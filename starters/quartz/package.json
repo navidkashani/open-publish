@@ -1,0 +1,17 @@
+{
+  "name": "open-publish-quartz",
+  "version": "0.1.0",
+  "description": "Quartz site that builds itself from an Open Publish snapshot",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "node scripts/fetch-content.mjs && node scripts/build-site.mjs && node scripts/finalize.mjs",
+    "fetch": "node scripts/fetch-content.mjs",
+    "finalize": "node scripts/finalize.mjs",
+    "test": "node --test scripts/*.test.mjs",
+    "verify": "node scripts/verify-build.mjs"
+  }
+}

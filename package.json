@@ -1,0 +1,13 @@
+{
+  "name": "open-publish",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A free, self-hosted alternative to Obsidian Publish",
+  "type": "module",
+  "scripts": {
+    "test": "npm --prefix plugin test && node --test starters/quartz/scripts/*.test.mjs",
+    "typecheck": "npm --prefix plugin run typecheck",
+    "build": "npm --prefix plugin run build",
+    "check": "npm run typecheck && npm test && npm run build"
+  }
+}

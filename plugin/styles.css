@@ -1,0 +1,257 @@
+/* Open Publish */
+
+.op-modal { --op-gap: 12px; }
+.op-modal .modal-content { max-height: 70vh; overflow-y: auto; }
+
+.op-muted { color: var(--text-muted); font-size: var(--font-ui-smaller); }
+.op-inline-icon { display: inline-flex; vertical-align: -2px; margin-right: 6px; }
+
+.op-scan-status { padding: 24px 0; color: var(--text-muted); }
+
+.op-summary {
+  display: flex;
+  gap: 6px;
+  align-items: baseline;
+  padding-bottom: var(--op-gap);
+  border-bottom: 1px solid var(--background-modifier-border);
+  margin-bottom: var(--op-gap);
+}
+
+.op-auto-note { display: flex; align-items: center; margin-bottom: var(--op-gap); }
+
+.op-notice-error,
+.op-notice-warning,
+.op-notice-ok,
+.op-notice-info {
+  border-radius: var(--radius-s);
+  padding: 10px 12px;
+  margin-bottom: var(--op-gap);
+  font-size: var(--font-ui-small);
+  border-left: 3px solid transparent;
+}
+.op-notice-error { background: var(--background-modifier-error); border-left-color: var(--text-error); }
+.op-notice-warning { background: var(--background-secondary); border-left-color: var(--text-warning); }
+.op-notice-ok { background: var(--background-secondary); border-left-color: var(--text-success); }
+.op-notice-info { background: var(--background-secondary); border-left-color: var(--text-muted); }
+
+.op-blockers .op-blocker { margin-top: 8px; }
+
+/* --- review sections --- */
+
+.op-section {
+  margin-bottom: 4px;
+  border-radius: var(--radius-m);
+}
+.op-section-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  padding: 6px 8px;
+  border-radius: var(--radius-s);
+  user-select: none;
+}
+.op-section-header:hover { background: var(--background-modifier-hover); }
+.op-section-title {
+  font-weight: var(--font-semibold);
+  color: var(--text-normal);
+  flex-shrink: 0;
+}
+.op-section-count {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  font-variant-numeric: tabular-nums;
+  margin-right: auto;
+}
+.op-section-action {
+  padding: 2px 10px;
+  height: 24px;
+  font-size: var(--font-ui-smaller);
+  box-shadow: none;
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid var(--background-modifier-border);
+}
+.op-section-action:hover { background: var(--background-modifier-hover); color: var(--text-normal); }
+
+.op-section-body { padding: 2px 0 10px 8px; }
+.op-section-hint { padding: 0 0 8px 26px; }
+/* Only bodies and children carry this — never a row or a header. */
+.op-collapsed { display: none; }
+
+/* The twisty is the only thing that folds a row; everything else ticks it. */
+.op-twisty {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  color: var(--text-faint);
+  border-radius: var(--radius-s);
+  transform: rotate(-90deg);
+  transition: transform 100ms ease;
+}
+.op-twisty:hover { color: var(--text-normal); background: var(--background-modifier-hover); }
+.op-twisty-open { transform: rotate(0deg); }
+.op-twisty .svg-icon { width: 14px; height: 14px; }
+/* A file has no twisty, but its row still has to line up with its siblings. */
+.op-row-file > .op-twisty { visibility: hidden; pointer-events: none; }
+
+/* --- file tree --- */
+
+.op-tree-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 3px 8px 3px 0;
+  border-radius: var(--radius-s);
+  font-size: var(--font-ui-small);
+  min-width: 0;
+  user-select: none;
+}
+.op-tree-row-clickable { cursor: pointer; }
+.op-tree-row-clickable:hover { background: var(--background-modifier-hover); }
+
+.op-tree-tick { flex-shrink: 0; margin: 0; }
+.op-tree-icon {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  color: var(--text-faint);
+}
+.op-tree-icon .svg-icon { width: 15px; height: 15px; }
+.op-row-folder > .op-tree-icon { color: var(--text-muted); }
+
+.op-tree-name {
+  overflow-wrap: anywhere;
+  min-width: 0;
+  color: var(--text-normal);
+}
+.op-row-folder > .op-tree-name { font-weight: var(--font-medium); }
+.op-tree-suffix { color: var(--text-faint); font-size: var(--font-ui-smaller); flex-shrink: 0; }
+.op-tree-row > .op-badge { margin-left: auto; }
+.op-tree-count {
+  margin-left: auto;
+  color: var(--text-faint);
+  font-size: var(--font-ui-smaller);
+  font-variant-numeric: tabular-nums;
+  flex-shrink: 0;
+}
+
+/*
+ * The indent guide. It starts under the parent's twisty so the line visibly
+ * descends from the folder it belongs to, which is what makes depth readable
+ * without counting pixels.
+ */
+.op-tree-children {
+  margin-left: 8px;
+  padding-left: 8px;
+  border-left: 1px solid var(--background-modifier-border);
+}
+
+.op-rename-row { gap: 6px; padding-left: 8px; }
+
+/*
+ * A part-ticked folder. Obsidian styles :checked but not :indeterminate, so
+ * without this a folder with one note selected looks identical to one with
+ * none — the single most confusing state the tree can be in.
+ */
+.op-tree-tick:indeterminate {
+  background-color: var(--interactive-accent);
+  opacity: 0.55;
+  position: relative;
+}
+.op-tree-tick:indeterminate::after {
+  content: '';
+  position: absolute;
+  inset: 45% 22% 45% 22%;
+  background: var(--text-on-accent);
+  border-radius: 1px;
+}
+
+.op-badge {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  padding: 0 5px;
+  flex-shrink: 0;
+}
+
+.op-progress-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  padding-top: var(--op-gap);
+  margin-top: var(--op-gap);
+  border-top: 1px solid var(--background-modifier-border);
+  flex-wrap: wrap;
+}
+
+.op-progress-headline { font-size: var(--font-ui-medium); font-weight: var(--font-semibold); margin-bottom: 4px; }
+.op-progress-headline-done { font-size: var(--font-ui-large); }
+.op-progress-stats { color: var(--text-muted); font-size: var(--font-ui-small); margin-bottom: 10px; }
+.op-progress-status { color: var(--text-muted); font-size: var(--font-ui-small); margin-bottom: 8px; }
+.op-progress-bar {
+  height: 6px;
+  background: var(--background-modifier-border);
+  border-radius: 3px;
+  overflow: hidden;
+  margin-bottom: 4px;
+}
+.op-progress-bar-fill {
+  height: 100%;
+  width: 0;
+  background: var(--interactive-accent);
+  transition: width 120ms linear;
+}
+.op-progress-count { color: var(--text-muted); font-size: var(--font-ui-smaller); margin-bottom: var(--op-gap); }
+.op-progress-detail {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  margin-bottom: 8px;
+}
+.op-progress-notice p { margin: 0 0 6px; }
+.op-progress-notice p:last-child { margin-bottom: 0; }
+
+.op-progress-log {
+  max-height: 240px;
+  overflow-y: auto;
+  font-size: var(--font-ui-smaller);
+  font-family: var(--font-monospace);
+}
+.op-progress-log-row { display: flex; align-items: center; gap: 6px; padding: 1px 0; word-break: break-all; }
+.op-progress-log-icon { display: inline-flex; flex-shrink: 0; color: var(--text-muted); }
+
+.op-wizard-progress { color: var(--text-muted); font-size: var(--font-ui-smaller); }
+.op-wizard-steps { padding-left: 20px; }
+.op-wizard-steps li { margin-bottom: 6px; }
+.op-wizard-result { margin: 8px 0; font-size: var(--font-ui-small); }
+.op-wizard-values pre {
+  font-size: var(--font-ui-smaller);
+  padding: 8px;
+  background: var(--background-secondary);
+  border-radius: var(--radius-s);
+  overflow-x: auto;
+}
+
+.op-security-note p { margin: 0 0 8px; }
+
+.op-result { padding: 14px 16px; }
+.op-result-headline { font-size: var(--font-ui-medium); font-weight: var(--font-semibold); margin: 0 0 4px; }
+.op-result-stats { color: var(--text-muted); font-size: var(--font-ui-small); margin: 0 0 8px; }
+.op-result p:last-child { margin-bottom: 0; }
+
+/* A removal confirmation has to look different from the button it replaced. */
+.op-confirm {
+  background: var(--background-modifier-error);
+  color: var(--text-on-accent);
+  white-space: normal;
+  text-align: left;
+}
+
+.op-status-bar { cursor: pointer; gap: 6px; }
+.op-status-bar-icon { display: inline-flex; align-items: center; }
+.op-status-bar-icon .svg-icon { width: 14px; height: 14px; }
+.op-status-bar-busy .op-status-bar-icon { color: var(--interactive-accent); }

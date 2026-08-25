@@ -1,0 +1,13 @@
+node_modules/
+public/
+.quartz/
+.op-build-state.json
+
+# Fetched from your bucket on every build — never committed, and never in Git.
+content/
+
+# op-site.ts is regenerated on every build, but the default copy IS committed
+# so that a fresh clone type-checks before the first publish.
+
+# Quartz checkout cached by `npm run verify`
+.quartz/

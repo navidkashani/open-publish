@@ -1,0 +1,8 @@
+node_modules/
+plugin/main.js
+plugin/main.js.map
+.DS_Store
+
+# Obsidian writes this if the repo root is ever opened as a vault. It should not be.
+# The scratch test vault lives at ~/Documents/obsidian-open-publish-test
+.obsidian/
