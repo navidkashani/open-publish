@@ -106,12 +106,12 @@ function displayFor(entry, explicitDisplay, rawTarget) {
 export function rewriteLinks(text, links = [], options = {}) {
   const siteRoot = (options.siteRoot ?? '').replace(/\/+$/, '')
   const byRaw = new Map(links.map((entry) => [entry.raw, entry]))
-  const ranges = protectedRanges(text)
+  const wikilinkRanges = protectedRanges(text)
 
   const url = (slug, subpath) => `${siteRoot}/${slug}${anchorFor(subpath)}`
 
   let out = text.replace(WIKILINK, (match, bang, inner, index) => {
-    if (isProtected(ranges, index)) return match
+    if (isProtected(wikilinkRanges, index)) return match
 
     const pipe = inner.indexOf('|')
     const rawTarget = (pipe === -1 ? inner : inner.slice(0, pipe)).trim()
@@ -135,8 +135,14 @@ export function rewriteLinks(text, links = [], options = {}) {
     return `[${label}](${url(entry.slug, entry.subpath)})`
   })
 
+  // Measured again, against the text this pass actually walks. Rewriting a
+  // wikilink changes its length, which moves everything after it — so ranges
+  // taken from the original text would point at the wrong bytes here, and a
+  // link inside a code fence would be rewritten as though it were prose.
+  const markdownRanges = protectedRanges(out)
+
   out = out.replace(MARKDOWN_LINK, (match, bang, label, target, index) => {
-    if (isProtected(ranges, index)) return match
+    if (isProtected(markdownRanges, index)) return match
     if (/^(?:[a-z][a-z0-9+.-]*:|\/\/|#|\/)/i.test(target)) return match // external, anchor, already absolute
 
     let decoded = target

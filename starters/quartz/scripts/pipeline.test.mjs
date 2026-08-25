@@ -377,3 +377,31 @@ test('without noIndex there is no robots.txt at all', async () => {
     assert.doesNotMatch(await readFile(join(cwd, 'public/_headers'), 'utf8'), /X-Robots-Tag/)
   })
 })
+
+test('a note renamed into the homepage slot redirects to the site root, not to /index', async () => {
+  // Quartz emits the homepage at `/`; `/index` is a path it never produced, so
+  // the old URL of a note that became the homepage would land on a 404.
+  const cwd = await mkdtemp(join(tmpdir(), 'op-build-'))
+  try {
+    await writeFile(
+      join(cwd, '.op-build-state.json'),
+      JSON.stringify({
+        snapshot: 's1',
+        site: {},
+        redirects: [
+          { from: 'notes/home', to: 'index' },
+          { from: 'notes/old', to: 'notes/new' },
+        ],
+      }),
+    )
+    await mkdir(join(cwd, 'public'), { recursive: true })
+    await writeFile(join(cwd, 'public/index.html'), '<html></html>')
+
+    assert.equal((await runScript('finalize.mjs', cwd, {})).code, 0)
+    const redirects = await readFile(join(cwd, 'public/_redirects'), 'utf8')
+    assert.match(redirects, /^\/notes\/home \/ 301$/m, 'the homepage redirect points at the root')
+    assert.match(redirects, /^\/notes\/old \/notes\/new 301$/m, 'and every other one is unaffected')
+  } finally {
+    await rm(cwd, { recursive: true, force: true })
+  }
+})

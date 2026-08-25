@@ -85,7 +85,7 @@ async function main() {
   if (redirects.length > 0) {
     await writeFile(
       join(PUBLIC_DIR, '_redirects'),
-      redirects.map((rule) => `/${strip(rule.from)} /${strip(rule.to)} 301`).join('\n') + '\n',
+      redirects.map((rule) => `/${strip(rule.from)} ${target(rule.to)} 301`).join('\n') + '\n',
       'utf8',
     )
     console.log(`[open-publish] ${redirects.length} redirect(s) written for renamed notes`)
@@ -101,6 +101,16 @@ async function main() {
 }
 
 const strip = (value) => String(value).replace(/^\/+/, '')
+
+/**
+ * The homepage is served at `/`, not at `/index` — so a note that was renamed
+ * *into* the homepage slot has to redirect to the root, or its old URL lands on
+ * a path the generator never emitted.
+ */
+const target = (value) => {
+  const slug = strip(value)
+  return slug === 'index' ? '/' : `/${slug}`
+}
 
 async function walk(dir) {
   const out = []

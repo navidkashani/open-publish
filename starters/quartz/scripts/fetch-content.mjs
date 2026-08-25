@@ -88,6 +88,17 @@ Update the starter repository from the template.`)
       )
     }
 
+    if (typeof file.slug !== 'string' || !file.slug) {
+      fail(`The snapshot entry for "${path}" has no slug, so there is nowhere to write it.`)
+    }
+    // Everything here is written to disk by slug. The plugin's slugifier cannot
+    // emit a traversal, but this script is the thing holding the pen, so it
+    // checks rather than assumes: a clear build failure beats writing outside
+    // the content directory.
+    if (file.slug.startsWith('/') || file.slug.split('/').includes('..')) {
+      fail(`The snapshot entry for "${path}" has a slug that escapes the content directory: ${file.slug}`)
+    }
+
     const isMarkdown = path.toLowerCase().endsWith('.md')
     const target = join(CONTENT_DIR, isMarkdown ? `${file.slug}.md` : file.slug)
     await mkdir(dirname(target), { recursive: true })
