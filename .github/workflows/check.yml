@@ -1,0 +1,34 @@
+# Runs exactly what `npm run check` runs locally — typecheck, both test suites,
+# then the bundle. Deliberately the same one command a contributor already uses,
+# so CI and a local run cannot drift apart.
+name: check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # Node 22.18+ strips TypeScript types from `.ts` imports without a flag,
+      # which is what lets the test suites import `src/**/*.ts` directly with no
+      # build step and no test-only toolchain. 24 is the floor we develop on.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: plugin/package-lock.json
+
+      # Only the plugin has dependencies, and all of them are dev-only: the
+      # shipped plugin has no runtime dependencies at all. The starter's tests
+      # use nothing but Node built-ins.
+      - run: npm ci --prefix plugin
+
+      - run: npm run check

@@ -4,6 +4,9 @@
   "private": true,
   "description": "A free, self-hosted alternative to Obsidian Publish",
   "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
   "scripts": {
     "test": "npm --prefix plugin test && node --test starters/quartz/scripts/*.test.mjs",
     "typecheck": "npm --prefix plugin run typecheck",

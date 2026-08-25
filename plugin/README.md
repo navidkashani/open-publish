@@ -23,7 +23,7 @@ No telemetry. No analytics. No server operated by this project.
 npm install
 npm run dev        # esbuild watch
 npm run typecheck
-npm test           # 105 tests, no network, no Obsidian
+npm test           # 221 tests, no network, no Obsidian
 npm run build      # produces main.js
 ```
 
@@ -44,12 +44,23 @@ src/
 │  ├─ slug.ts                 path → URL, plus collision detection
 │  ├─ snapshot.ts             snapshot format, diffing, rename detection
 │  ├─ publisher.ts            the state machine
+│  ├─ session.ts              a publish that outlives the window that started it
 │  ├─ limits.ts               platform limits
 │  ├─ errors.ts               every user-facing error message
 │  └─ gc.ts                   orphan cleanup
-├─ destinations/              sigv4.ts, s3.ts, http.ts, obsidian-http.ts
-├─ builders/                  webhook.ts — deploy hook + deploy verification
-└─ ui/                        PublishModal, ProgressView, SetupWizard, SettingsTab
+├─ destinations/              types.ts, sigv4.ts, s3.ts, http.ts, obsidian-http.ts,
+│                             content-types.ts
+├─ builders/                  types.ts, webhook.ts — deploy hook + verification
+└─ ui/
+   ├─ PublishModal.ts         the window: scan, review, progress
+   ├─ ReviewView.ts           what is about to change, and what each tick means
+   ├─ TreeView.ts             the folder tree and its ticks
+   ├─ FileTree.ts             tree building and tick arithmetic, no DOM
+   ├─ ProgressView.ts         progress, and the result once it is known
+   ├─ StatusBar.ts            background progress; absent on mobile
+   ├─ messages.ts             every sentence the publish window can say
+   ├─ SetupWizard.ts          first-run setup
+   └─ SettingsTab.ts          settings
 ```
 
 ### A note on testability

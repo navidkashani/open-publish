@@ -94,21 +94,41 @@ the honest, complete version.
 
 ## Development
 
+Node 22.18 or newer. The test suites import the TypeScript sources directly,
+relying on Node stripping the types itself, so there is no build step and no
+test-only toolchain to keep in sync.
+
 ```bash
 npm install --prefix plugin
-npm test          # 130+ tests, no network, no Obsidian needed
+npm run check     # typecheck, both test suites, then the bundle
+```
+
+Or one piece at a time:
+
+```bash
 npm run typecheck
+npm test          # 281 tests: no network, no Obsidian, no browser
 npm run build     # produces plugin/main.js
 ```
+
+The tests are the specification for the parts that must not break — atomic
+commits, garbage-collection safety, link rewriting, the tick-to-outcome table in
+the publish window, and the full build pipeline run as real subprocesses against
+a stand-in bucket. `npm run check` is what CI runs, unchanged.
 
 To try it in a vault, copy `manifest.json`, `main.js` and `styles.css` into
 `<vault>/.obsidian/plugins/open-publish/`.
 
 ## Status
 
-Phase 1 of the roadmap in `docs/architecture.md`: the plugin and the Quartz
-starter are complete and tested. Mobile is untested; the code avoids Node APIs
-so it should work, but it has not been verified on a device.
+Phases 1 and 2 of the roadmap in `docs/architecture.md` are done: the plugin and
+the Quartz starter are complete and tested. Phase 3 is next — a Worker gateway
+and Deploy-to-Cloudflare button, rollback UI, and mobile.
+
+Mobile is the honest caveat. `manifest.json` does not mark the plugin
+desktop-only and the code avoids Node APIs, so it should work, but it has not
+been verified on a device — and the status bar it uses to report a publish
+running in the background does not exist there, leaving only notices.
 
 ## Licence
 
