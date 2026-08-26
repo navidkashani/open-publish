@@ -58,6 +58,11 @@ even though the API works.
 
 ## Hosting
 
+The plugin ships with this list built in. Pick one in **Settings > Site build**
+and it labels the copy, the build budget and the warnings for the host you
+actually use. The choice is only ever a label: the deploy hook URL is the one
+thing sent, and the site address the one thing polled.
+
 The starter's build command is:
 
 ```
@@ -66,13 +71,67 @@ node scripts/fetch-content.mjs && node scripts/build-site.mjs && node scripts/fi
 
 Output directory: `public`. Environment variables: `OP_ENDPOINT`, `OP_BUCKET`,
 `OP_REGION`, `OP_ACCESS_KEY_ID`, `OP_SECRET_ACCESS_KEY`, plus `OP_PREFIX` if you
-use one.
+use one, and `OP_SITE_URL` where the host does not provide an address of its own.
+
+| Host | Deploy hook URL | Free build budget | `_redirects` and `_headers` | Site address variable |
+|---|---|---|---|---|
+| **Cloudflare Pages** | `https://api.cloudflare.com/client/v4/pages/webhooks/deploy_hooks/<hook-id>` | 500 builds a month, 1 at a time | native | `CF_PAGES_URL` |
+| **Cloudflare Workers** | `https://api.cloudflare.com/client/v4/workers/builds/deploy_hooks/<hook-id>` | 3,000 build minutes a month, 1 at a time | native | none, set `OP_SITE_URL` |
+| **Netlify** | `https://api.netlify.com/build_hooks/<hook-id>` | 300 credits a month, about 20 deploys | native | `URL`, `DEPLOY_PRIME_URL` |
+| **Vercel** | `https://api.vercel.com/v1/integrations/deploy/<project-id>/<hash>` | 100 deploys a day, 60 hook triggers an hour | neither | `VERCEL_PROJECT_PRODUCTION_URL` |
+| **Another host** | whatever your host gives you | unknown | unknown | set `OP_SITE_URL` |
+
+All four accept `POST`, none needs an authorization header, and Vercel also
+accepts `GET`. The plugin recognises a pasted hook URL by matching it against
+these shapes exactly, so a hook behind a relay or a proxy is simply "Another
+host": a near miss costs a label and never changes a limit.
+
+One caveat on the Cloudflare Pages row. Cloudflare's
+[deploy hooks page](https://developers.cloudflare.com/pages/configuration/deploy-hooks/)
+shows the URL only in a screenshot rather than as text, so that path is what the
+dashboard hands out rather than something Cloudflare documents. Everything else
+in the table comes from the vendor's own docs.
+
+### The site address
+
+Quartz needs an absolute address for the feed, the sitemap and the 404 page.
+Each host names its own variable, and the build reads whichever one it finds.
+Two variables of our own override that:
+
+| Variable | When you need it |
+|---|---|
+| `OP_SITE_URL` | A custom domain, Cloudflare Workers Builds, or any host that sets no address of its own. Without it the feed and the sitemap keep the vendor host name, or the site is built as `example.com`. |
+| `OP_SITE_ROOT` | A site served from a sub-path, e.g. `https://example.com/notes/`. Set it to `/notes` so internal links resolve. |
+
+Adding a custom domain in your host's dashboard is not enough on its own. The
+pages will serve from it, but the feed and the sitemap keep pointing at the
+`pages.dev` or `netlify.app` name until `OP_SITE_URL` says otherwise.
+
+### Cloudflare Pages
+
+The documented default. See [setup-cloudflare.md](setup-cloudflare.md).
 
 ### Cloudflare Workers Builds
 
-The forward-looking Cloudflare option, since Pages is in maintenance mode.
-Same repository, same build command, same variables. Deploy hooks work the same
-way.
+The forward-looking Cloudflare option. Cloudflare's own
+[migration guide](https://developers.cloudflare.com/workers/static-assets/migration-guides/migrate-from-pages/)
+puts it plainly: Pages continues to be supported, but new investment,
+optimisation and feature work go to Workers.
+
+Same repository, same build command, same variables. Deploy hooks arrived in
+[April 2026](https://developers.cloudflare.com/changelog/post/2026-04-01-deploy-hooks/):
+a URL, `POST`, no authorization header, 10 builds a minute per Worker.
+
+The one thing to get right is the address. Workers Builds sets `CI`,
+`WORKERS_CI`, `WORKERS_CI_BUILD_UUID`, `WORKERS_CI_COMMIT_SHA` and
+`WORKERS_CI_BRANCH`, and
+[no URL variable at all](https://developers.cloudflare.com/workers/ci-cd/builds/configuration/).
+So **set `OP_SITE_URL` yourself**. If you forget, the build stops and says so,
+which is deliberate: it used to build a site quietly addressed as `example.com`.
+
+The starter is still Pages-shaped, so a Worker also needs a `wrangler.jsonc`
+with `assets.directory` set to `./public`. That is why Pages remains the
+recommendation.
 
 ### Netlify
 
@@ -80,9 +139,23 @@ Build command `npm run build`, publish directory `public`. Environment variables
 under **Site configuration → Environment variables**. Deploy hook under
 **Build & deploy → Build hooks**.
 
-Netlify's plans are credit-based: roughly 300 credits with deploys at about 15
-each, so around 20 deploys a month on the free tier. Set *Minimum minutes
-between builds* higher than the Cloudflare default.
+Netlify's free plan is
+[credit-based](https://docs.netlify.com/manage/accounts-and-billing/billing/billing-for-credit-based-plans/billing-faq-for-credit-based-plans/):
+roughly 300 credits a month at about 15 per production deploy, so **around 20
+deploys a month**.
+
+Worth being clear about what that means, because it is not what a minimum wait
+protects against. Five minutes between builds still permits about 8,600 builds a
+month. The limit that bites is the monthly one, and the only real defence is to
+turn *Build after publishing* off and start builds when you mean to. The plugin
+says so in a panel next to that switch rather than changing the setting for you.
+
+Run out and the site keeps serving what it has, but stops updating: on the
+legacy build-minutes plans
+[builds stop and the site stays up](https://answers.netlify.com/t/what-happens-if-a-free-plan-exceeds-bandwidth-and-or-build-minutes-limit/16244),
+and on the credit-based free plan the project is paused until the next cycle.
+The deploy hook then returns an error, so the plugin reports that your host
+turned the request down.
 
 Netlify reads `_redirects` and `_headers` from the publish directory natively,
 so both files work unchanged.
@@ -95,16 +168,30 @@ Deploy hook under **Settings → Git → Deploy Hooks**.
 
 Vercel does not read `_redirects` or `_headers`. Rename redirects and the
 `no-store` rule on `/_publish.json` will not apply, which means the plugin may
-briefly report a stale snapshot as live. Translate them into `vercel.json` if
-you need them; the cache-busting nonce on each poll covers most of the risk.
+briefly report a stale version as live. Translate them into `vercel.json` if you
+need them; the cache-busting parameter on each poll covers most of the risk.
 
 ### GitHub Pages
 
-Workable but awkward: it has no deploy hook, so builds are triggered by a
-`repository_dispatch` or `workflow_dispatch` webhook instead. Point the plugin's
-deploy hook URL at the GitHub API endpoint with a token, but note that a GitHub
-token is a much wider credential than a deploy hook URL, which is a poor trade
-for the design described in [security.md](security.md).
+Not directly supported, and the reason is worth stating rather than working
+around. GitHub has no deploy hook: builds are started through
+`repository_dispatch` or `workflow_dispatch`, and both require an
+`Authorization` header carrying a token. The plugin sends **no headers at all**
+with a deploy hook, by design, so there is nowhere to put one.
+
+An earlier version of this page said to point the deploy hook URL at the GitHub
+API "with a token". That never worked. To use GitHub Pages you need a small
+relay that you own, holding the token and exposing a plain URL, which is the
+same shape as the Worker gateway sketched in [security.md](security.md). A
+GitHub token is also a far wider credential than a deploy hook URL, which is a
+poor trade on its own terms.
+
+### A hook for the branch your site serves
+
+Whichever host you pick, create the deploy hook for the branch the live site is
+built from. A hook scoped to some other branch builds a preview address while
+the plugin polls the production one, so the check never matches and a publish
+waits the full ten minutes before saying anything.
 
 ## Local testing with MinIO
 
