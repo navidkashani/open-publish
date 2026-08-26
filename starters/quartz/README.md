@@ -12,6 +12,11 @@ only in the build machine's working directory.
    nothing to run locally.
 2. Connect it to Cloudflare Pages (or Workers Builds, Netlify, or Vercel).
 3. Build command: `npm run build`. Output directory: `public`.
+
+   On **Workers Builds** the output settings come from `wrangler.jsonc` instead,
+   which is already here. Change the `name` in it to match your Worker, or the
+   build fails. Every other host ignores that file, including Pages, because it
+   carries no `pages_build_output_dir`.
 4. Add these environment variables, using a **read-only** storage token:
 
    | Variable | Value |

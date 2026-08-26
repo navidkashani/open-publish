@@ -82,8 +82,10 @@ export interface Host {
  * it is the one we recommend.
  *
  * Pages keeps the recommendation even though Workers Builds has the larger
- * allowance and Cloudflare's own investment. The starter is Pages-shaped, and
- * Workers Builds needs a `wrangler.jsonc` we do not ship yet.
+ * allowance and Cloudflare's own investment. The starter now ships the
+ * `wrangler.jsonc` a Worker needs, so what is left is one real difference:
+ * Workers Builds reports no site address, so OP_SITE_URL has to be set by hand
+ * or the build stops. One extra step on the recommended path is one too many.
  *
  * Netlify is listed rather than left out, for the same reason Wasabi is listed
  * in the storage catalogue. Omitting it does not stop anyone using it; it only
@@ -143,7 +145,8 @@ export const HOSTS: readonly Host[] = [
     projectNoun: 'Worker',
     setup: [
       'In Cloudflare, go to Workers & Pages → Create → Import a repository, and pick the repository you just made.',
-      'Build command: npm run build. Deploy command: leave the default. Path to your assets: public.',
+      'Build command: npm run build. Deploy command: leave the default. The rest comes from wrangler.jsonc in the repository.',
+      'Edit the "name" in wrangler.jsonc to match the Worker you just created. Builds fail when the two disagree.',
       'Open Settings → Variables and Secrets and add the variables below.',
       'Add OP_SECRET_ACCESS_KEY as a secret rather than a plain variable.',
       'Set OP_SITE_URL to your site address. Workers Builds does not provide one, and without it the build stops.',

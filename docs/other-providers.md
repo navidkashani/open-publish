@@ -129,9 +129,18 @@ The one thing to get right is the address. Workers Builds sets `CI`,
 So **set `OP_SITE_URL` yourself**. If you forget, the build stops and says so,
 which is deliberate: it used to build a site quietly addressed as `example.com`.
 
-The starter is still Pages-shaped, so a Worker also needs a `wrangler.jsonc`
-with `assets.directory` set to `./public`. That is why Pages remains the
-recommendation.
+The starter ships the `wrangler.jsonc` a Worker needs: assets-only, no `main`,
+`./public` as the assets directory, `404-page` handling for the 404 Quartz
+emits, and `auto-trailing-slash` so the extensionless links Quartz writes
+resolve to its flat `.html` files. Pages ignores that file, because it carries
+no `pages_build_output_dir`, so one repository serves both.
+
+**Change the `name` in it to match your Worker.** Workers Builds fails the build
+when the two disagree, and the error does not say which name it wanted.
+
+Pages keeps the recommendation anyway, for one reason rather than the old one:
+Workers Builds reports no site address, so `OP_SITE_URL` is a required manual
+step here and not needed at all there.
 
 ### Netlify
 

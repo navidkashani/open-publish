@@ -1,0 +1,40 @@
+// Cloudflare Workers Builds.
+//
+// Only read when this repository is connected to a Worker. Cloudflare Pages
+// ignores a Wrangler file that has no `pages_build_output_dir`, using it for
+// local development only, so shipping this changes nothing for the Pages setup
+// in docs/setup-cloudflare.md.
+//
+// Netlify and Vercel never look at it.
+{
+  // This has to match the Worker's name in the Cloudflare dashboard. Workers
+  // Builds fails the build when the two disagree, so if you named your Worker
+  // something else, change this line rather than renaming the Worker.
+  "name": "open-publish-site",
+
+  // Pinned, not "today". A compatibility date is how a Worker keeps the runtime
+  // behaviour it was built against, so moving it should be a decision somebody
+  // makes, never something that happens because a rebuild ran on a later date.
+  "compatibility_date": "2026-08-25",
+
+  // No "main" on purpose. This site has no Worker code of its own, and an
+  // assets-only Worker is what Cloudflare's own static-site-generation example
+  // looks like. Adding a script here would mean `_headers` and `_redirects`
+  // stopped applying to anything that script answered.
+  "assets": {
+    // Where `npm run build` puts the site. Kept in step with the build by a
+    // test, because the failure mode if these drift is an empty site rather
+    // than an error.
+    "directory": "./public",
+
+    // Quartz's NotFoundPage emitter writes 404.html, so a miss serves that page
+    // rather than a bare status code.
+    "not_found_handling": "404-page",
+
+    // The default, written down rather than assumed, because the whole site
+    // depends on it. Quartz emits flat files (notes/foo.html) and links to them
+    // without the extension (/notes/foo). This is the mode that serves one from
+    // the other; "none" would 404 every internal link on the site.
+    "html_handling": "auto-trailing-slash"
+  }
+}
