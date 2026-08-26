@@ -12,10 +12,14 @@ R2 → API Tokens, scoped to this bucket, and paste both halves again. Note that
 the secret is shown only once at creation.
 
 **"Bucket `<name>` was not found at this endpoint."**
-Either the bucket name is misspelt or the endpoint points at a different
-account. On R2 the endpoint must be
-`https://<your-account-id>.r2.cloudflarestorage.com`. The account ID is on the
-R2 overview page, and is not the same as your zone or user ID.
+Either the bucket name is misspelt or the endpoint points somewhere else. The
+hint on this error names the thing to check for the provider you actually
+chose: an account ID on R2, a region on S3, B2 and Wasabi.
+
+Pick your provider in **Settings > Storage** and the endpoint is built from one
+blank rather than typed, which is where most of these came from. If you are on
+**Other S3-compatible storage**, check the endpoint yourself: it is a full URL,
+starting with `https://`.
 
 **"Couldn't reach the storage endpoint."**
 A DNS or connectivity failure: the request never reached a server. Check the
@@ -31,7 +35,22 @@ Press **Rescan** to see their changes, then publish.
 Your provider does not implement `If-Match` on PUT. The plugin falls back to
 reading the pointer and warning before writing. Publishing still works; the
 protection against two devices publishing simultaneously is weaker. R2, S3 and
-recent MinIO all support it.
+MinIO from 2024-09-13 onwards all support it.
+
+**Test connection** now reports this directly, and the **Publishing from two
+devices** row in settings says what it found. **Storage self-test** goes one
+further and also checks the first-publish guard (`If-None-Match: *`), which is
+the one MinIO got wrong in the releases before that date.
+
+**"This is not the storage your site was published to."**
+Not an error: a warning that the endpoint, bucket, prefix or addressing style
+has changed since your last publish. Three things happen if you publish now.
+Every file uploads again, because the new bucket has nothing to compare
+against. The review screen shows your whole vault as new, for the same reason.
+And your site keeps building from the old storage until you update the
+variables in your host's build settings, which step 4 of the setup guide lists.
+Moving deliberately is fine. The warning is there because none of that is
+visible otherwise.
 
 ## Builds
 

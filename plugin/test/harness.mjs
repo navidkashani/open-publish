@@ -1,6 +1,7 @@
 /** Redirects `obsidian` imports to the stub, then hands back the UI modules. */
 import { registerHooks } from 'node:module'
 import { PublishSession } from '../src/core/session.ts'
+import { migrateSettings } from '../src/settings.ts'
 
 const stub = new URL('./obsidian-stub.mjs', import.meta.url).href
 
@@ -14,6 +15,8 @@ registerHooks({
 export const { PublishModal } = await import('../src/ui/PublishModal.ts')
 export const { StatusBar } = await import('../src/ui/StatusBar.ts')
 export const { FolderModal } = await import('../src/ui/FolderModal.ts')
+export const { OpenPublishSettingTab } = await import('../src/ui/SettingsTab.ts')
+export const { SetupWizard } = await import('../src/ui/SetupWizard.ts')
 export const { Platform, TFile, TFolder } = await import('./obsidian-stub.mjs')
 export { notices, menus, modals, suggesters, MODAL_MEMBERS } from './obsidian-stub.mjs'
 export { PublishSession }
@@ -81,6 +84,44 @@ export function fakePlugin(overrides = {}) {
     triggerBuildOnly: async () => calls.updates++,
     saveSettings: async () => {},
     setPublishWindowOpen: (open) => calls.windowOpen.push(open),
+  }
+  return plugin
+}
+
+/**
+ * A plugin complete enough to render the settings tab and the setup wizard.
+ *
+ * The settings come from the real `migrateSettings`, so a test can hand over
+ * the same shape a `data.json` has and get whatever the shipping migration
+ * would have produced, defaults included.
+ */
+export function fakeStoragePlugin({ stored = {}, testResult = { ok: true } } = {}) {
+  const calls = { saves: 0, tests: 0, selfTests: 0, cleanups: 0, cacheClears: 0, builderChecks: 0 }
+  const plugin = {
+    calls,
+    settings: migrateSettings(stored),
+    manifest: { version: '0.1.0' },
+    async saveSettings() {
+      calls.saves++
+    },
+    async testDestination() {
+      calls.tests++
+      return testResult
+    },
+    async testBuilder() {
+      calls.builderChecks++
+      return { ok: true, reason: 'Site is reachable.' }
+    },
+    async runStorageSelfTest() {
+      calls.selfTests++
+    },
+    async runGarbageCollection() {
+      calls.cleanups++
+    },
+    async clearHashCache() {
+      calls.cacheClears++
+    },
+    isNotePublished: () => true,
   }
   return plugin
 }

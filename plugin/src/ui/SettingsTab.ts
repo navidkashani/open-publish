@@ -1,6 +1,8 @@
 import { Notice, PluginSettingTab, Setting } from 'obsidian'
 import type { App } from 'obsidian'
 import type OpenPublishPlugin from '../main.ts'
+import { hasStorageMoved } from '../settings.ts'
+import { providerById } from '../destinations/providers.ts'
 import { isAlwaysExcluded, parsePublishFrontmatter } from '../core/selection.ts'
 import { FolderModal } from './FolderModal.ts'
 import { folderRulesSummary, summarizeRules } from './FolderRules.ts'
@@ -8,6 +10,7 @@ import { PathSuggest, normalizeTypedPath } from './PathSuggest.ts'
 import { renderRuleRows } from './RuleList.ts'
 import type { Disposer } from './RuleList.ts'
 import { SetupWizard } from './SetupWizard.ts'
+import { StorageFields } from './StorageFields.ts'
 
 const HOMEPAGE_DESC = 'The note visitors land on, e.g. "Notes/Home.md". It has to be a published note.'
 
@@ -64,89 +67,32 @@ export class OpenPublishSettingTab extends PluginSettingTab {
     this.renderSecurityNote(containerEl)
   }
 
+  /**
+   * Four fields and a provider, with the endpoint built for you.
+   *
+   * It used to be seven, endpoint typed by hand, and the first entry in
+   * troubleshooting.md was a malformed one. The form itself lives in
+   * `StorageFields`, shared with the setup wizard, which was already a
+   * near-duplicate of this before a catalogue doubled the branching in both.
+   */
   private renderStorage(containerEl: HTMLElement): void {
     new Setting(containerEl).setName('Storage').setHeading()
-    const settings = this.plugin.settings.destination
 
-    new Setting(containerEl)
-      .setName('Endpoint')
-      .setDesc('For Cloudflare R2: https://<account-id>.r2.cloudflarestorage.com')
-      .addText((text) =>
-        text
-          .setPlaceholder('https://….r2.cloudflarestorage.com')
-          .setValue(settings.endpoint)
-          .onChange(async (value) => {
-            settings.endpoint = value.trim()
-            await this.plugin.saveSettings()
-          }),
-      )
-
-    new Setting(containerEl).setName('Bucket').addText((text) =>
-      text.setValue(settings.bucket).onChange(async (value) => {
-        settings.bucket = value.trim()
-        await this.plugin.saveSettings()
-      }),
-    )
-
-    new Setting(containerEl)
-      .setName('Region')
-      .setDesc('R2 uses "auto". S3 uses a real region such as eu-west-1.')
-      .addText((text) =>
-        text.setValue(settings.region).onChange(async (value) => {
-          settings.region = value.trim() || 'auto'
-          await this.plugin.saveSettings()
-        }),
-      )
-
-    new Setting(containerEl)
-      .setName('Access key ID')
-      .setDesc('Use a token scoped to this bucket only, with read and write access.')
-      .addText((text) =>
-        text.setValue(settings.accessKeyId).onChange(async (value) => {
-          settings.accessKeyId = value.trim()
-          await this.plugin.saveSettings()
-        }),
-      )
-
-    new Setting(containerEl).setName('Secret access key').addText((text) => {
-      text.inputEl.type = 'password'
-      text.setValue(settings.secretAccessKey).onChange(async (value) => {
-        settings.secretAccessKey = value.trim()
-        await this.plugin.saveSettings()
-      })
+    // A dropdown here, a row list in the wizard. Settings is a maintenance
+    // surface where the choice has already been made, and the analytics
+    // provider two sections down sets exactly this precedent.
+    const fields = new StorageFields(containerEl, {
+      destination: this.plugin.settings.destination,
+      save: () => this.plugin.saveSettings(),
+      showProviderPicker: true,
+      test: () => this.plugin.testDestination(),
+      storageMoved: () => hasStorageMoved(this.plugin.settings),
+      // The whole tab, not just the form: the cleanup row below carries this
+      // provider's caution, and a screen that updates half of itself is worse
+      // than one that takes a moment.
+      onProviderChange: () => this.display(),
     })
-
-    new Setting(containerEl)
-      .setName('Key prefix')
-      .setDesc('Optional. Lets one bucket hold several sites, e.g. "notes".')
-      .addText((text) =>
-        text.setValue(settings.prefix ?? '').onChange(async (value) => {
-          settings.prefix = value.trim().replace(/^\/+|\/+$/g, '')
-          await this.plugin.saveSettings()
-        }),
-      )
-
-    new Setting(containerEl)
-      .setName('Path-style addressing')
-      .setDesc('On for R2, MinIO and most S3-compatible providers. Turn off only if your provider requires bucket-in-hostname URLs.')
-      .addToggle((toggle) =>
-        toggle.setValue(settings.forcePathStyle !== false).onChange(async (value) => {
-          settings.forcePathStyle = value
-          await this.plugin.saveSettings()
-        }),
-      )
-
-    new Setting(containerEl)
-      .setName('Test connection')
-      .setDesc('Writes a small test object, reads it back, then deletes it.')
-      .addButton((button) =>
-        button.setButtonText('Test').onClick(async () => {
-          button.setButtonText('Testing…').setDisabled(true)
-          const result = await this.plugin.testDestination()
-          button.setButtonText('Test').setDisabled(false)
-          new Notice(result.ok ? 'Storage is working.' : `${result.reason}${result.hint ? ' ' + result.hint : ''}`, result.ok ? 4000 : 10000)
-        }),
-      )
+    fields.render()
   }
 
   private renderBuild(containerEl: HTMLElement): void {
@@ -515,11 +461,16 @@ export class OpenPublishSettingTab extends PluginSettingTab {
         }),
       )
 
+    // Wasabi bills a deleted object for the rest of its 90 days, so on that one
+    // provider this button costs money rather than saving it. The warning
+    // belongs here as much as in the picker: this is where it is spent.
+    const cleanupCaution = providerById(this.plugin.settings.destination.provider).caution
     new Setting(containerEl)
       .setName('Clean up unused files')
       .setDesc(
         'Deletes files in your storage that your site no longer uses. ' +
-          'Keeps the last 5 publishes and anything from the past week. It will not run while a publish is going.',
+          'Keeps the last 5 publishes and anything from the past week. It will not run while a publish is going.' +
+          (cleanupCaution ? ` ${cleanupCaution}` : ''),
       )
       .addButton((button) =>
         button.setButtonText('Clean up').onClick(async () => {

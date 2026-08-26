@@ -28,10 +28,16 @@ Open **Settings → Open Publish → Open setup guide** in Obsidian to follow al
 > unlocks content that is already public on your website. The read-write one can
 > replace your site, so it stays scoped to a single bucket.
 
-**In Obsidian**, fill in Endpoint, Bucket, Region (`auto`), and the read-write
-key pair, then press **Test connection**. It writes a small object, reads it
-back, compares it, and deletes it, so a pass means the token really can do
-everything publishing needs.
+**In Obsidian**, choose **Cloudflare R2** in the storage list, then fill in the
+Account ID, the bucket and the read-write key pair. The endpoint is built from
+the account ID and shown underneath, so there is no URL to type. Region and
+path-style addressing are set for you and live under **Advanced**, which opens
+by itself if anything in there is not R2's default.
+
+Press **Test connection**. It writes a small object, reads it back, compares it,
+deletes it, and then makes one write with a deliberately stale `If-Match` that
+R2 has to reject, so a pass means the token really can do everything publishing
+needs and that two devices can publish safely.
 
 ---
 

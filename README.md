@@ -42,8 +42,14 @@ published in Git.
 ## Getting started
 
 Follow **[docs/setup-cloudflare.md](docs/setup-cloudflare.md)**: about ten
-minutes, no terminal, nothing to install outside Obsidian. Other hosts work the
-same way; see [docs/other-providers.md](docs/other-providers.md).
+minutes, no terminal, nothing to install outside Obsidian.
+
+The setup guide opens on a storage picker. Cloudflare R2, Amazon S3, Backblaze
+B2, Wasabi and MinIO each fill in their own endpoint, region and addressing
+style from one blank, and **Other S3-compatible storage** takes an endpoint
+directly, so anything speaking the S3 API works whether or not it is on the
+list. See [docs/other-providers.md](docs/other-providers.md) for the table, the
+two providers whose pricing fights this design, and other hosts.
 
 ## How publishing works
 

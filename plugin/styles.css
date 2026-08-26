@@ -335,3 +335,89 @@
 .op-rule-add { border-top: none; padding-top: 4px; }
 .op-rule-add .setting-item-control { width: 100%; }
 .op-rule-add input { width: 100%; }
+
+/* --- storage providers -------------------------------------------------- */
+
+/*
+ * A row list, not a tile grid. Obsidian's settings column is narrow and the
+ * wizard is already a scrolling modal, so a grid would collapse to a list on
+ * anything small and cost a media query to buy nothing.
+ *
+ * Text-led, with no logos and no glyphs: one identical icon on six rows is
+ * decoration, six different ones are a decoder ring with no key, and Obsidian
+ * hides settings icons for the whole community-plugins group anyway.
+ */
+.op-provider-list {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  overflow: hidden;
+  margin-bottom: var(--op-gap);
+}
+.op-provider-row {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  border: none;
+  border-radius: 0;
+  border-top: 1px solid var(--background-modifier-border);
+  background: transparent;
+  box-shadow: none;
+  cursor: pointer;
+  white-space: normal;
+  height: auto;
+}
+.op-provider-row:first-child { border-top: none; }
+.op-provider-row.is-selected { background: var(--background-modifier-hover); }
+.op-provider-row.is-selected .op-provider-name { color: var(--text-accent); }
+
+.op-provider-heading { display: flex; align-items: baseline; gap: 8px; }
+.op-provider-name { font-weight: var(--font-semibold); }
+.op-provider-badge {
+  font-size: var(--font-ui-smaller);
+  color: var(--text-accent);
+  border: 1px solid var(--text-accent);
+  border-radius: var(--radius-s);
+  padding: 0 5px;
+}
+.op-provider-summary { color: var(--text-muted); font-size: var(--font-ui-smaller); margin-top: 2px; }
+/* A cost, not a note. It reads in the same colour as the warning panel. */
+.op-provider-caution-line { color: var(--text-warning); font-size: var(--font-ui-smaller); margin-top: 2px; }
+
+/* Touch has no hover, so selection must be legible without one. */
+@media (hover: hover) {
+  .op-provider-row:hover { background: var(--background-modifier-hover); }
+}
+
+.op-wizard-links { display: flex; flex-wrap: wrap; gap: 14px; margin: 8px 0 4px; font-size: var(--font-ui-small); }
+
+/*
+ * The endpoint we built, always readable even though it is only editable inside
+ * Advanced. Otherwise this would be a URL built for you that you cannot see.
+ */
+.op-endpoint-preview {
+  margin-top: 3px;
+  font-family: var(--font-monospace);
+  font-size: var(--font-ui-smaller);
+  overflow-wrap: anywhere;
+}
+
+.op-advanced-toggle {
+  display: block;
+  width: 100%;
+  text-align: left;
+  margin-top: var(--op-gap);
+  padding: 6px 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  cursor: pointer;
+  color: var(--text-muted);
+  font-size: var(--font-ui-small);
+}
+.op-advanced-toggle::before { content: "▸ "; }
+.op-advanced-toggle[aria-expanded='true']::before { content: "▾ "; }
+.op-advanced { padding-left: 2px; }

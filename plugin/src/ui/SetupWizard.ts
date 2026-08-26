@@ -9,10 +9,12 @@
 import { Modal, Notice, Setting } from 'obsidian'
 import type { App } from 'obsidian'
 import type OpenPublishPlugin from '../main.ts'
-import { isBuilderConfigured, isDestinationConfigured } from '../settings.ts'
+import { hasStorageMoved, isBuilderConfigured } from '../settings.ts'
+import { providerById } from '../destinations/providers.ts'
 import { addRule, removeRule, summarizeRules } from './FolderRules.ts'
 import { renderFolderList } from './RuleList.ts'
 import type { Disposer } from './RuleList.ts'
+import { StorageFields, renderProviderList, selectProvider } from './StorageFields.ts'
 
 interface Step {
   title: string
@@ -22,12 +24,16 @@ interface Step {
 export class SetupWizard extends Modal {
   private stepIndex = 0
   private disposeRows: Disposer = () => {}
+  /**
+   * Assigned in the body rather than declared as a constructor parameter
+   * property: Node's type stripping, which is what lets the test suites import
+   * `src/**` with no build step, refuses that syntax outright.
+   */
+  private readonly plugin: OpenPublishPlugin
 
-  constructor(
-    app: App,
-    private readonly plugin: OpenPublishPlugin,
-  ) {
+  constructor(app: App, plugin: OpenPublishPlugin) {
     super(app)
+    this.plugin = plugin
   }
 
   override onOpen(): void {
@@ -42,7 +48,7 @@ export class SetupWizard extends Modal {
 
   private steps(): Step[] {
     return [
-      { title: 'Create a storage bucket', render: (c) => this.renderBucketStep(c) },
+      { title: 'Choose your storage', render: (c) => this.renderBucketStep(c) },
       { title: 'Connect the plugin to storage', render: (c) => this.renderCredentialsStep(c) },
       { title: 'Create the site repository', render: (c) => this.renderRepoStep(c) },
       { title: 'Connect hosting', render: (c) => this.renderHostingStep(c) },
@@ -90,86 +96,69 @@ export class SetupWizard extends Modal {
     for (const line of lines) list.createEl('li', { text: line })
   }
 
+  /**
+   * The picker, and instructions that swap with it. That is the whole mechanism.
+   *
+   * Nothing chosen here is ever sent anywhere: it decides what this step says
+   * and what the next one prefills, and the endpoint string remains the only
+   * thing the signer sees.
+   */
   private renderBucketStep(container: HTMLElement): void {
     container.createEl('p', {
       text: 'Your notes live in storage you own. Nothing passes through a service run by anyone else.',
     })
-    this.instructions(container, [
-      'Open the Cloudflare dashboard and go to R2.',
-      'Create a bucket. "my-notes-publish" is a fine name. Leave it private.',
-      'Note your Account ID from the R2 overview page; the endpoint URL contains it.',
-      'Go to R2 → API Tokens and create a token with Object Read & Write, scoped to this bucket only. Save the key and secret.',
-      'Create a second token with Object Read only, scoped to the same bucket. That one goes to the build in a later step.',
-    ])
+
+    const destination = this.plugin.settings.destination
+    renderProviderList(container, destination.provider, (id) => {
+      selectProvider(destination, id)
+      this.renderStep()
+      void this.plugin.saveSettings()
+    })
+
+    const provider = providerById(destination.provider)
+    this.instructions(container, provider.setup)
+
+    if (provider.consoleUrl || provider.keysUrl) {
+      const links = container.createDiv({ cls: 'op-wizard-links' })
+      const link = (href: string, text: string): void => {
+        links.createEl('a', { href, text, attr: { target: '_blank', rel: 'noopener' } })
+      }
+      if (provider.consoleUrl) link(provider.consoleUrl, `Open ${provider.name}`)
+      if (provider.keysUrl) link(provider.keysUrl, 'How to create keys')
+    }
+
     container.createEl('p', {
       cls: 'op-muted',
       text:
-        'Two tokens, because they carry very different risk. The read-only one only unlocks content that is already ' +
-        'public on your site. The read-write one can replace your site, so it stays scoped to this bucket and nothing else.',
+        'Two sets of keys, because they carry very different risk. The read-only pair only unlocks content that is ' +
+        'already public on your site. The read-write pair can replace your site, so it stays scoped to this bucket ' +
+        'and nothing else.',
     })
   }
 
+  /**
+   * The same form settings shows, minus the provider picker: step 1 already
+   * chose, and Back is the way to change it.
+   */
   private renderCredentialsStep(container: HTMLElement): void {
-    const destination = this.plugin.settings.destination
-
-    new Setting(container).setName('Endpoint').addText((text) =>
-      text
-        .setPlaceholder('https://<account-id>.r2.cloudflarestorage.com')
-        .setValue(destination.endpoint)
-        .onChange(async (value) => {
-          destination.endpoint = value.trim()
-          await this.plugin.saveSettings()
-        }),
-    )
-    new Setting(container).setName('Bucket').addText((text) =>
-      text.setValue(destination.bucket).onChange(async (value) => {
-        destination.bucket = value.trim()
-        await this.plugin.saveSettings()
-      }),
-    )
-    new Setting(container).setName('Region').setDesc('R2 uses "auto".').addText((text) =>
-      text.setValue(destination.region).onChange(async (value) => {
-        destination.region = value.trim() || 'auto'
-        await this.plugin.saveSettings()
-      }),
-    )
-    new Setting(container).setName('Access key ID').addText((text) =>
-      text.setValue(destination.accessKeyId).onChange(async (value) => {
-        destination.accessKeyId = value.trim()
-        await this.plugin.saveSettings()
-      }),
-    )
-    new Setting(container).setName('Secret access key').addText((text) => {
-      text.inputEl.type = 'password'
-      text.setValue(destination.secretAccessKey).onChange(async (value) => {
-        destination.secretAccessKey = value.trim()
-        await this.plugin.saveSettings()
-      })
-    })
-
     const result = container.createDiv({ cls: 'op-wizard-result' })
-    new Setting(container).addButton((button) =>
-      button
-        .setButtonText('Test connection')
-        .setCta()
-        .onClick(async () => {
-          if (!isDestinationConfigured(this.plugin.settings)) {
-            result.className = 'op-wizard-result op-notice-warning'
-            result.setText('Fill in every field above first.')
-            return
-          }
-          result.className = 'op-wizard-result'
-          result.setText('Testing…')
-          const outcome = await this.plugin.testDestination()
-          if (outcome.ok) {
-            result.className = 'op-wizard-result op-notice-ok'
-            result.setText('Connected. Wrote a test object, read it back, and deleted it.')
-          } else {
-            result.className = 'op-wizard-result op-notice-error'
-            result.setText(`${outcome.reason}${outcome.hint ? ' ' + outcome.hint : ''}`)
-          }
-        }),
-    )
+    const fields = new StorageFields(container, {
+      destination: this.plugin.settings.destination,
+      save: () => this.plugin.saveSettings(),
+      showProviderPicker: false,
+      test: () => this.plugin.testDestination(),
+      storageMoved: () => hasStorageMoved(this.plugin.settings),
+      // Inline rather than a Notice: a wizard step that answers in a toast over
+      // the top of itself is answering somewhere the user is not looking.
+      report: (message, tone) => {
+        result.className = `op-wizard-result op-notice-${tone}`
+        result.setText(message)
+      },
+    })
+    fields.render()
+    // The result panel is created first so the callback can close over it, then
+    // moved below the form it reports on.
+    container.appendChild(result)
   }
 
   private renderRepoStep(container: HTMLElement): void {
@@ -198,6 +187,13 @@ export class SetupWizard extends Modal {
       `OP_BUCKET=${destination.bucket || '<not set, go back a step>'}`,
       `OP_REGION=${destination.region || 'auto'}`,
       ...(destination.prefix ? [`OP_PREFIX=${destination.prefix}`] : []),
+      // Without this line the build defaults path-style *on*
+      // (`env.OP_FORCE_PATH_STYLE !== 'false'`), so anyone who turned the
+      // toggle off got a plugin writing `bucket.endpoint/key` and a build
+      // reading `endpoint/bucket/key`. The publish succeeds and the site then
+      // cannot find `current.json`: a failure one step after the mistake, on a
+      // machine the user cannot see.
+      ...(destination.forcePathStyle === false ? ['OP_FORCE_PATH_STYLE=false'] : []),
       'OP_ACCESS_KEY_ID=<read-only key id>',
       'OP_SECRET_ACCESS_KEY=<read-only secret>',
     ]
@@ -218,14 +214,14 @@ export class SetupWizard extends Modal {
     const note = container.createDiv({ cls: 'op-notice-info' })
     note.createEl('p', {
       text:
-        'The last two values are blank on purpose. They are the read-only token from step 1: the build uses it, ' +
-        'the plugin never does, so Open Publish does not keep a copy.',
+        'The last two values are blank on purpose. They are the read-only storage keys from step 1: the build uses ' +
+        'them, the plugin never does, so Open Publish does not keep a copy.',
     })
     note.createEl('p', {
       text:
-        'That separation is the point: the read-only token only unlocks content already published on your site, ' +
-        'while the read-write token in this plugin can replace the site. Storing both here would put them in one basket ' +
-        'for no benefit. Paste it straight from Cloudflare into Cloudflare.',
+        'That separation is the point: the read-only keys only unlock content already published on your site, ' +
+        'while the read-write keys in this plugin can replace the site. Storing both here would put them in one basket ' +
+        'for no benefit. Copy them straight from your storage provider into your host, without a detour through here.',
     })
   }
 
@@ -322,7 +318,7 @@ export class SetupWizard extends Modal {
       cls: 'op-muted',
       text:
         'One last thing worth knowing: these credentials sit in plain text in your vault and sync with it. ' +
-        'Keep the token scoped to this one bucket, and revoke it from the Cloudflare dashboard if you ever need to.',
+        'Keep the keys scoped to this one bucket, and revoke them with your storage provider if you ever need to.',
     })
   }
 }

@@ -285,7 +285,15 @@ Every core module avoids importing Obsidian values, so the real implementation
 | 1 | Scanner, hasher, selection, snapshots, S3 destination, webhook builder, publish UI | done |
 | 2 | Setup wizard, link index, redirects, "Add linked", throttling, error mapping, guards, GC, docs | done |
 | 3 | Worker gateway and Deploy-to-Cloudflare button; mobile testing (including the rule rows' long-press); rollback UI; site options parity | next |
-| 4 | Astro starter; more destination presets (B2, Wasabi, MinIO); optional Git destination | later |
+| 4 | Astro starter; optional Git destination | later |
+
+Destination presets (R2, S3, B2, Wasabi, MinIO, and a free-form "Other") landed
+early, out of phase 4. They are presentation and prefill only:
+`destinations/providers.ts` is a table with no imports, and nothing in it
+reaches the wire. `S3Destination` receives the same `S3Config` it always has,
+and the endpoint string remains the only source of truth for what is signed and
+sent, so a provider id that is missing, stale or wrong costs a label and
+nothing else.
 
 ## Open questions
 

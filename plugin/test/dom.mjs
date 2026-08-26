@@ -160,6 +160,37 @@ export class StubElement {
   hide() {
     this.hidden = true
   }
+  /**
+   * Obsidian's own `HTMLElement.toggle(show)`, not `classList.toggle`. It is
+   * plain visibility, and the settings tab uses it to hide the analytics ID
+   * field, so without it `display()` throws before rendering anything.
+   */
+  toggle(show) {
+    this.hidden = !show
+  }
+  /**
+   * Only the two positions the plugin uses. A `beforebegin` insert is a *move*
+   * when the element already has a parent, which is the case the settings tab
+   * relies on to put a dropdown above the field it governs.
+   */
+  insertAdjacentElement(position, element) {
+    element.parentElement?.removeChild(element)
+    if (position === 'beforebegin' || position === 'afterend') {
+      const parent = this.parentElement
+      if (!parent) throw new Error(`insertAdjacentElement("${position}") on a node with no parent`)
+      const index = parent.children.indexOf(this)
+      parent.children.splice(position === 'beforebegin' ? index : index + 1, 0, element)
+      element.parentElement = parent
+      return element
+    }
+    if (position === 'afterbegin') {
+      this.children.unshift(element)
+      element.parentElement = this
+      return element
+    }
+    if (position === 'beforeend') return this.appendChild(element)
+    throw new Error(`unsupported insertAdjacentElement position "${position}"`)
+  }
   set className(value) {
     this.classList = new StubClassList()
     for (const name of String(value).split(/\s+/).filter(Boolean)) this.classList.add(name)
