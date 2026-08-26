@@ -37,6 +37,7 @@ published in Git.
 |---|---|
 | `plugin/` | The Obsidian plugin. TypeScript, no runtime dependencies. |
 | `starters/quartz/` | The site repository template: fetches a snapshot and builds it with Quartz. |
+| `gateway/` | An optional Cloudflare Worker, so the plugin can reach R2 without holding a storage key. |
 | `docs/` | Setup, architecture, security, troubleshooting. |
 
 ## Getting started
@@ -49,6 +50,14 @@ B2, Wasabi and MinIO each fill in their own endpoint, region and addressing
 style from one blank, and **Other S3-compatible storage** takes an endpoint
 directly, so anything speaking the S3 API works whether or not it is on the
 list.
+
+There is one entry that is not S3: **Cloudflare R2 without keys**. You deploy
+[a small Worker](gateway/README.md) to your own Cloudflare account, Cloudflare
+binds it to your bucket, and the plugin then holds one bearer token instead of
+an access key and secret. It is not encryption, the token still lives in your
+vault in plain text, and your site build still needs a read-only R2 key of its
+own. What it changes is what a leak reaches. See
+[docs/security.md](docs/security.md), which is blunt about both halves.
 
 Hosting has a picker of its own. Cloudflare Pages, Cloudflare Workers, Netlify
 and Vercel each bring their own instructions, their own free-plan numbers and
@@ -93,7 +102,7 @@ This plugin contacts exactly three, all of which you configure yourself:
 
 | Endpoint | Why | When |
 |---|---|---|
-| Your storage endpoint (e.g. `https://<account>.r2.cloudflarestorage.com`) | Read the current snapshot; upload notes and attachments | Scanning, publishing, cleanup |
+| Your storage endpoint (e.g. `https://<account>.r2.cloudflarestorage.com`), or your own Worker's address if you use the gateway | Read the current snapshot; upload notes and attachments | Scanning, publishing, cleanup |
 | Your deploy hook URL | Ask your host to rebuild the site | After a successful publish |
 | Your site URL, path `/_publish.json` | Check whether the new version is live | After triggering a build |
 
@@ -123,7 +132,7 @@ Or one piece at a time:
 
 ```bash
 npm run typecheck
-npm test          # 332 tests: no network, no Obsidian, no browser
+npm test          # no network, no Obsidian, no browser
 npm run build     # produces plugin/main.js
 ```
 

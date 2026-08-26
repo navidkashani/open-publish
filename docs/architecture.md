@@ -331,6 +331,18 @@ and the endpoint string remains the only source of truth for what is signed and
 sent, so a provider id that is missing, stale or wrong costs a label and
 nothing else.
 
+One entry in that table breaks the rule, deliberately and in exactly one place.
+"Cloudflare R2 without keys" carries `kind: 'gateway'`, which decides the `type`
+discriminant on the stored destination, and `main.ts` builds a
+`GatewayDestination` from it instead of an `S3Destination`. That is the whole of
+the seam: `destinations/types.ts` did not change, and the publisher, the
+scanner, the collector and the self-test depend on `Destination` and nothing
+narrower, so none of them can tell the difference. The gateway is a Worker the
+user deploys to their own account (`gateway/` in this repository); the plugin
+holds a bearer token for it rather than a storage key, which shrinks what a
+leaked credential reaches without pretending anything is encrypted. See
+[security.md](security.md).
+
 ## Open questions
 
 1. **A Git destination.** Content in Git is forbidden by the current brief, and

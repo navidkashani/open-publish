@@ -67,16 +67,43 @@ the truth from your bucket.
 - No writes to your notes, ever. Selection state lives in plugin settings, not
   in your files.
 
-## What is coming: the Worker gateway
+## The Worker gateway, which removes the key rather than hiding it
 
-The genuinely better answer, deferred to Phase 3 because it is
-Cloudflare-specific.
+This exists now, for Cloudflare R2, as **Cloudflare R2 without keys** in
+**Settings > Storage**.
 
-Instead of holding S3 keys, the plugin would hold a single bearer token for a
-small Worker that *you* own, deployed with a "Deploy to Cloudflare" button. The
-Worker has an R2 binding, so no S3 credentials exist on your device at all. It
-can also hold the deploy hook, enforce key prefixes, rate-limit, and perform the
-pointer swap server-side.
+You deploy a small Worker to your own Cloudflare account, and Cloudflare binds
+it to your bucket on its side. The plugin then holds a single bearer token for
+that Worker. No S3 credential is on your device at all.
 
-That collapses onboarding *and* fixes the credential problem, which is why it
-should become the recommended path once the direct-storage route is proven.
+**Read the next paragraph before believing this fixes the problem above.**
+
+The token lives in exactly the same place the keys did: `data.json`, plain text,
+synced, readable by every other plugin. **It is not encrypted, and nothing on a
+device can encrypt it.** Everything at the top of this page is still true of it.
+
+What changes is blast radius, which is the same defence as before, applied
+harder:
+
+| | Direct R2 keys | The gateway |
+|---|---|---|
+| What the plugin holds | An access key and secret | One bearer token |
+| What a leak reaches | The bucket, with whatever the token was scoped to | One Worker, which reaches one bucket, or one prefix of it if you set `PREFIX` |
+| What it can do there | Anything the key was cut for | Five operations, on keys the Worker chooses |
+| Revoking it | Create a token, scope it, replace two fields | One command, replace one field |
+
+Two things it does not do, said plainly because a picker entry could imply
+otherwise:
+
+- **Your site build still uses a read-only R2 key.** The build reads the bucket
+  directly and the gateway is not in that path. That key only unlocks content
+  already public on your site, and it never passes through Obsidian, so it is a
+  far weaker credential. It has not gone away.
+- **It is Cloudflare-only.** On Amazon S3, Backblaze or Wasabi there is no
+  equivalent, and the setup at the top of this page remains the one to follow.
+
+R2 stays the recommended entry. The gateway needs a deploy before it works,
+which is a step new users should not meet first, and the direct route has more
+miles on it. That balance is worth revisiting once this one does.
+
+[The gateway's README](../gateway/README.md) has the four commands.
