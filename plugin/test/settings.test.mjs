@@ -9,6 +9,7 @@ import {
   hostTarget,
   isDestinationConfigured,
   isBuilderConfigured,
+  storageMovedWarning,
   storageTarget,
 } from '../src/settings.ts'
 
@@ -493,4 +494,33 @@ test('two gateways are told apart by address and prefix, and by nothing else', (
   assert.notEqual(storageTarget(gateway()), storageTarget(gateway({ prefix: 'notes' })))
   assert.notEqual(storageTarget(gateway()), storageTarget(gateway({ workerUrl: 'https://other.workers.dev' })))
   assert.doesNotMatch(storageTarget(gateway()), /\bt\b/, 'the token is a credential and never goes in a signature')
+})
+
+test('a gateway move is hedged, because the plugin cannot see which bucket it reaches', () => {
+  // The path the gateway's own README recommends is pointing a Worker at the
+  // bucket you already publish to. The plain warning asserts the opposite of
+  // what happens there: it promises a full re-upload and a site building from
+  // the old storage, when content is addressed by hash and the bucket has not
+  // changed. A gateway holds no bucket name, so the honest version says "if".
+  const settings = migrateSettings({
+    destination: { endpoint: R2_ENDPOINT, bucket: 'my-notes', accessKeyId: 'k', secretAccessKey: 's' },
+    lastSnapshotId: 'snap-1',
+  })
+  assert.match(storageMovedWarning(settings), /uploads everything again/)
+
+  settings.destination = { type: 'gateway', provider: 'gateway', workerUrl: 'https://gw.workers.dev', token: 't' }
+  const hedged = storageMovedWarning(settings)
+  assert.equal(hasStorageMoved(settings), true, 'the route changed, so a panel is still right')
+  assert.match(hedged, /If it reaches the same bucket, nothing is lost/)
+  assert.match(hedged, /OP_PREFIX/, 'the one value that actually has to change')
+  assert.doesNotMatch(hedged, /uploads everything again/)
+})
+
+test('and the same hedge applies coming back off a gateway', () => {
+  const settings = migrateSettings({
+    destination: { type: 'gateway', workerUrl: 'https://gw.workers.dev', token: 't' },
+    lastSnapshotId: 'snap-1',
+  })
+  settings.destination = { type: 's3', provider: 'r2', endpoint: R2_ENDPOINT, bucket: 'my-notes', region: 'auto', accessKeyId: 'k', secretAccessKey: 's', prefix: '', forcePathStyle: true }
+  assert.match(storageMovedWarning(settings), /If it reaches the same bucket/)
 })

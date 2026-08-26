@@ -31,7 +31,6 @@ import {
 } from '../destinations/providers.ts'
 import type { ProviderId, StorageProvider } from '../destinations/providers.ts'
 import {
-  STORAGE_MOVED_WARNING,
   emptyGatewayDestination,
   emptyS3Destination,
   isDestinationReady,
@@ -74,8 +73,14 @@ export interface StorageFieldsOptions {
   /** Settings picks the provider here; the wizard has already picked on step 1. */
   showProviderPicker: boolean
   test: () => Promise<TestResult>
-  /** True when the site's content lives in storage other than this one. */
-  storageMoved?: () => boolean
+  /**
+   * The warning to show when the site's content lives somewhere other than
+   * this, or null when it does not.
+   *
+   * Text rather than a boolean: which of the two warnings applies depends on
+   * `lastPublishedTarget`, which this form does not have and should not need.
+   */
+  storageMoved?: () => string | null
   /**
    * Called instead of re-rendering just this form when the provider changes.
    * Settings uses it because copy outside this form depends on the provider
@@ -175,7 +180,8 @@ export class StorageFields {
     this.regionInput = null
     const provider = this.provider
 
-    if (this.options.storageMoved?.()) this.renderMovedWarning()
+    const moved = this.options.storageMoved?.()
+    if (moved) this.renderMovedWarning(moved)
     if (this.options.showProviderPicker) this.renderProviderDropdown()
     if (provider.caution) {
       this.host.createDiv({ cls: 'op-notice-warning op-provider-caution', text: provider.caution })
@@ -252,10 +258,10 @@ export class StorageFields {
     })
   }
 
-  private renderMovedWarning(): void {
+  private renderMovedWarning(warning: string): void {
     const box = this.host.createDiv({ cls: 'op-notice-warning op-storage-moved' })
     box.createEl('p', { text: 'This is not the storage your site was published to.' })
-    box.createEl('p', { text: STORAGE_MOVED_WARNING })
+    box.createEl('p', { text: warning })
   }
 
   private renderProviderDropdown(): void {

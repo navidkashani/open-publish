@@ -64,7 +64,7 @@ test('every request carries the token, and only the token', async () => {
 // --- reads ---------------------------------------------------------------
 
 test('a missing key is null, not an error', async () => {
-  const missing = { status: 404, headers: { 'X-Open-Publish-Gateway': '1' }, text: '{"error":"No such key."}' }
+  const missing = { status: 404, headers: { 'X-Open-Publish-Miss': 'key' }, text: '{"error":"No such key."}' }
   assert.equal(await new GatewayDestination(config, recorder([missing]).client).get('objects/ab/x'), null)
   assert.equal(await new GatewayDestination(config, recorder([missing]).client).head('objects/ab/x'), null)
   assert.equal(await new GatewayDestination(config, recorder([missing]).client).getWithEtag('objects/ab/x'), null)
@@ -86,19 +86,29 @@ test('getWithEtag hands back the body and its etag, so a later write can use If-
   assert.equal(result.body, body)
 })
 
-test('a 404 from something that is not the gateway is a wrong address, not an empty site', async () => {
+test('a 404 that is not about a missing key is a wrong address, not an empty site', async () => {
   // The dangerous shape. `scanner.ts` reads a null pointer as "nothing has ever
   // been published", so answering null here shows somebody their whole vault as
   // unpublished and blames nothing.
-  const { client } = recorder([{ status: 404, text: '<html>404 not found</html>' }])
-  await assert.rejects(
-    () => new GatewayDestination(config, client).get('current.json'),
-    (error) => error.code === 'storage-missing-bucket' && /not an Open Publish gateway/.test(error.message),
-  )
+  //
+  // The second case is the one the gateway signature alone got wrong: a Worker
+  // address carrying a path its routes do not serve (`https://example.com/gw`)
+  // is answered by the real gateway, signed, with a 404 that means "no such
+  // route" rather than "no such key".
+  for (const response of [
+    { status: 404, text: '<html>404 not found</html>' },
+    { status: 404, headers: { 'X-Open-Publish-Gateway': '1' }, text: '{"error":"Not a gateway route."}' },
+  ]) {
+    const { client } = recorder([response])
+    await assert.rejects(
+      () => new GatewayDestination(config, client).get('current.json'),
+      (error) => error.code === 'storage-missing-bucket' && /not an Open Publish gateway/.test(error.message),
+    )
+  }
 })
 
 test('reads never come from a cache, and a fresh read gets a URL nothing can have cached', async () => {
-  const signed = { status: 404, headers: { 'X-Open-Publish-Gateway': '1' } }
+  const signed = { status: 404, headers: { 'X-Open-Publish-Miss': 'key' } }
   const { client, calls } = recorder([signed, signed])
   const destination = new GatewayDestination(config, client)
   await destination.get('current.json')
@@ -144,7 +154,7 @@ test('both conditional writes surface as storage-conflict, because publisher.ts 
 })
 
 test('a delete of an already-missing key is a success', async () => {
-  const { client } = recorder([{ status: 404, headers: { 'X-Open-Publish-Gateway': '1' } }])
+  const { client } = recorder([{ status: 404, headers: { 'X-Open-Publish-Miss': 'key' } }])
   await new GatewayDestination(config, client).delete('objects/ab/gone')
 })
 

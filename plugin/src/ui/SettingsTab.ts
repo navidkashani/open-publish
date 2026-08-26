@@ -1,7 +1,7 @@
 import { Notice, PluginSettingTab, Setting } from 'obsidian'
 import type { App } from 'obsidian'
 import type OpenPublishPlugin from '../main.ts'
-import { hasHostMoved, hasStorageMoved } from '../settings.ts'
+import { hasHostMoved, hasStorageMoved, storageMovedWarning } from '../settings.ts'
 import { providerById } from '../destinations/providers.ts'
 import { isAlwaysExcluded, parsePublishFrontmatter } from '../core/selection.ts'
 import { FolderModal } from './FolderModal.ts'
@@ -90,7 +90,8 @@ export class OpenPublishSettingTab extends PluginSettingTab {
       save: () => this.plugin.saveSettings(),
       showProviderPicker: true,
       test: () => this.plugin.testDestination(),
-      storageMoved: () => hasStorageMoved(this.plugin.settings),
+      storageMoved: () =>
+        hasStorageMoved(this.plugin.settings) ? storageMovedWarning(this.plugin.settings) : null,
       // The whole tab, not just the form: the cleanup row below carries this
       // provider's caution, and a screen that updates half of itself is worse
       // than one that takes a moment.

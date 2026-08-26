@@ -213,7 +213,7 @@ async function putObject(request: Request, env: Env, key: string): Promise<Respo
 
 async function getObject(env: Env, key: string): Promise<Response> {
   const object = await env.BUCKET.get(key)
-  if (!object) return problem(404, 'No such key.')
+  if (!object) return keyMiss()
   // No Content-Length: the body is a stream, and the runtime frames it. Stating
   // a length beside a stream is a way for the two to disagree, and nothing on
   // the other end reads it on a GET anyway.
@@ -227,7 +227,7 @@ async function getObject(env: Env, key: string): Promise<Response> {
  */
 async function headObject(env: Env, key: string): Promise<Response> {
   const object = await env.BUCKET.head(key)
-  if (!object) return problem(404, 'No such key.')
+  if (!object) return keyMiss()
   return new Response(null, {
     status: 200,
     headers: { ...objectHeaders(object), 'Content-Length': String(object.size) },
@@ -341,6 +341,24 @@ function isSafeKey(key: string): boolean {
  * near the field that caused it.
  */
 const SIGNATURE = { 'X-Open-Publish-Gateway': '1' }
+
+/**
+ * A 404 that means "this object is not here", as opposed to every other 404.
+ *
+ * The distinction has to be on the wire, because on the client side the two are
+ * the same status from the same address. A missing object is an ordinary answer
+ * on the publish path and the caller wants null for it. Anything else, most
+ * plausibly a Worker reached at a path this route does not serve, must not be
+ * read that way: the plugin turns a null pointer into "nothing has ever been
+ * published" and shows somebody their entire vault as unpublished.
+ *
+ * The signature alone cannot carry this. It says the gateway answered, and the
+ * gateway is exactly what answers 404 when the address carries a path prefix
+ * its routes do not match.
+ */
+function keyMiss(): Response {
+  return json({ error: 'No such key.' }, 404, { 'X-Open-Publish-Miss': 'key' })
+}
 
 function quote(etag: string): string {
   return etag.startsWith('"') ? etag : `"${etag}"`

@@ -9,7 +9,7 @@
 import { Modal, Notice, Setting } from 'obsidian'
 import type { App } from 'obsidian'
 import type OpenPublishPlugin from '../main.ts'
-import { hasHostMoved, hasStorageMoved } from '../settings.ts'
+import { hasHostMoved, hasStorageMoved, storageMovedWarning } from '../settings.ts'
 import { providerById } from '../destinations/providers.ts'
 import { hostById } from '../builders/hosts.ts'
 import { addRule, removeRule, summarizeRules } from './FolderRules.ts'
@@ -169,7 +169,8 @@ export class SetupWizard extends Modal {
       save: () => this.plugin.saveSettings(),
       showProviderPicker: false,
       test: () => this.plugin.testDestination(),
-      storageMoved: () => hasStorageMoved(this.plugin.settings),
+      storageMoved: () =>
+        hasStorageMoved(this.plugin.settings) ? storageMovedWarning(this.plugin.settings) : null,
       // Inline rather than a Notice: a wizard step that answers in a toast over
       // the top of itself is answering somewhere the user is not looking.
       report: (message, tone) => {

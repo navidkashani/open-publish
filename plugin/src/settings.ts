@@ -367,6 +367,35 @@ export const STORAGE_MOVED_WARNING =
   'Step 4 of the setup guide has them.'
 
 /**
+ * The same warning, hedged exactly as far as the truth requires.
+ *
+ * A gateway holds no bucket name, so when one is on either side of the move the
+ * plugin cannot tell "the same bucket, reached a new way" from "a different
+ * bucket". Those have opposite consequences, and the sentence above asserts the
+ * second one: it promises a full re-upload and a site building from the old
+ * storage. On the path the gateway's own README recommends, pointing a Worker
+ * at the bucket you already publish to, both halves are wrong. Content is
+ * addressed by hash, so nothing re-uploads, and the build reads the same bucket
+ * it always did.
+ *
+ * Firing at all is still right. The route changed, `OP_PREFIX` may have to
+ * change with it, and that is worth a panel. Only the certainty has to go.
+ */
+export const STORAGE_REROUTED_WARNING =
+  'This is a different route to your storage than the one you last published through. If it reaches the same ' +
+  'bucket, nothing is lost and nothing uploads twice. If it reaches a different one, your site keeps building ' +
+  "from the old bucket until you update the values in your host's settings. Step 4 of the setup guide has them, " +
+  'and OP_PREFIX is the one to check first.'
+
+/** Which of the two the situation actually warrants. */
+export function storageMovedWarning(settings: Settings): string {
+  const publishedThroughGateway = (settings.lastPublishedTarget ?? '').startsWith('gateway|')
+  return settings.destination.type === 'gateway' || publishedThroughGateway
+    ? STORAGE_REROUTED_WARNING
+    : STORAGE_MOVED_WARNING
+}
+
+/**
  * Which host is serving the site, as far as this vault knows.
  *
  * The host label, and nothing else.

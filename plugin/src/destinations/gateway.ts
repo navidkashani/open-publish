@@ -227,11 +227,13 @@ export class GatewayDestination implements Destination {
    * surfaces later as a failed PUT, three screens from the field that caused
    * it.
    *
-   * The Worker signs every response it sends, so the two are distinguishable
-   * without depending on the wording of an error body.
+   * The Worker marks the first kind specifically. The signature header is not
+   * enough on its own: it says a gateway answered, and a gateway is exactly
+   * what answers 404 when its address carries a path its routes do not serve,
+   * which is the shape of a mistyped or re-routed Worker address.
    */
   private missing(response: HttpResponse): null {
-    if (header(response, 'x-open-publish-gateway')) return null
+    if (header(response, 'x-open-publish-miss') === 'key') return null
     throw describeGatewayError(404, response.text, this.errorContext())
   }
 

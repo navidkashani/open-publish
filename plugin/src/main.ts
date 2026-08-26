@@ -1,7 +1,7 @@
 import { Notice, Plugin, TFile, normalizePath } from 'obsidian'
 import {
   DEFAULT_SETTINGS,
-  STORAGE_MOVED_WARNING,
+  storageMovedWarning,
   hasStorageMoved,
   isDestinationConfigured,
   isHookConfigured,
@@ -285,7 +285,7 @@ export default class OpenPublishPlugin extends Plugin {
     // to show the entire vault as new: the new bucket has no `current.json`, so
     // the scan has nothing to diff against and every HEAD misses. The review is
     // where that surprise lands, so it is where the reason belongs.
-    if (hasStorageMoved(this.settings)) result.warnings.push(STORAGE_MOVED_WARNING)
+    if (hasStorageMoved(this.settings)) result.warnings.push(storageMovedWarning(this.settings))
     return result
   }
 
