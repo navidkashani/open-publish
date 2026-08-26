@@ -34,3 +34,28 @@ test('an explicit override beats the host, for custom domains', () => {
 test('a blank host variable falls through instead of winning', () => {
   assert.equal(resolveBaseUrl({ CF_PAGES_URL: '', URL: 'https://x.netlify.app' }), 'x.netlify.app')
 })
+
+// --- Workers Builds ---------------------------------------------------------
+
+test('Workers Builds with no address fails the build instead of shipping example.com', () => {
+  // It sets WORKERS_CI and no URL variable of any kind, so every lookup above
+  // misses and Quartz writes the feed, the sitemap and the 404 page for
+  // example.com. Silently, on the host our own docs call forward-looking.
+  assert.throws(
+    () => resolveBaseUrl({ WORKERS_CI: '1', CI: 'true', WORKERS_CI_BRANCH: 'main' }),
+    /OP_SITE_URL/,
+    'the failure has to name the variable that fixes it',
+  )
+})
+
+test('Workers Builds with an address set resolves like anywhere else', () => {
+  assert.equal(
+    resolveBaseUrl({ WORKERS_CI: '1', OP_SITE_URL: 'https://notes.example.com' }),
+    'notes.example.com',
+  )
+})
+
+test('every other host keeps returning undefined, so nothing else moves', () => {
+  assert.equal(resolveBaseUrl({ CI: 'true' }), undefined)
+  assert.equal(resolveBaseUrl({ WORKERS_CI: '' }), undefined, 'a blank variable is not a Workers build')
+})

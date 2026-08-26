@@ -10,7 +10,7 @@ only in the build machine's working directory.
 
 1. **Use this template → Create a new repository.** Do not clone; there is
    nothing to run locally.
-2. Connect it to Cloudflare Pages (or Netlify, or Vercel).
+2. Connect it to Cloudflare Pages (or Workers Builds, Netlify, or Vercel).
 3. Build command: `npm run build`. Output directory: `public`.
 4. Add these environment variables, using a **read-only** storage token:
 
@@ -22,6 +22,13 @@ only in the build machine's working directory.
    | `OP_ACCESS_KEY_ID` | read-only key ID |
    | `OP_SECRET_ACCESS_KEY` | read-only secret (mark encrypted) |
    | `OP_PREFIX` | optional, if the plugin uses a key prefix |
+   | `OP_SITE_URL` | your site address. Required on Workers Builds, which reports none, and on any custom domain |
+   | `OP_SITE_ROOT` | optional, for a site served from a sub-path, e.g. `/notes` |
+
+   The build works out the address from the host's own variable where there is
+   one (`CF_PAGES_URL`, `URL`, `VERCEL_PROJECT_PRODUCTION_URL`). Workers Builds
+   sets none, so the build stops and asks for `OP_SITE_URL` rather than quietly
+   producing a site addressed as `example.com`.
 
 Full walkthrough: [docs/setup-cloudflare.md](../../docs/setup-cloudflare.md).
 
