@@ -1,0 +1,35 @@
+{
+  "name": "open-publish-gateway",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A Cloudflare Worker that lets Open Publish reach your R2 bucket without holding a storage key",
+  "type": "module",
+  "engines": {
+    "node": ">=22.18"
+  },
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "test": "node --test test/*.test.mjs",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0",
+    "wrangler": "^4.0.0"
+  },
+  "cloudflare": {
+    "label": "Open Publish gateway",
+    "products": ["Workers", "R2"],
+    "bindings": {
+      "BUCKET": {
+        "description": "The R2 bucket your notes are published to. Pick the bucket you already use, not a new one: a new bucket is empty, and your site would build from it with nothing in it."
+      },
+      "TOKEN": {
+        "description": "A secret you invent. Paste the same value into Obsidian, in **Settings → Open Publish → Storage**. Generate one with `openssl rand -base64 32`. It is the only credential the plugin holds, and you can change it here at any time."
+      },
+      "PREFIX": {
+        "description": "Optional. Restricts this Worker to one folder of the bucket, so the token cannot reach anything else. Leave empty unless you already publish under a key prefix, in which case use the same value as `OP_PREFIX` in your site build."
+      }
+    }
+  }
+}

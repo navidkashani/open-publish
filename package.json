@@ -8,8 +8,8 @@
     "node": ">=22.18"
   },
   "scripts": {
-    "test": "npm --prefix plugin test && node --test starters/quartz/scripts/*.test.mjs",
-    "typecheck": "npm --prefix plugin run typecheck",
+    "test": "npm --prefix plugin test && node --test starters/quartz/scripts/*.test.mjs && node --test gateway/test/*.test.mjs",
+    "typecheck": "npm --prefix plugin run typecheck && npm --prefix plugin exec -- tsc -p gateway/tsconfig.json",
     "build": "npm --prefix plugin run build",
     "check": "npm run typecheck && npm test && npm run build",
     "verify": "npm --prefix starters/quartz run verify"

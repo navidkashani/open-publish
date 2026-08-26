@@ -26,9 +26,10 @@ jobs:
           cache: npm
           cache-dependency-path: plugin/package-lock.json
 
-      # Only the plugin has dependencies, and all of them are dev-only: the
-      # shipped plugin has no runtime dependencies at all. The starter's tests
-      # use nothing but Node built-ins.
+      # Only the plugin gets an install, and all of its dependencies are
+      # dev-only: the shipped plugin has no runtime dependencies at all. The
+      # starter's tests and the gateway Worker's tests use nothing but Node
+      # built-ins, and the gateway's typecheck borrows the plugin's `tsc`.
       - run: npm ci --prefix plugin
 
       - run: npm run check

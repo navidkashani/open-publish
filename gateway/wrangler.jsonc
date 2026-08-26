@@ -1,0 +1,56 @@
+// The Open Publish gateway.
+//
+// One Worker, one R2 binding. Cloudflare joins the two together on its side,
+// which is the whole point: the plugin never holds a storage credential.
+{
+  // The Worker's name in your Cloudflare dashboard, and the first half of the
+  // address the plugin talks to (https://<name>.<your-subdomain>.workers.dev).
+  // Rename it here rather than in the dashboard: Workers Builds fails when the
+  // two disagree.
+  "name": "open-publish-gateway",
+
+  "main": "src/worker.ts",
+
+  // Pinned, not "today". A compatibility date is how a Worker keeps the runtime
+  // behaviour it was built against, so moving it should be a decision somebody
+  // makes, never something that happens because a redeploy ran on a later date.
+  "compatibility_date": "2026-08-25",
+
+  // Errors and request logs in the dashboard. Off by default, and the first
+  // thing anybody wants when a publish fails for a reason the plugin cannot
+  // see.
+  "observability": {
+    "enabled": true
+  },
+
+  "r2_buckets": [
+    {
+      // What `env.BUCKET` is in the Worker. Do not rename: the code reads it.
+      "binding": "BUCKET",
+
+      // The bucket your notes already live in. Change this to your own bucket
+      // name before deploying. Pointing a gateway at a *new* empty bucket is
+      // the one mistake here that fails quietly: publishing works, and the
+      // site builds from a bucket with nothing in it.
+      "bucket_name": "my-notes-publish"
+    }
+  ],
+
+  "vars": {
+    // Every key this Worker touches is forced under this prefix, so a stolen
+    // token cannot reach the rest of the bucket. Empty means the whole bucket.
+    //
+    // It has to match what the build reads (OP_PREFIX), and changing it later
+    // moves your whole site: the content is addressed by key, so a new prefix
+    // is a new, empty site until everything is published again.
+    "PREFIX": ""
+  }
+
+  // TOKEN is deliberately absent. It is a secret, not a var, and a secret in
+  // this file would be committed to the repository. Set it after deploying:
+  //
+  //   wrangler secret put TOKEN
+  //
+  // Generate one with `openssl rand -base64 32`, or let the Deploy to
+  // Cloudflare button prompt you for it.
+}
