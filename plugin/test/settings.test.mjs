@@ -3,7 +3,9 @@ import assert from 'node:assert/strict'
 import {
   migrateSettings,
   DEFAULT_SETTINGS,
+  hasHostMoved,
   hasStorageMoved,
+  hostTarget,
   isDestinationConfigured,
   isBuilderConfigured,
   storageTarget,
@@ -215,4 +217,141 @@ test('nothing is claimed before the first publish, or before storage is filled i
 
   const halfTyped = migrateSettings({ lastSnapshotId: 'snap-1', lastPublishedTarget: 'something|else||path' })
   assert.equal(hasStorageMoved(halfTyped), false, 'a half-typed endpoint is not a migration')
+})
+
+// --- the hosting label ---------------------------------------------------
+
+const NETLIFY_HOOK = 'https://api.netlify.com/build_hooks/68a1f0c2d3e4b5a6c7d8e9f0'
+const PAGES_HOOK = 'https://api.cloudflare.com/client/v4/pages/webhooks/deploy_hooks/0f7a1c2e3b4d5e6f'
+
+test('a stored Netlify hook is recognised without a byte of the build settings changing', () => {
+  // The number that matters most here is the one we must not touch. It governs
+  // how often somebody spends an allowance of roughly 20 a month, and a guess
+  // is no basis for changing it.
+  const stored = {
+    builder: { url: NETLIFY_HOOK, siteUrl: 'https://x.netlify.app', minIntervalMinutes: 17, autoTrigger: false },
+  }
+  const settings = migrateSettings(stored)
+  assert.equal(settings.builder.host, 'netlify')
+  assert.equal(settings.builder.url, NETLIFY_HOOK, 'byte-identical to what was in the box')
+  assert.equal(settings.builder.minIntervalMinutes, 17, 'never rewritten from an inference')
+  assert.equal(settings.builder.autoTrigger, false)
+})
+
+test('an existing Pages user is labelled correctly rather than accidentally', () => {
+  const settings = migrateSettings({ builder: { url: PAGES_HOOK, siteUrl: 'https://x.pages.dev' } })
+  assert.equal(settings.builder.host, 'cloudflare-pages')
+  assert.equal(settings.builder.minIntervalMinutes, 5, 'the default it already had')
+})
+
+test('a hook URL that matches nothing is Another host, and nothing is rewritten', () => {
+  const settings = migrateSettings({
+    builder: { url: 'https://relay.example.com/build/abc', siteUrl: 'https://notes.example.com', minIntervalMinutes: 5 },
+  })
+  assert.equal(settings.builder.host, 'other')
+  assert.equal(settings.builder.url, 'https://relay.example.com/build/abc')
+  assert.equal(settings.builder.minIntervalMinutes, 5)
+})
+
+test('a vault with no hook yet opens on the recommended host', () => {
+  assert.equal(migrateSettings({}).builder.host, 'cloudflare-pages')
+  assert.equal(migrateSettings({ builder: { url: '   ' } }).builder.host, 'cloudflare-pages')
+})
+
+test('a stored host survives a round trip through an older build', () => {
+  // An older build merges the builder with `Object.assign`, so a key it has
+  // never heard of passes straight through. That is what makes the field safe
+  // to add: a downgrade and an upgrade leave it where it was.
+  const mine = migrateSettings({ builder: { url: PAGES_HOOK, host: 'vercel' } })
+  assert.equal(mine.builder.host, 'vercel', 'an explicit choice outranks what the hook URL looks like')
+
+  const throughOldBuild = JSON.parse(JSON.stringify(mine))
+  assert.equal(migrateSettings(throughOldBuild).builder.host, 'vercel')
+})
+
+test('a host id from the future is re-inferred rather than kept unrenderable', () => {
+  const settings = migrateSettings({ builder: { url: NETLIFY_HOOK, host: 'fly' } })
+  assert.equal(settings.builder.host, 'netlify')
+  assert.equal(settings.builder.url, NETLIFY_HOOK, 'the hook URL is the source of truth either way')
+})
+
+test('migration stays idempotent with the host label in the file', () => {
+  const once = migrateSettings({
+    builder: { url: NETLIFY_HOOK, siteUrl: 'https://x.netlify.app', minIntervalMinutes: 30 },
+    lastSnapshotId: 'snap-1',
+  })
+  assert.deepEqual(migrateSettings(JSON.parse(JSON.stringify(once))), once)
+})
+
+// --- where the last publish was served from ------------------------------
+
+test('the host target notices a move and ignores everything that is not one', () => {
+  const base = { host: 'netlify', siteUrl: 'https://x.netlify.app' }
+  assert.notEqual(hostTarget(base), hostTarget({ ...base, host: 'vercel' }))
+  assert.equal(hostTarget(base), hostTarget({ ...base, siteUrl: 'https://notes.example.com' }))
+  assert.equal(hostTarget(base), hostTarget({ ...base, siteUrl: '' }))
+})
+
+test('putting a custom domain in front of the site is not a host move', () => {
+  // The case that matters most, because this project's own setup guide tells
+  // people to do exactly this and then update the address here. A panel telling
+  // them to re-enter environment variables that are already correct is the
+  // warning everyone learns to ignore before the real one arrives.
+  const settings = migrateSettings({
+    builder: { url: PAGES_HOOK, siteUrl: 'https://x.pages.dev' },
+    lastSnapshotId: 'snap-1',
+  })
+  settings.builder.siteUrl = 'https://notes.example.com'
+  assert.equal(hasHostMoved(settings), false)
+})
+
+test('finishing setup after publishing is not a host move either', () => {
+  const settings = migrateSettings({ builder: { url: PAGES_HOOK, siteUrl: '' }, lastSnapshotId: 'snap-1' })
+  settings.builder.siteUrl = 'https://x.pages.dev'
+  assert.equal(hasHostMoved(settings), false, 'the address was never what identified the host')
+})
+
+test('the deploy hook URL is not part of the target, because it is a credential', () => {
+  // A second copy of it would sit unmasked in data.json and outlive the day
+  // somebody rotates the first one.
+  const settings = migrateSettings({
+    builder: { url: NETLIFY_HOOK, siteUrl: 'https://x.netlify.app' },
+    lastSnapshotId: 'snap-1',
+  })
+  assert.equal(settings.lastPublishedHostTarget.includes('68a1f0c2d3e4b5a6c7d8e9f0'), false)
+})
+
+test('a vault that published before this field existed is credited with its own host', () => {
+  const settings = migrateSettings({
+    builder: { url: PAGES_HOOK, siteUrl: 'https://x.pages.dev' },
+    lastSnapshotId: 'snap-1',
+  })
+  assert.equal(settings.lastPublishedHostTarget, hostTarget(settings.builder))
+  assert.equal(hasHostMoved(settings), false, 'nothing has moved, so nothing is said')
+})
+
+test('publishing to one host and then pointing at another is called out', () => {
+  const settings = migrateSettings({
+    builder: { url: PAGES_HOOK, siteUrl: 'https://x.pages.dev' },
+    lastSnapshotId: 'snap-1',
+  })
+  settings.builder.url = NETLIFY_HOOK
+  settings.builder.host = 'netlify'
+  settings.builder.siteUrl = 'https://x.netlify.app'
+  assert.equal(hasHostMoved(settings), true)
+})
+
+test('nothing is claimed before the first publish, or before the build settings are filled in', () => {
+  const neverPublished = migrateSettings({ builder: { url: PAGES_HOOK, siteUrl: 'https://x.pages.dev' } })
+  assert.equal(hasHostMoved(neverPublished), false)
+
+  const halfTyped = migrateSettings({ lastSnapshotId: 'snap-1', lastPublishedHostTarget: 'netlify|https://old' })
+  assert.equal(hasHostMoved(halfTyped), false, 'a half-typed hook is not a migration')
+})
+
+test('two devices infer the same host from the same file, so there is nothing to diverge', () => {
+  const file = { builder: { url: NETLIFY_HOOK, siteUrl: 'https://x.netlify.app' } }
+  const laptop = migrateSettings(JSON.parse(JSON.stringify(file)))
+  const phone = migrateSettings(JSON.parse(JSON.stringify(file)))
+  assert.deepEqual(laptop.builder, phone.builder)
 })

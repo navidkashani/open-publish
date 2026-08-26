@@ -3,6 +3,7 @@ import {
   DEFAULT_SETTINGS,
   STORAGE_MOVED_WARNING,
   hasStorageMoved,
+  hostTarget,
   isDestinationConfigured,
   isHookConfigured,
   migrateSettings,
@@ -337,7 +338,16 @@ export default class OpenPublishPlugin extends Plugin {
       // recognised as the migration it is rather than passing for a setting
       // change. See `hasStorageMoved`.
       this.settings.lastPublishedTarget = storageTarget(this.settings.destination)
-      if (outcome.buildTriggered) this.settings.lastBuildTriggeredAt = Date.now()
+      if (outcome.buildTriggered) {
+        this.settings.lastBuildTriggeredAt = Date.now()
+        // And which host is now serving it. Gated on the build actually being
+        // asked for, not merely on the content being committed: with automatic
+        // builds off, throttled, or refused, the notes are in storage and the
+        // *old* host is still serving the site. Recording the new host there
+        // would clear the "you have moved host" panel at precisely the moment
+        // it is telling the truth.
+        this.settings.lastPublishedHostTarget = hostTarget(this.settings.builder)
+      }
       try {
         await this.saveSettings()
         await this.saveHashCache()

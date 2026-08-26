@@ -14,18 +14,38 @@
 import type { S3Config } from './destinations/s3.ts'
 import { inferProvider, isProviderId } from './destinations/providers.ts'
 import type { ProviderId } from './destinations/providers.ts'
+import { inferHost, isHostId } from './builders/hosts.ts'
+import type { HostId } from './builders/hosts.ts'
 import type { SnapshotSite } from './core/snapshot.ts'
 
 export const SETTINGS_VERSION = 1
 
 export interface WebhookBuilderSettings {
   type: 'webhook'
+  /**
+   * `host` sits *beside* `type`, exactly as `provider` sits beside the
+   * destination's. `type` is the builder-kind discriminant a future Git-push
+   * builder would need; Pages, Netlify and Vercel are all `type: 'webhook'`,
+   * same config and same code path.
+   *
+   * It is a label, a set of instructions and a warning. `WebhookBuilder` never
+   * sees it, and the hook URL it is inferred from stays the only source of
+   * truth about which host this is.
+   */
+  host: HostId
   url: string
   method: 'POST' | 'GET'
   siteUrl: string
   logsUrl: string
   autoTrigger: boolean
-  /** Free-tier builds are scarce (Pages: 500/month, 1 concurrent). */
+  /**
+   * Five minutes, because Cloudflare Pages allows one build at a time.
+   *
+   * Worth knowing what it is not: protection against a *monthly* allowance. At
+   * five minutes this permits about 8,600 builds a month, so on Netlify's
+   * roughly 20 the only real defence is `autoTrigger`. The settings panel says
+   * so rather than quietly raising this for anyone.
+   */
   minIntervalMinutes: number
 }
 
@@ -64,6 +84,15 @@ export interface Settings {
    * keystroke and then gone.
    */
   lastPublishedTarget: string | null
+  /**
+   * Where the last publish was *served from*, as a `hostTarget` signature.
+   *
+   * The hosting counterpart of `lastPublishedTarget`, and the same kind of
+   * state rather than event. Switching host after publishing is a migration
+   * with its own three consequences, none of which the user is told about by
+   * default. See `hasHostMoved`.
+   */
+  lastPublishedHostTarget: string | null
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -83,6 +112,9 @@ export const DEFAULT_SETTINGS: Settings = {
   },
   builder: {
     type: 'webhook',
+    // The recommended host, so a fresh vault opens on it, and the interval
+    // below is that host's own constraint rather than a number from nowhere.
+    host: 'cloudflare-pages',
     url: '',
     method: 'POST',
     siteUrl: '',
@@ -116,6 +148,7 @@ export const DEFAULT_SETTINGS: Settings = {
   lastPublishedAt: null,
   lastBuildTriggeredAt: null,
   lastPublishedTarget: null,
+  lastPublishedHostTarget: null,
 }
 
 function cloneDefaults(): Settings {
@@ -151,6 +184,7 @@ export function migrateSettings(raw: unknown): Settings {
   }
 
   settings.destination.provider = resolveProvider(stored.destination)
+  settings.builder.host = resolveHost(stored.builder)
 
   settings.lastSnapshotId = typeof stored.lastSnapshotId === 'string' ? stored.lastSnapshotId : null
   settings.lastPublishedAt = typeof stored.lastPublishedAt === 'number' ? stored.lastPublishedAt : null
@@ -165,6 +199,12 @@ export function migrateSettings(raw: unknown): Settings {
         // only for people who publish once more first.
         settings.lastSnapshotId
         ? storageTarget(settings.destination)
+        : null
+  settings.lastPublishedHostTarget =
+    typeof stored.lastPublishedHostTarget === 'string'
+      ? stored.lastPublishedHostTarget
+      : settings.lastSnapshotId
+        ? hostTarget(settings.builder)
         : null
   settings.version = SETTINGS_VERSION
   return settings
@@ -192,6 +232,30 @@ function resolveProvider(stored: Partial<S3Config & { provider?: unknown }> | un
   // the recommended default instead of falling to Other.
   if (!endpoint.trim()) return DEFAULT_SETTINGS.destination.provider
   return inferProvider(endpoint).id
+}
+
+/**
+ * Which host label a stored builder gets.
+ *
+ * The same rule as `resolveProvider`, for the same reason: inference runs only
+ * on an exact hook-URL match, so migration can never change a working
+ * configuration. Anything else is "Another host", and the worst a wrong guess
+ * costs is a label, because nothing derived from it is ever sent and no stored
+ * number is ever rewritten from it. `minIntervalMinutes` and `autoTrigger` in
+ * particular are left exactly as the user set them: they govern somebody's
+ * bill, and a guess is no basis for changing one.
+ *
+ * A stored id we do not recognise (one from a newer build, arriving here after
+ * a downgrade) is re-inferred rather than kept, so the UI can always render its
+ * own state.
+ */
+function resolveHost(stored: Partial<WebhookBuilderSettings & { host?: unknown }> | undefined): HostId {
+  if (isHostId(stored?.host)) return stored.host
+  const url = typeof stored?.url === 'string' ? stored.url : ''
+  // An empty hook URL is "not set up yet", not "unrecognisable", so it keeps
+  // the recommended default instead of falling to Another host.
+  if (!url.trim()) return DEFAULT_SETTINGS.builder.host
+  return inferHost(url)
 }
 
 /**
@@ -226,6 +290,62 @@ export const STORAGE_MOVED_WARNING =
   "keeps building from the old storage until you update the values in your host's settings. " +
   'Step 4 of the setup guide has them.'
 
+/**
+ * Which host is serving the site, as far as this vault knows.
+ *
+ * The host label, and nothing else.
+ *
+ * The deploy hook URL is left out because it is a credential: a second copy of
+ * it, in a field nothing masks and nothing clears, would outlive the day
+ * somebody rotates the first one. `storageTarget` leaves the access keys out
+ * for the same reason.
+ *
+ * The site address is left out because it moves for reasons that are not a host
+ * move, and the commonest of them is one this project's own documentation tells
+ * people to do: put a custom domain in front of the site and update the address
+ * here. Including it meant following that advice raised a panel telling the user
+ * their site was served somewhere else and sending them off to re-enter
+ * environment variables that were already correct. A warning that fires on the
+ * happy path is worse than no warning, because it is the one people learn to
+ * ignore before the real one arrives.
+ *
+ * Two things this deliberately cannot see, both of which cost a missing warning
+ * rather than a wrong one:
+ *
+ *  - moving to a different project on the *same* host, which no signal here can
+ *    distinguish from staying put;
+ *  - correcting a host label by hand after publishing, which looks identical to
+ *    a move and shows the panel until the next build clears it.
+ */
+export function hostTarget(builder: Pick<WebhookBuilderSettings, 'host'>): string {
+  return builder.host
+}
+
+/**
+ * True when the site is still being served by a host other than the one the
+ * plugin is now pointed at.
+ *
+ * Three things go wrong at once, and none of them looks like a failure. The old
+ * host keeps serving the live site indefinitely, so nothing breaks; it just
+ * stops updating. The new host needs every OP_* variable entered again,
+ * including the read-only storage keys the plugin does not hold. And the site
+ * address now names a site that has never been built, so verification polls a
+ * 404 for the full ten minutes and reports "Saved, still waiting".
+ */
+export function hasHostMoved(settings: Settings): boolean {
+  if (!settings.lastSnapshotId || !settings.lastPublishedHostTarget) return false
+  // The hook URL alone, not the site address: a publish needs only the hook, so
+  // that is the point from which pointing somewhere new can do damage. Asking
+  // for the address too meant a vault that published before the address was
+  // filled in reported a move the moment setup was finished.
+  if (!isHookConfigured(settings)) return false
+  return hostTarget(settings.builder) !== settings.lastPublishedHostTarget
+}
+
+export const HOST_MOVED_WARNING =
+  'Your site is still being served by the host you last published to. This host has to build once before ' +
+  "anything here goes live, and it needs the same variables as the old one. Step 4 of the setup guide has them."
+
 function asStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) return []
   return value.filter((v): v is string => typeof v === 'string').map((v) => v.replace(/^\/+|\/+$/g, ''))
@@ -256,7 +376,11 @@ export function isHookConfigured(settings: Settings): boolean {
   return Boolean(settings.builder.url)
 }
 
-/** Enough to start a build *and* tell when it landed. */
+/** Enough to start a build *and* tell when it landed, on the builder alone. */
+export function isBuilderReady(builder: WebhookBuilderSettings): boolean {
+  return Boolean(builder.url && builder.siteUrl)
+}
+
 export function isBuilderConfigured(settings: Settings): boolean {
-  return Boolean(settings.builder.url && settings.builder.siteUrl)
+  return isBuilderReady(settings.builder)
 }
