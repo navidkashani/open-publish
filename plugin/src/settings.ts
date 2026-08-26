@@ -342,6 +342,47 @@ export function hasHostMoved(settings: Settings): boolean {
   return hostTarget(settings.builder) !== settings.lastPublishedHostTarget
 }
 
+/**
+ * What a finished publish leaves behind in settings.
+ *
+ * Extracted from `main.ts` so it can be tested at all. Everything else the
+ * plugin decides has a test; this did not, because `main.ts` imports Obsidian's
+ * `Plugin` and nothing can load it outside the app. That mattered more than it
+ * looks: these five fields are what every "has anything moved" question is
+ * answered against later, and a wrong one is invisible until a warning fires,
+ * or fails to, weeks afterwards.
+ *
+ * `now` is passed in rather than read here, so a test can say when.
+ *
+ * Nothing happens unless the publish committed. An uncommitted run changed
+ * nothing about where the site's content lives, so recording it would be
+ * recording a publish that did not happen.
+ */
+export function recordPublish(settings: Settings, outcome: PublishRecord, now: number): void {
+  if (!outcome.committed) return
+  settings.lastSnapshotId = outcome.snapshotId
+  settings.lastPublishedAt = now
+  // Where it went, so that pointing the plugin somewhere else later can be
+  // recognised as the migration it is rather than passing for a setting change.
+  // See `hasStorageMoved`.
+  settings.lastPublishedTarget = storageTarget(settings.destination)
+  if (!outcome.buildTriggered) return
+  settings.lastBuildTriggeredAt = now
+  // And which host is now serving it. Gated on the build actually being asked
+  // for, not merely on the content being committed: with automatic builds off,
+  // throttled, or refused, the notes are in storage and the *old* host is still
+  // serving the site. Recording the new host here would clear the "you have
+  // moved host" panel at precisely the moment it is telling the truth.
+  settings.lastPublishedHostTarget = hostTarget(settings.builder)
+}
+
+/** The part of a `PublishOutcome` this bookkeeping actually reads. */
+export interface PublishRecord {
+  snapshotId: string
+  committed: boolean
+  buildTriggered: boolean
+}
+
 export const HOST_MOVED_WARNING =
   'Your site is still being served by the host you last published to. This host has to build once before ' +
   "anything here goes live, and it needs the same variables as the old one. Step 4 of the setup guide has them."

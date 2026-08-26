@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   migrateSettings,
+  recordPublish,
   DEFAULT_SETTINGS,
   hasHostMoved,
   hasStorageMoved,
@@ -354,4 +355,59 @@ test('two devices infer the same host from the same file, so there is nothing to
   const laptop = migrateSettings(JSON.parse(JSON.stringify(file)))
   const phone = migrateSettings(JSON.parse(JSON.stringify(file)))
   assert.deepEqual(laptop.builder, phone.builder)
+})
+
+// --- what a finished publish leaves behind -------------------------------
+
+const published = (over = {}) =>
+  migrateSettings({
+    destination: { endpoint: R2_ENDPOINT, bucket: 'my-notes', accessKeyId: 'k', secretAccessKey: 's' },
+    builder: { url: PAGES_HOOK, siteUrl: 'https://x.pages.dev' },
+    ...over,
+  })
+
+const outcome = (over = {}) => ({ snapshotId: 'snap-2', committed: true, buildTriggered: true, ...over })
+
+test('a committed publish records where the content went and when', () => {
+  const settings = published()
+  recordPublish(settings, outcome(), 1_700_000_000_000)
+  assert.equal(settings.lastSnapshotId, 'snap-2')
+  assert.equal(settings.lastPublishedAt, 1_700_000_000_000)
+  assert.equal(settings.lastPublishedTarget, storageTarget(settings.destination))
+  assert.equal(settings.lastBuildTriggeredAt, 1_700_000_000_000)
+  assert.equal(settings.lastPublishedHostTarget, hostTarget(settings.builder))
+})
+
+test('a publish that committed nothing records nothing at all', () => {
+  // "Nothing has changed since the last publish" commits nothing and spends no
+  // build, so it is not a publish to remember.
+  const settings = published({ lastSnapshotId: 'snap-1' })
+  const before = JSON.parse(JSON.stringify(settings))
+  recordPublish(settings, outcome({ committed: false }), 1_700_000_000_000)
+  assert.deepEqual(settings, before)
+})
+
+test('content published with no build leaves the old host on the record', () => {
+  // The case the review caught. With automatic builds off, throttled, or
+  // refused, the notes are in storage and the *old* host is still serving the
+  // site. Recording the new one here cleared the "you have moved host" panel at
+  // exactly the moment it was telling the truth.
+  const settings = published({ lastSnapshotId: 'snap-1' })
+  settings.lastPublishedHostTarget = 'netlify'
+  recordPublish(settings, outcome({ buildTriggered: false }), 1_700_000_000_000)
+
+  assert.equal(settings.lastSnapshotId, 'snap-2', 'the content really did move')
+  assert.equal(settings.lastPublishedTarget, storageTarget(settings.destination))
+  assert.equal(settings.lastPublishedHostTarget, 'netlify', 'but nothing built here yet')
+  assert.equal(settings.lastBuildTriggeredAt, null, 'and no build was spent')
+  assert.equal(hasHostMoved(settings), true, 'so the warning still stands')
+})
+
+test('the build that follows it does clear the warning', () => {
+  const settings = published({ lastSnapshotId: 'snap-1' })
+  settings.lastPublishedHostTarget = 'netlify'
+  recordPublish(settings, outcome({ buildTriggered: false }), 1_700_000_000_000)
+  recordPublish(settings, outcome({ snapshotId: 'snap-3' }), 1_700_000_060_000)
+  assert.equal(hasHostMoved(settings), false)
+  assert.equal(settings.lastPublishedHostTarget, 'cloudflare-pages')
 })

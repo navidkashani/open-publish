@@ -3,11 +3,10 @@ import {
   DEFAULT_SETTINGS,
   STORAGE_MOVED_WARNING,
   hasStorageMoved,
-  hostTarget,
   isDestinationConfigured,
   isHookConfigured,
   migrateSettings,
-  storageTarget,
+  recordPublish,
 } from './settings.ts'
 import type { Settings } from './settings.ts'
 import { S3Destination } from './destinations/s3.ts'
@@ -208,7 +207,8 @@ export default class OpenPublishPlugin extends Plugin {
         url: this.settings.builder.url,
         method: this.settings.builder.method,
         siteUrl: this.settings.builder.siteUrl,
-        logsUrl: this.settings.builder.logsUrl,
+        // No logsUrl. The builder never read it, and the copy that matters is
+        // the one handed to `publish()`, which `verifyTimeoutError` uses.
       },
       this.http,
     )
@@ -225,7 +225,10 @@ export default class OpenPublishPlugin extends Plugin {
 
   async testBuilder(): Promise<BuilderTestResult> {
     const builder = this.builder()
-    if (!builder) return { ok: false, reason: 'The deploy hook URL and site URL are not both set yet.' }
+    // `builder()` returns null only when the hook URL is missing. A missing
+    // site URL is a real case too, but `test()` reports that one itself, and
+    // naming both here sent people to check a field that was already filled in.
+    if (!builder) return { ok: false, reason: 'No deploy hook URL is set yet.' }
     return builder.test()
   }
 
@@ -332,22 +335,7 @@ export default class OpenPublishPlugin extends Plugin {
   private async finishSession(session: PublishSession, status: SessionStatus): Promise<void> {
     const outcome = status.outcome
     if (outcome?.committed) {
-      this.settings.lastSnapshotId = outcome.snapshotId
-      this.settings.lastPublishedAt = Date.now()
-      // Where it went, so that pointing the plugin somewhere else later can be
-      // recognised as the migration it is rather than passing for a setting
-      // change. See `hasStorageMoved`.
-      this.settings.lastPublishedTarget = storageTarget(this.settings.destination)
-      if (outcome.buildTriggered) {
-        this.settings.lastBuildTriggeredAt = Date.now()
-        // And which host is now serving it. Gated on the build actually being
-        // asked for, not merely on the content being committed: with automatic
-        // builds off, throttled, or refused, the notes are in storage and the
-        // *old* host is still serving the site. Recording the new host there
-        // would clear the "you have moved host" panel at precisely the moment
-        // it is telling the truth.
-        this.settings.lastPublishedHostTarget = hostTarget(this.settings.builder)
-      }
+      recordPublish(this.settings, outcome, Date.now())
       try {
         await this.saveSettings()
         await this.saveHashCache()
