@@ -48,8 +48,18 @@ The setup guide opens on a storage picker. Cloudflare R2, Amazon S3, Backblaze
 B2, Wasabi and MinIO each fill in their own endpoint, region and addressing
 style from one blank, and **Other S3-compatible storage** takes an endpoint
 directly, so anything speaking the S3 API works whether or not it is on the
-list. See [docs/other-providers.md](docs/other-providers.md) for the table, the
-two providers whose pricing fights this design, and other hosts.
+list.
+
+Hosting has a picker of its own. Cloudflare Pages, Cloudflare Workers, Netlify
+and Vercel each bring their own instructions, their own free-plan numbers and
+their own warnings, and **Another host** covers anything that builds a Git
+repository and gives you a deploy hook URL. The host is recognised from the hook
+URL you paste, and it is never sent anywhere: it decides what the copy says, not
+what the plugin does.
+
+See [docs/other-providers.md](docs/other-providers.md) for both tables, the two
+storage providers whose pricing fights this design, and what each host does
+about redirects and site addresses.
 
 ## How publishing works
 

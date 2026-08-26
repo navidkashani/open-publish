@@ -366,3 +366,191 @@ test('changing provider updates the copy outside the storage form too', () => {
   assert.equal(plugin.settings.destination.provider, 'wasabi')
   assert.match(descOf(rowNamed(root, 'Clean up unused files')), /90 days/)
 })
+
+// --- the site build section ----------------------------------------------
+
+const NETLIFY_HOOK = 'https://api.netlify.com/build_hooks/68a1f0c2d3e4b5a6c7d8e9f0'
+const PAGES_HOOK = 'https://api.cloudflare.com/client/v4/pages/webhooks/deploy_hooks/0f7a1c2e3b4d5e6f'
+
+const buildSection = (root) => find(root, byClass('op-build-fields'))
+
+test('a fresh vault starts on the recommended host and asks for a hook URL', () => {
+  const { root } = open()
+  const host = rowNamed(root, 'Hosting provider')
+  assert.equal(inputIn(host).value, 'cloudflare-pages')
+  assert.ok(rowNamed(root, 'Deploy hook URL'))
+  assert.ok(rowNamed(root, 'Site URL'))
+  assert.equal(visible(rowNamed(root, 'Build logs URL')), false, 'the optional one lives in Advanced')
+})
+
+test('the free plan quoted is the one the user is actually on', () => {
+  // The bug this replaced: every user, on every host, was told "Cloudflare
+  // Pages' free plan allows 500 builds a month", which on Netlify is wrong by
+  // more than an order of magnitude in the direction that costs them the month.
+  const { root } = open({ builder: { url: PAGES_HOOK, siteUrl: 'https://x.pages.dev' } })
+  assert.match(descOf(rowNamed(root, 'Minimum minutes between builds')), /500 builds a month/)
+
+  const { root: onNetlify } = open({ builder: { url: NETLIFY_HOOK, siteUrl: 'https://x.netlify.app' } })
+  const desc = descOf(rowNamed(onNetlify, 'Minimum minutes between builds'))
+  assert.match(desc, /about 20 site updates a month/)
+  assert.doesNotMatch(desc, /Cloudflare|500 builds/)
+})
+
+test('only the host whose month can run out gets a standing panel', () => {
+  const { root } = open({ builder: { url: NETLIFY_HOOK, siteUrl: 'https://x.netlify.app' } })
+  const panel = find(root, byClass('op-build-allowance'))
+  assert.ok(panel, 'a 20-deploy month is worth a panel next to the switch that spends it')
+  assert.match(panel.textContent, /Build after publishing/)
+
+  const { root: onPages } = open({ builder: { url: PAGES_HOOK, siteUrl: 'https://x.pages.dev' } })
+  assert.equal(find(onPages, byClass('op-build-allowance')), null, 'undifferentiated warnings train dismissal')
+})
+
+test('the two controls that govern the bill stay out of Advanced', () => {
+  const { root } = open({ builder: { url: NETLIFY_HOOK, siteUrl: 'https://x.netlify.app' } })
+  assert.equal(visible(rowNamed(root, 'Build after publishing')), true)
+  assert.equal(visible(rowNamed(root, 'Minimum minutes between builds')), true)
+})
+
+test('an existing hook URL is recognised, and the label says where it came from', () => {
+  const { root } = open({ builder: { url: NETLIFY_HOOK, siteUrl: 'https://x.netlify.app' } })
+  assert.equal(inputIn(rowNamed(root, 'Hosting provider')).value, 'netlify')
+  assert.match(descOf(rowNamed(root, 'Hosting provider')), /Recognised from your deploy hook/)
+})
+
+test('a hook URL that matches nothing claims nothing', () => {
+  const { root } = open({ builder: { url: 'https://relay.example.com/build/x', siteUrl: 'https://notes.example.com' } })
+  assert.equal(inputIn(rowNamed(root, 'Hosting provider')).value, 'other')
+  assert.doesNotMatch(descOf(rowNamed(root, 'Hosting provider')), /Recognised from/)
+})
+
+test('pasting a hook URL relabels the host without disturbing what was typed', () => {
+  const { root, plugin } = open({ builder: { siteUrl: 'https://x.netlify.app', minIntervalMinutes: 17 } })
+  const hook = inputIn(rowNamed(root, 'Deploy hook URL'))
+  hook.value = NETLIFY_HOOK
+  dispatch(hook, 'input')
+
+  assert.equal(plugin.settings.builder.host, 'netlify')
+  assert.equal(inputIn(rowNamed(root, 'Hosting provider')).value, 'netlify', 'and the control says so')
+  assert.equal(plugin.settings.builder.siteUrl, 'https://x.netlify.app')
+  assert.equal(plugin.settings.builder.minIntervalMinutes, 17, 'a number that governs a bill is never inferred')
+})
+
+test("relabelling brings the new host's caveat with it, rather than dropping it", () => {
+  // setDesc replaces the description element's contents, so anything under it
+  // has to be rebuilt. Getting this wrong silently lost the one line saying
+  // that renames will not redirect on Vercel.
+  const { root } = open()
+  const hook = inputIn(rowNamed(root, 'Deploy hook URL'))
+  hook.value = 'https://api.vercel.com/v1/integrations/deploy/prj_a/b1'
+  dispatch(hook, 'input')
+
+  const desc = descOf(rowNamed(root, 'Hosting provider'))
+  assert.match(desc, /100 deploys a day/)
+  assert.match(desc, /vercel\.json/)
+  assert.match(desc, /Recognised from your deploy hook/)
+})
+
+test('switching host by hand keeps the hook URL and the site URL', () => {
+  const { root, plugin } = open({ builder: { url: PAGES_HOOK, siteUrl: 'https://x.pages.dev' } })
+  const dropdown = inputIn(rowNamed(root, 'Hosting provider'))
+  dropdown.value = 'vercel'
+  dispatch(dropdown, 'input')
+
+  assert.equal(plugin.settings.builder.host, 'vercel')
+  assert.equal(plugin.settings.builder.url, PAGES_HOOK, 'a deploy hook URL can only be pasted, never derived')
+  assert.equal(plugin.settings.builder.siteUrl, 'https://x.pages.dev')
+})
+
+test('an explicit pick that disagrees with the hook URL is stated once, not argued with', () => {
+  const { root } = open({ builder: { url: NETLIFY_HOOK, host: 'vercel', siteUrl: 'https://x.netlify.app' } })
+  assert.equal(inputIn(rowNamed(root, 'Hosting provider')).value, 'vercel', 'the deliberate choice stands')
+  assert.match(descOf(rowNamed(root, 'Hosting provider')), /looks like a Netlify one/)
+})
+
+test('a host that cannot report its own address says so where the address is typed', () => {
+  const { root } = open({ builder: { host: 'cloudflare-workers', url: '', siteUrl: '' } })
+  assert.match(descOf(rowNamed(root, 'Site URL')), /OP_SITE_URL/)
+
+  const { root: onPages } = open({ builder: { url: PAGES_HOOK } })
+  assert.doesNotMatch(descOf(rowNamed(onPages, 'Site URL')), /OP_SITE_URL/)
+})
+
+test('a deliberate pick survives the hook URL being edited again', () => {
+  // Inference applies itself on new evidence, not on every keystroke. Re-typing
+  // a URL that says what it already said is not new evidence, and overruling a
+  // deliberate choice with it made the "looks like a Netlify one" line
+  // unreachable through the very form that shows it.
+  const { root, plugin } = open({ builder: { url: NETLIFY_HOOK, host: 'vercel', siteUrl: 'https://x.netlify.app' } })
+  const hook = inputIn(rowNamed(root, 'Deploy hook URL'))
+
+  hook.value = ''
+  dispatch(hook, 'input')
+  hook.value = NETLIFY_HOOK
+  dispatch(hook, 'input')
+
+  assert.equal(plugin.settings.builder.host, 'vercel', 'the deliberate choice stands')
+  assert.match(descOf(rowNamed(root, 'Hosting provider')), /looks like a Netlify one/)
+})
+
+test('a genuinely different hook URL does overrule the earlier pick', () => {
+  const { root, plugin } = open({ builder: { url: NETLIFY_HOOK, host: 'vercel', siteUrl: 'https://x.netlify.app' } })
+  const hook = inputIn(rowNamed(root, 'Deploy hook URL'))
+  hook.value = PAGES_HOOK
+  dispatch(hook, 'input')
+
+  assert.equal(plugin.settings.builder.host, 'cloudflare-pages', 'a new host is new evidence')
+  assert.match(descOf(rowNamed(root, 'Hosting provider')), /Recognised from your deploy hook/)
+})
+
+test('the escape-hatch host asks for a site address the build can read', () => {
+  const { root } = open({ builder: { url: 'https://relay.example.com/build/x', siteUrl: 'https://notes.example.com' } })
+  assert.equal(inputIn(rowNamed(root, 'Hosting provider')).value, 'other')
+  assert.match(descOf(rowNamed(root, 'Site URL')), /OP_SITE_URL/)
+})
+
+test("Vercel's missing redirects are a line, not an alarm", () => {
+  const { root } = open({ builder: { host: 'vercel', url: 'https://api.vercel.com/v1/integrations/deploy/prj_a/b1' } })
+  assert.match(descOf(rowNamed(root, 'Hosting provider')), /vercel\.json/)
+  assert.equal(find(buildSection(root), byClass('op-build-allowance')), null)
+})
+
+test('Advanced holds the build logs URL, and opens by itself when one is set', () => {
+  const { root } = open({ builder: { url: PAGES_HOOK } })
+  const closed = find(buildSection(root), byClass('op-advanced-toggle'))
+  assert.equal(closed.getAttr('aria-expanded'), 'false')
+  assert.equal(closed.textContent, 'Advanced')
+
+  const { root: withLogs } = open({ builder: { url: PAGES_HOOK, logsUrl: 'https://dash.example/logs' } })
+  const open2 = find(buildSection(withLogs), byClass('op-advanced-toggle'))
+  assert.equal(open2.getAttr('aria-expanded'), 'true')
+  assert.equal(open2.textContent, 'Advanced · build logs URL')
+  assert.equal(visible(rowNamed(withLogs, 'Build logs URL')), true)
+})
+
+test('the check button refuses an unfinished form before making a request', async () => {
+  const { root, plugin } = open({ builder: { url: PAGES_HOOK, siteUrl: '' } })
+  click(find(rowNamed(root, 'Check the site'), (node) => node.tagName === 'BUTTON'))
+  await new Promise((resolve) => setImmediate(resolve))
+  assert.equal(plugin.calls.builderChecks, 0)
+})
+
+test('a host the site was never published from says so, and keeps saying it', () => {
+  const { root } = open({
+    builder: { url: NETLIFY_HOOK, siteUrl: 'https://x.netlify.app' },
+    lastSnapshotId: 'snap-1',
+    lastPublishedHostTarget: 'cloudflare-pages|https://x.pages.dev',
+  })
+  const warning = find(root, byClass('op-host-moved'))
+  assert.ok(warning, 'the old host keeps serving, so nothing breaks and nobody finds out')
+  assert.match(warning.textContent, /still being served by the host you last published to/)
+  assert.match(warning.textContent, /needs the same variables as the old one/)
+})
+
+test('no such warning when this is the host that was published from', () => {
+  const { root } = open({
+    builder: { url: PAGES_HOOK, siteUrl: 'https://x.pages.dev' },
+    lastSnapshotId: 'snap-1',
+  })
+  assert.equal(find(root, byClass('op-host-moved')), null)
+})

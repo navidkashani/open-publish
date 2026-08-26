@@ -91,15 +91,26 @@ needs and that two devices can publish safely.
 | Read-only token | The build environment | Read published content | Near zero, unless the site is password protected |
 
 9. **Settings → Builds & deployments → Deploy hooks → Create deploy hook**.
-   Branch `main`. Copy the URL.
+   Use the branch your site is actually built from, usually `main`. A hook on
+   another branch deploys to a preview address while the plugin polls
+   production, so the check waits the full ten minutes and finds nothing. Copy
+   the URL.
 
 **In Obsidian**, paste the deploy hook URL and your `*.pages.dev` site URL, then
-press **Check site**. This confirms the site responds and reports which snapshot
+press **Check the site**. This confirms the site responds and reports which snapshot
 it is currently serving. It deliberately does not start a build: free plans
 allow 500 a month, and a test button should not spend one uninvited.
 
 10. Optional: **Custom domains → Set up a domain**. Cloudflare handles DNS and
     TLS.
+
+    One extra step that is easy to miss. A custom domain moves the pages, but
+    the build still learns its address from `CF_PAGES_URL`, so the feed, the
+    sitemap and the 404 page keep pointing at `*.pages.dev`. Nothing fails, and
+    nobody notices until someone subscribes. Add `OP_SITE_URL` with your real
+    address to the environment variables from step 8. If the site is served
+    from a sub-path rather than a domain root, add `OP_SITE_ROOT` as well, e.g.
+    `/notes`.
 
 ---
 
@@ -136,10 +147,18 @@ actually changed.
 
 ## A note on Cloudflare Pages
 
-Pages is in maintenance mode: supported and receiving fixes, but new investment
-goes to Workers. Because this design only needs "a Git-connected build with
-environment variables and a deploy hook", the identical flow works on Workers
-Builds, Netlify and Vercel. See [other-providers.md](other-providers.md).
+Pages is still the recommended path, and the starter is built for it. Worth
+knowing where Cloudflare is going, though, in their own words from the
+[migration guide](https://developers.cloudflare.com/workers/static-assets/migration-guides/migrate-from-pages/):
+Pages continues to be supported, but all new investment, optimisation and
+feature work goes to Workers.
+
+Because this design only needs "a Git-connected build with environment variables
+and a deploy hook", the identical flow works on Workers Builds, Netlify and
+Vercel, and the plugin has a host picker that swaps these instructions and the
+free-plan numbers for whichever you pick. Workers Builds needs one thing extra:
+it reports no site address, so `OP_SITE_URL` is required rather than optional.
+See [other-providers.md](other-providers.md).
 
 If something goes wrong, [troubleshooting.md](troubleshooting.md) lists every
 error message and what to do about it.

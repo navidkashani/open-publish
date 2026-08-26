@@ -22,7 +22,6 @@ import type { ConcurrencySupport, TestResult } from '../destinations/types.ts'
 import {
   PROVIDERS,
   advancedChanges,
-  advancedLabel,
   applyProvider,
   composeEndpoint,
   isProviderId,
@@ -32,6 +31,8 @@ import {
 import type { ProviderId, StorageProvider } from '../destinations/providers.ts'
 import { STORAGE_MOVED_WARNING, isDestinationReady } from '../settings.ts'
 import type { Settings } from '../settings.ts'
+import { advancedLabel, renderDisclosure, validateOnBlur } from './Disclosure.ts'
+import { renderPickerList } from './PickerList.ts'
 
 type Destination = Settings['destination']
 
@@ -55,8 +56,6 @@ export interface StorageFieldsOptions {
   /** How a test result is announced. Settings uses a Notice, the wizard a panel. */
   report?: (message: string, tone: Tone) => void
 }
-
-let sectionCounter = 0
 
 /**
  * Apply a provider choice to a stored destination, in place.
@@ -247,7 +246,7 @@ export class StorageFields {
         })
       // On blur, never on change: validating an account ID per keystroke
       // flashes an error for the first thirty-one characters of a correct one.
-      this.validateOnBlur(setting, text.inputEl, variable.pattern, variable.error)
+      validateOnBlur(setting, text.inputEl, variable.pattern, variable.error)
     })
 
     this.syncEndpoint('variable')
@@ -282,45 +281,22 @@ export class StorageFields {
     this.refreshAdvancedLabel()
   }
 
-  private validateOnBlur(setting: Setting, input: HTMLInputElement, pattern: RegExp, message: string): void {
-    input.addEventListener('blur', () => {
-      // An empty field is not yet filled in, which is not the same as wrong.
-      const value = input.value.trim()
-      setting.setErrorMessage(!value || pattern.test(value) ? null : message)
-    })
-  }
-
   // --- Advanced ----------------------------------------------------------
 
-  private advancedToggle: HTMLElement | null = null
+  private setAdvancedLabel: ((label: string) => void) | null = null
 
   private changes(): string[] {
     return advancedChanges(this.destination.provider, this.destination)
   }
 
   private refreshAdvancedLabel(): void {
-    this.advancedToggle?.setText(advancedLabel(this.changes()))
+    this.setAdvancedLabel?.(advancedLabel(this.changes()))
   }
 
   private renderAdvanced(): void {
     const provider = this.provider
-    const startOpen = this.changes().length > 0
-    const bodyId = `op-advanced-${++sectionCounter}`
-
-    const toggle = this.host.createEl('button', {
-      cls: 'op-advanced-toggle',
-      text: advancedLabel(this.changes()),
-      attr: { type: 'button', 'aria-expanded': String(startOpen), 'aria-controls': bodyId },
-    })
-    this.advancedToggle = toggle
-
-    const body = this.host.createDiv({ cls: 'op-advanced', attr: { id: bodyId } })
-    body.toggleClass('op-collapsed', !startOpen)
-    toggle.addEventListener('click', () => {
-      const open = toggle.getAttribute('aria-expanded') !== 'true'
-      toggle.setAttr('aria-expanded', String(open))
-      body.toggleClass('op-collapsed', !open)
-    })
+    const { body, setLabel } = renderDisclosure(this.host, advancedLabel(this.changes()), this.changes().length > 0)
+    this.setAdvancedLabel = setLabel
 
     // The endpoint is only editable here, but it is readable above at all times.
     if (provider.endpointTemplate !== null) {
@@ -334,7 +310,7 @@ export class StorageFields {
           this.syncEndpoint('endpoint')
           this.save()
         })
-        this.validateOnBlur(setting, text.inputEl, /^https?:\/\/\S+$/i, 'An address has to start with https:// or http://.')
+        validateOnBlur(setting, text.inputEl, /^https?:\/\/\S+$/i, 'An address has to start with https:// or http://.')
       })
     }
 
@@ -477,40 +453,30 @@ export function testSummary(measured: ConcurrencySupport | null): string {
 }
 
 /**
- * The picker itself: a row list, not a tile grid.
+ * The storage rows, in the shared list component's terms.
  *
- * Obsidian's settings column is narrow and the wizard is already a scrolling
- * modal, so a grid would collapse to a list on anything small and cost a media
- * query to buy nothing. Each row is a real button with `aria-pressed` rather
- * than a radiogroup: correct radio semantics need roving tabindex and arrow
- * keys, and a half-built radiogroup is worse for a screen reader than plain
- * buttons.
- *
- * No logos and no glyphs. One identical icon on six rows is decoration, six
- * different ones are a decoder ring with no key, and Obsidian hides settings
- * icons for the whole community-plugins group anyway.
+ * The two-device sentence rides along as the extra line, because on this list
+ * it is the second thing worth knowing about a provider and there is nowhere
+ * better to say it before the choice is made.
  */
 export function renderProviderList(
   container: HTMLElement,
   selected: ProviderId,
   onPick: (id: ProviderId) => void,
 ): void {
-  const list = container.createDiv({ cls: 'op-provider-list' })
-  for (const provider of PROVIDERS) {
-    const row = list.createEl('button', {
-      cls: 'op-provider-row',
-      attr: { type: 'button', 'aria-pressed': String(provider.id === selected) },
-    })
-    row.toggleClass('is-selected', provider.id === selected)
-
-    const heading = row.createDiv({ cls: 'op-provider-heading' })
-    heading.createSpan({ cls: 'op-provider-name', text: provider.name })
-    if (provider.recommended) heading.createSpan({ cls: 'op-provider-badge', text: 'Recommended' })
-
-    row.createDiv({ cls: 'op-provider-summary', text: provider.summary })
-    if (provider.caution) row.createDiv({ cls: 'op-provider-caution-line', text: provider.caution })
-    row.createDiv({ cls: 'op-provider-summary', text: provider.concurrency })
-
-    row.addEventListener('click', () => onPick(provider.id))
-  }
+  renderPickerList(
+    container,
+    PROVIDERS.map((provider) => ({
+      id: provider.id,
+      name: provider.name,
+      recommended: provider.recommended,
+      summary: provider.summary,
+      caution: provider.caution,
+      extra: provider.concurrency,
+    })),
+    selected,
+    (id) => {
+      if (isProviderId(id)) onPick(id)
+    },
+  )
 }

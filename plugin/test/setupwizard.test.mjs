@@ -200,3 +200,162 @@ test('the step says it is working before it says what it found', async () => {
   await new Promise((resolve) => setImmediate(resolve))
   assert.match(find(wizard.contentEl, byClass('op-wizard-result')).textContent, /Connected/)
 })
+
+// --- choosing a host ------------------------------------------------------
+
+const NETLIFY_HOOK = 'https://api.netlify.com/build_hooks/68a1f0c2d3e4b5a6c7d8e9f0'
+const PAGES_HOOK = 'https://api.cloudflare.com/client/v4/pages/webhooks/deploy_hooks/0f7a1c2e3b4d5e6f'
+
+const hostRows = (wizard) => findAll(wizard.contentEl, byClass('op-provider-row'))
+const hostNamed = (wizard, name) =>
+  hostRows(wizard).find((row) => find(row, byClass('op-provider-name'))?.textContent === name)
+
+test('step 4 offers every host, marks one, and says what each free plan gives you', () => {
+  const { wizard } = open()
+  goTo(wizard, 3)
+  const rows = hostRows(wizard)
+  assert.equal(rows.length, 5)
+
+  const badges = findAll(wizard.contentEl, byClass('op-provider-badge'))
+  assert.equal(badges.length, 1, 'exactly one recommendation, or it is not a recommendation')
+  assert.equal(find(hostNamed(wizard, 'Cloudflare Pages'), byClass('op-provider-badge')).textContent, 'Recommended')
+  assert.match(find(hostNamed(wizard, 'Netlify'), byClass('op-provider-summary')).textContent, /20 deploys a month/)
+})
+
+test('picking a host swaps the instructions, which is the whole mechanism', () => {
+  const { wizard, plugin } = open()
+  goTo(wizard, 3)
+  assert.match(wizard.contentEl.textContent, /Framework preset: None/)
+
+  click(hostNamed(wizard, 'Netlify'))
+
+  assert.equal(plugin.settings.builder.host, 'netlify')
+  assert.match(wizard.contentEl.textContent, /Publish directory: public/)
+  assert.doesNotMatch(wizard.contentEl.textContent, /Framework preset: None/)
+  assert.equal(hostNamed(wizard, 'Netlify').getAttr('aria-pressed'), 'true')
+  assert.equal(hostNamed(wizard, 'Cloudflare Pages').getAttr('aria-pressed'), 'false')
+})
+
+test('a host that provides no site address gets one in its environment block', () => {
+  // Otherwise Quartz falls back to example.com and the feed, the sitemap and
+  // the 404 page all ship pointing at a domain the user does not own.
+  const { wizard } = open({
+    destination: { endpoint: R2_ENDPOINT, bucket: 'my-notes', accessKeyId: 'k', secretAccessKey: 's' },
+    builder: { host: 'cloudflare-workers', siteUrl: 'https://notes.example.com' },
+  })
+  goTo(wizard, 3)
+  assert.match(envBlock(wizard), /OP_SITE_URL=https:\/\/notes\.example\.com/)
+
+  const { wizard: onPages } = open({ destination: { endpoint: R2_ENDPOINT, bucket: 'my-notes' } })
+  goTo(onPages, 3)
+  assert.doesNotMatch(envBlock(onPages), /OP_SITE_URL/, 'Pages reports its own address')
+})
+
+test('the escape-hatch host gets OP_SITE_URL in the block it tells you to paste', () => {
+  // "Another host" is where every unrecognised deploy hook lands, and it is the
+  // one host with no WORKERS_CI guard behind it, so an environment block that
+  // omits OP_SITE_URL is a site quietly built as example.com.
+  const { wizard } = open({
+    destination: { endpoint: R2_ENDPOINT, bucket: 'my-notes' },
+    builder: { host: 'other', siteUrl: 'https://notes.example.com' },
+  })
+  goTo(wizard, 3)
+  assert.match(envBlock(wizard), /OP_SITE_URL=https:\/\/notes\.example\.com/)
+  assert.match(wizard.contentEl.textContent, /Set OP_SITE_URL to your site address/, 'and the steps agree with it')
+})
+
+test('the custom domain trap is named where the variables are handed over', () => {
+  const { wizard } = open({ destination: { endpoint: R2_ENDPOINT, bucket: 'my-notes' } })
+  goTo(wizard, 3)
+  assert.match(wizard.contentEl.textContent, /custom domain/)
+  assert.match(wizard.contentEl.textContent, /feed and sitemap/)
+})
+
+test('choosing a host leaves every value that governs a build alone', () => {
+  const { wizard, plugin } = open({
+    builder: { url: PAGES_HOOK, siteUrl: 'https://x.pages.dev', minIntervalMinutes: 30, autoTrigger: false },
+  })
+  goTo(wizard, 3)
+  click(hostNamed(wizard, 'Vercel'))
+
+  const builder = plugin.settings.builder
+  assert.equal(builder.host, 'vercel')
+  assert.equal(builder.url, PAGES_HOOK, 'a deploy hook URL can only be pasted, never derived')
+  assert.equal(builder.siteUrl, 'https://x.pages.dev')
+  assert.equal(builder.minIntervalMinutes, 30)
+  assert.equal(builder.autoTrigger, false)
+})
+
+// --- the deploy hook step -------------------------------------------------
+
+test("step 5 gives the chosen host's own instructions, and no picker", () => {
+  const { wizard } = open({ builder: { url: NETLIFY_HOOK, siteUrl: 'https://x.netlify.app' } })
+  goTo(wizard, 4)
+  assert.match(wizard.contentEl.textContent, /Build & deploy → Build hooks/)
+  assert.equal(settingNamed(wizard.contentEl, 'Hosting provider'), null, 'step 4 already chose; Back is how you change it')
+  assert.ok(settingNamed(wizard.contentEl, 'Deploy hook URL'))
+  assert.ok(settingNamed(wizard.contentEl, 'Site URL'))
+})
+
+test('every host is told to create the hook for the branch the site is built from', () => {
+  // A hook on the wrong branch deploys a preview while the plugin polls
+  // production, so the check never matches and a publish waits the full ten
+  // minutes before saying anything.
+  for (const stored of [{ url: PAGES_HOOK }, { url: NETLIFY_HOOK }, { host: 'vercel' }, { host: 'other' }]) {
+    const { wizard } = open({ builder: stored })
+    goTo(wizard, 4)
+    assert.match(wizard.contentEl.textContent, /branch/, `${stored.host ?? stored.url} says nothing about the branch`)
+  }
+})
+
+test("the allowance panel reaches the wizard too, before a month has been spent", () => {
+  const { wizard } = open({ builder: { url: NETLIFY_HOOK, siteUrl: 'https://x.netlify.app' } })
+  goTo(wizard, 4)
+  assert.match(find(wizard.contentEl, byClass('op-build-allowance')).textContent, /about 20 site updates a month/)
+
+  const { wizard: onPages } = open({ builder: { url: PAGES_HOOK, siteUrl: 'https://x.pages.dev' } })
+  goTo(onPages, 4)
+  assert.equal(find(onPages.contentEl, byClass('op-build-allowance')), null)
+})
+
+test('the check result lands in the step, not in a toast over the top of it', async () => {
+  const { wizard, plugin } = open({ builder: { url: PAGES_HOOK, siteUrl: 'https://x.pages.dev' } })
+  goTo(wizard, 4)
+  click(find(settingNamed(wizard.contentEl, 'Check the site'), (node) => node.tagName === 'BUTTON'))
+  await new Promise((resolve) => setImmediate(resolve))
+
+  assert.equal(plugin.calls.builderChecks, 1)
+  const result = find(wizard.contentEl, byClass('op-wizard-result'))
+  assert.match(result.textContent, /Site is reachable/)
+  assert.equal(result.hasClass('op-notice-ok'), true)
+})
+
+test('an unfinished form is refused before a request is ever made', async () => {
+  const { wizard, plugin } = open({ builder: { url: PAGES_HOOK } })
+  goTo(wizard, 4)
+  click(find(settingNamed(wizard.contentEl, 'Check the site'), (node) => node.tagName === 'BUTTON'))
+  await new Promise((resolve) => setImmediate(resolve))
+
+  assert.equal(plugin.calls.builderChecks, 0)
+  assert.match(find(wizard.contentEl, byClass('op-wizard-result')).textContent, /Fill in the deploy hook URL/)
+})
+
+test('the hook and site fields on step 5 write straight through to settings', () => {
+  const { wizard, plugin } = open()
+  goTo(wizard, 4)
+  const site = find(settingNamed(wizard.contentEl, 'Site URL'), (node) => node.tagName === 'INPUT')
+  site.value = ' https://x.pages.dev/ '
+  dispatch(site, 'input')
+  assert.equal(plugin.settings.builder.siteUrl, 'https://x.pages.dev')
+  assert.ok(plugin.calls.saves > 0)
+})
+
+test('the setup guide is still six steps, so "step 4" keeps meaning the same thing', () => {
+  // `STORAGE_MOVED_WARNING` and `HOST_MOVED_WARNING` both send people to step 4
+  // for the environment variables, and both would be wrong if this changed.
+  const { wizard } = open()
+  assert.match(wizard.contentEl.textContent, /Step 1 of 6/)
+  goTo(wizard, 3)
+  assert.match(wizard.contentEl.textContent, /Step 4 of 6/)
+  assert.ok(envBlock(wizard).includes('OP_ENDPOINT'), 'and step 4 is still the one with the variables')
+})

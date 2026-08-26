@@ -176,6 +176,9 @@ export class Setting {
   addDropdown(build) {
     const selectEl = this.controlEl.createEl('select')
     const dropdown = valueComponent(selectEl, 'value')
+    // Real `DropdownComponent` exposes this, and code that repaints a dropdown
+    // without redrawing the form around it needs the element itself.
+    dropdown.selectEl = selectEl
     dropdown.addOptions = (options) => {
       for (const [value, label] of Object.entries(options)) selectEl.createEl('option', { text: label, attr: { value } })
       return dropdown

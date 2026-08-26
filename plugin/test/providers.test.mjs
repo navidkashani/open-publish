@@ -11,7 +11,6 @@ import { readFileSync } from 'node:fs'
 import {
   PROVIDERS,
   advancedChanges,
-  advancedLabel,
   applyProvider,
   composeEndpoint,
   docsEndpoint,
@@ -22,6 +21,7 @@ import {
   providerById,
   variableValue,
 } from '../src/destinations/providers.ts'
+import { advancedLabel } from '../src/ui/Disclosure.ts'
 
 /** A realistic blank per provider, so the round trip is tested on real shapes. */
 const SAMPLES = {

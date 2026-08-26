@@ -394,6 +394,22 @@
 .op-wizard-links { display: flex; flex-wrap: wrap; gap: 14px; margin: 8px 0 4px; font-size: var(--font-ui-small); }
 
 /*
+ * Where the host label came from. Inferring a value is only acceptable if the
+ * user can see that it was inferred and correct it, so this line sits directly
+ * under the control that corrects it.
+ */
+.op-host-note:not(:empty) { margin-top: 3px; color: var(--text-muted); font-size: var(--font-ui-smaller); }
+
+/*
+ * The Notify tier, for a free plan a busy afternoon can exhaust.
+ *
+ * Inline and persistent, next to the two controls that spend the allowance, and
+ * never a modal. Undifferentiated warnings train people to dismiss them, so
+ * this is the only build warning that gets a panel.
+ */
+.op-build-allowance { margin: var(--op-gap) 0; }
+
+/*
  * The endpoint we built, always readable even though it is only editable inside
  * Advanced. Otherwise this would be a URL built for you that you cannot see.
  */

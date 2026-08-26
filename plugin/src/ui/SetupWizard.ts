@@ -9,11 +9,13 @@
 import { Modal, Notice, Setting } from 'obsidian'
 import type { App } from 'obsidian'
 import type OpenPublishPlugin from '../main.ts'
-import { hasStorageMoved, isBuilderConfigured } from '../settings.ts'
+import { hasHostMoved, hasStorageMoved } from '../settings.ts'
 import { providerById } from '../destinations/providers.ts'
+import { hostById } from '../builders/hosts.ts'
 import { addRule, removeRule, summarizeRules } from './FolderRules.ts'
 import { renderFolderList } from './RuleList.ts'
 import type { Disposer } from './RuleList.ts'
+import { BuildFields, renderHostList, selectHost } from './BuildFields.ts'
 import { StorageFields, renderProviderList, selectProvider } from './StorageFields.ts'
 
 interface Step {
@@ -172,14 +174,29 @@ export class SetupWizard extends Modal {
     ])
   }
 
+  /**
+   * The host picker, and instructions that swap with it. The same mechanism as
+   * step 1, down to the component.
+   *
+   * Nothing chosen here is ever sent anywhere. It decides what this step says,
+   * which free plan the next one quotes, and one line of the environment block.
+   */
   private renderHostingStep(container: HTMLElement): void {
-    container.createEl('p', { text: 'Connect the repository to a host that builds it and serves the result.' })
-    this.instructions(container, [
-      'In Cloudflare, go to Workers & Pages → Create → Pages → Connect to Git, and pick the repository you just made.',
-      'Framework preset: None. Build command: npm run build. Output directory: public.',
-      'Open Settings → Environment variables and add the variables below, for both Production and Preview.',
-      'Mark OP_SECRET_ACCESS_KEY as encrypted.',
-    ])
+    container.createEl('p', {
+      text:
+        'Your host builds the site from the repository and serves it. ' +
+        'Your notes are fetched from your storage at build time.',
+    })
+
+    const builder = this.plugin.settings.builder
+    renderHostList(container, builder.host, (id) => {
+      selectHost(builder, id)
+      this.renderStep()
+      void this.plugin.saveSettings()
+    })
+
+    const host = hostById(builder.host)
+    this.instructions(container, host.setup)
 
     const destination = this.plugin.settings.destination
     const envLines = [
@@ -194,12 +211,17 @@ export class SetupWizard extends Modal {
       // cannot find `current.json`: a failure one step after the mistake, on a
       // machine the user cannot see.
       ...(destination.forcePathStyle === false ? ['OP_FORCE_PATH_STYLE=false'] : []),
+      // The hosts that provide no address of their own need telling, or the
+      // feed, the sitemap and the 404 page are written for example.com. The
+      // build now stops rather than shipping that, which makes this line the
+      // difference between a working build and a failed one.
+      ...(host.siteUrlVariable === null ? [`OP_SITE_URL=${builder.siteUrl || '<your site address>'}`] : []),
       'OP_ACCESS_KEY_ID=<read-only key id>',
       'OP_SECRET_ACCESS_KEY=<read-only secret>',
     ]
 
     const values = container.createDiv({ cls: 'op-wizard-values' })
-    values.createEl('div', { cls: 'op-muted', text: 'Environment variables for your Pages project:' })
+    values.createEl('div', { cls: 'op-muted', text: `Environment variables for your ${host.projectNoun}:` })
     values.createEl('pre', { text: envLines.join('\n') })
 
     new Setting(values).addButton((button) =>
@@ -208,6 +230,18 @@ export class SetupWizard extends Modal {
         new Notice('Copied. Fill in the two read-only values before pasting.')
       }),
     )
+
+    // Scenario 10: adding a custom domain in the host's dashboard moves the
+    // pages and leaves the feed and the sitemap pointing at the address the
+    // host generated. Nothing fails, so nobody finds out.
+    if (host.siteUrlVariable !== null) {
+      container.createEl('p', {
+        cls: 'op-muted',
+        text:
+          'Putting a custom domain in front of this later? Add OP_SITE_URL with that address as well, ' +
+          'or your feed and sitemap keep pointing at the address your host generated.',
+      })
+    }
 
     // The last two lines are placeholders on purpose, and that looks like a bug
     // unless we say why.
@@ -223,53 +257,44 @@ export class SetupWizard extends Modal {
         'while the read-write keys in this plugin can replace the site. Storing both here would put them in one basket ' +
         'for no benefit. Copy them straight from your storage provider into your host, without a detour through here.',
     })
+
+    if (host.consoleUrl || host.docsUrl) {
+      const links = container.createDiv({ cls: 'op-wizard-links' })
+      const link = (href: string, text: string): void => {
+        links.createEl('a', { href, text, attr: { target: '_blank', rel: 'noopener' } })
+      }
+      if (host.consoleUrl) link(host.consoleUrl, `Open ${host.name}`)
+      if (host.docsUrl) link(host.docsUrl, `${host.name} docs`)
+    }
   }
 
+  /**
+   * The same form settings shows, minus the host picker: step 4 already chose,
+   * and Back is the way to change it.
+   */
   private renderHookStep(container: HTMLElement): void {
-    this.instructions(container, [
-      'In your Pages project, go to Settings → Builds & deployments → Deploy hooks.',
-      'Create a hook for the main branch and copy the URL.',
-      'Paste it below, along with the site URL Cloudflare gave you.',
-    ])
-
     const builder = this.plugin.settings.builder
-    new Setting(container).setName('Deploy hook URL').addText((text) => {
-      text.inputEl.type = 'password'
-      text.setValue(builder.url).onChange(async (value) => {
-        builder.url = value.trim()
-        await this.plugin.saveSettings()
-      })
-    })
-    new Setting(container)
-      .setName('Site URL')
-      .setDesc('e.g. https://my-notes.pages.dev')
-      .addText((text) =>
-        text.setValue(builder.siteUrl).onChange(async (value) => {
-          builder.siteUrl = value.trim().replace(/\/+$/, '')
-          await this.plugin.saveSettings()
-        }),
-      )
+    this.instructions(container, hostById(builder.host).hookSetup)
 
     const result = container.createDiv({ cls: 'op-wizard-result' })
-    new Setting(container)
-      .setDesc('Checks that the site responds. It does not start a build, because those are limited on free plans.')
-      .addButton((button) =>
-        button
-          .setButtonText('Check site')
-          .setCta()
-          .onClick(async () => {
-            if (!isBuilderConfigured(this.plugin.settings)) {
-              result.className = 'op-wizard-result op-notice-warning'
-              result.setText('Fill in both fields first.')
-              return
-            }
-            result.className = 'op-wizard-result'
-            result.setText('Checking…')
-            const outcome = await this.plugin.testBuilder()
-            result.className = `op-wizard-result ${outcome.ok ? 'op-notice-ok' : 'op-notice-error'}`
-            result.setText(`${outcome.reason ?? ''}${outcome.hint ? ' ' + outcome.hint : ''}`.trim())
-          }),
-      )
+    const fields = new BuildFields(container, {
+      builder,
+      save: () => this.plugin.saveSettings(),
+      showHostPicker: false,
+      test: () => this.plugin.testBuilder(),
+      hostMoved: () => hasHostMoved(this.plugin.settings),
+      // Inline rather than a Notice, for the same reason step 2 is: a wizard
+      // step that answers in a toast over the top of itself is answering
+      // somewhere the user is not looking.
+      report: (message, tone) => {
+        result.className = `op-wizard-result op-notice-${tone}`
+        result.setText(message)
+      },
+    })
+    fields.render()
+    // The result panel is created first so the callback can close over it, then
+    // moved below the form it reports on.
+    container.appendChild(result)
   }
 
   private updateIncludes(includes: string[]): void {

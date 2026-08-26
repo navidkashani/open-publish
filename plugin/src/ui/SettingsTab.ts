@@ -1,7 +1,7 @@
 import { Notice, PluginSettingTab, Setting } from 'obsidian'
 import type { App } from 'obsidian'
 import type OpenPublishPlugin from '../main.ts'
-import { hasStorageMoved } from '../settings.ts'
+import { hasHostMoved, hasStorageMoved } from '../settings.ts'
 import { providerById } from '../destinations/providers.ts'
 import { isAlwaysExcluded, parsePublishFrontmatter } from '../core/selection.ts'
 import { FolderModal } from './FolderModal.ts'
@@ -9,6 +9,7 @@ import { folderRulesSummary, summarizeRules } from './FolderRules.ts'
 import { PathSuggest, normalizeTypedPath } from './PathSuggest.ts'
 import { renderRuleRows } from './RuleList.ts'
 import type { Disposer } from './RuleList.ts'
+import { BuildFields } from './BuildFields.ts'
 import { SetupWizard } from './SetupWizard.ts'
 import { StorageFields } from './StorageFields.ts'
 
@@ -95,76 +96,30 @@ export class OpenPublishSettingTab extends PluginSettingTab {
     fields.render()
   }
 
+  /**
+   * Six rows and a host, with the free plan quoted from the host you actually
+   * use.
+   *
+   * The form lives in `BuildFields`, shared with step 5 of the setup wizard,
+   * which was a near-duplicate of this in the same way the storage form used to
+   * be. What it replaced was worse than duplication: this section told every
+   * user, on every host, that "Cloudflare Pages' free plan allows 500 builds a
+   * month", which on Netlify is wrong by more than an order of magnitude in the
+   * direction that costs them the month.
+   */
   private renderBuild(containerEl: HTMLElement): void {
     new Setting(containerEl).setName('Site build').setHeading()
-    const builder = this.plugin.settings.builder
 
-    new Setting(containerEl)
-      .setName('Deploy hook URL')
-      .setDesc('Treat this like a password: anyone with it can start builds on your account.')
-      .addText((text) => {
-        text.inputEl.type = 'password'
-        text.setValue(builder.url).onChange(async (value) => {
-          builder.url = value.trim()
-          await this.plugin.saveSettings()
-        })
-      })
-
-    new Setting(containerEl)
-      .setName('Site URL')
-      .setDesc('The live site, e.g. https://my-notes.pages.dev. Used to check when a build has gone live.')
-      .addText((text) =>
-        text.setValue(builder.siteUrl).onChange(async (value) => {
-          builder.siteUrl = value.trim().replace(/\/+$/, '')
-          await this.plugin.saveSettings()
-        }),
-      )
-
-    new Setting(containerEl)
-      .setName('Build logs URL')
-      .setDesc('Optional. Shown when a build does not go live, so you can jump straight to the log.')
-      .addText((text) =>
-        text.setValue(builder.logsUrl).onChange(async (value) => {
-          builder.logsUrl = value.trim()
-          await this.plugin.saveSettings()
-        }),
-      )
-
-    new Setting(containerEl)
-      .setName('Build after publishing')
-      .setDesc('Off means content is uploaded but the site is not rebuilt until you ask.')
-      .addToggle((toggle) =>
-        toggle.setValue(builder.autoTrigger).onChange(async (value) => {
-          builder.autoTrigger = value
-          await this.plugin.saveSettings()
-        }),
-      )
-
-    new Setting(containerEl)
-      .setName('Minimum minutes between builds')
-      .setDesc(
-        "Cloudflare Pages' free plan allows 500 builds a month and one at a time. " +
-          'Publishes inside this window upload content but hold the build back.',
-      )
-      .addText((text) =>
-        text.setValue(String(builder.minIntervalMinutes)).onChange(async (value) => {
-          const parsed = Number(value)
-          builder.minIntervalMinutes = Number.isFinite(parsed) && parsed >= 0 ? parsed : 0
-          await this.plugin.saveSettings()
-        }),
-      )
-
-    new Setting(containerEl)
-      .setName('Check the site')
-      .setDesc('Checks that your site is reachable and says which version it is showing. Does not start a build.')
-      .addButton((button) =>
-        button.setButtonText('Check').onClick(async () => {
-          button.setButtonText('Checking…').setDisabled(true)
-          const result = await this.plugin.testBuilder()
-          button.setButtonText('Check').setDisabled(false)
-          new Notice(result.reason ?? (result.ok ? 'Site is reachable.' : 'Check failed.'), result.ok ? 5000 : 10000)
-        }),
-      )
+    // No `onHostChange` here, unlike storage: nothing outside this form depends
+    // on the host, so the form can repaint itself.
+    const fields = new BuildFields(containerEl, {
+      builder: this.plugin.settings.builder,
+      save: () => this.plugin.saveSettings(),
+      showHostPicker: true,
+      test: () => this.plugin.testBuilder(),
+      hostMoved: () => hasHostMoved(this.plugin.settings),
+    })
+    fields.render()
   }
 
   private renderSelection(containerEl: HTMLElement): void {

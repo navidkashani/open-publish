@@ -412,10 +412,3 @@ export function advancedChanges(id: string | undefined, fields: AdvancedFields):
   }
   return changes
 }
-
-/** `Advanced`, or `Advanced · key prefix "notes"`, or `Advanced · 2 settings changed`. */
-export function advancedLabel(changes: readonly string[]): string {
-  if (changes.length === 0) return 'Advanced'
-  if (changes.length === 1) return `Advanced · ${changes[0]}`
-  return `Advanced · ${changes.length} settings changed`
-}
