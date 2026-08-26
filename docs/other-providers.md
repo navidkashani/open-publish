@@ -12,22 +12,49 @@ free tiers are generous and both halves live in one dashboard.
 
 ## Storage
 
+The plugin ships with this list built in. Pick one in **Settings > Storage** and
+it fills in the endpoint, the region and path-style addressing for you, leaving
+one blank to type. The table is here for reference, and for anyone configuring
+the build by hand.
+
 | Provider | Endpoint | Region | Path style | Conditional writes |
 |---|---|---|---|---|
 | **Cloudflare R2** | `https://<account-id>.r2.cloudflarestorage.com` | `auto` | on | yes |
-| **AWS S3** | `https://s3.<region>.amazonaws.com` | the real region | either | yes |
-| **Backblaze B2** | `https://s3.<region>.backblazeb2.com` | e.g. `us-west-004` | on | check current docs |
-| **MinIO** (self-hosted) | your server URL | `us-east-1` | on | recent versions |
-| **Wasabi** | `https://s3.<region>.wasabisys.com` | the real region | on | check current docs |
+| **Amazon S3** | `https://s3.<region>.amazonaws.com` | the real region | off | yes |
+| **Backblaze B2** | `https://s3.<region>.backblazeb2.com` | e.g. `us-west-004` | on | check at connect |
+| **Wasabi** | `https://s3.<region>.wasabisys.com` | the real region | on | check at connect |
+| **MinIO** (self-hosted) | your server URL | `us-east-1` | on | 2024-09-13 and later |
+| **Other S3-compatible storage** | your provider's S3 API endpoint | usually `auto` | on | check at connect |
+
+Amazon S3 is the one entry with path style **off**: AWS documents path-style
+addressing as deprecated and virtual-host addressing as the form it is keeping.
+The cost of virtual-host addressing is that a bucket name containing a dot
+breaks TLS, so avoid dots in the name. Every other provider here is path-style,
+which is why it is the default.
 
 Use **Test connection** in the plugin before going further. It performs a real
-PUT, GET, compare and DELETE, so a pass means the credentials genuinely have
-everything publishing needs, not just that the host resolved.
+PUT, GET, compare and DELETE, then one write with a deliberately stale
+`If-Match` that a correct provider has to reject. A pass therefore means the
+credentials genuinely have everything publishing needs, and tells you whether
+two devices can publish safely.
 
 If a provider does not support conditional writes, the plugin detects it at
 runtime and degrades to a read-then-warn check. Publishing still works; the
 protection against two devices publishing at the same moment is weaker. Run
-**Storage self-test** in settings to see which behaviour you have.
+**Storage self-test** in settings for the full picture, including the
+first-publish guard that **Test connection** does not cover.
+
+### Two that fight this design
+
+**Wasabi** bills a 90-day minimum storage duration: delete an object sooner and
+you still pay for the remaining days. Open Publish is content-addressed, so
+**Clean up unused files** deletes orphaned objects, and on Wasabi that costs
+money rather than saving it. Wasabi works, and the plugin says this wherever you
+choose it, but leave the cleanup alone or expect the bill.
+
+**Storj** charges per segment, which penalises many small objects. A
+content-addressed vault is precisely many small objects, so it is a poor fit
+even though the API works.
 
 ## Hosting
 

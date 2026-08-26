@@ -12,6 +12,8 @@
  */
 
 import type { S3Config } from './destinations/s3.ts'
+import { inferProvider, isProviderId } from './destinations/providers.ts'
+import type { ProviderId } from './destinations/providers.ts'
 import type { SnapshotSite } from './core/snapshot.ts'
 
 export const SETTINGS_VERSION = 1
@@ -37,7 +39,14 @@ export interface SelectionSettings {
 
 export interface Settings {
   version: number
-  destination: S3Config & { type: 's3' }
+  /**
+   * `provider` sits *beside* `type`, not in place of it. `type` is the
+   * destination-kind discriminant a future Git destination would need; R2, B2
+   * and Wasabi are all `type: 's3'`, same config and same code path. The
+   * provider is a label and a set of prefills, and `S3Destination` never sees
+   * it.
+   */
+  destination: S3Config & { type: 's3'; provider: ProviderId }
   builder: WebhookBuilderSettings
   selection: SelectionSettings
   site: SnapshotSite
@@ -45,12 +54,25 @@ export interface Settings {
   lastPublishedAt: number | null
   /** Drives build throttling; separate from lastPublishedAt because a publish can skip the build. */
   lastBuildTriggeredAt: number | null
+  /**
+   * Where the last publish actually went, as a `storageTarget` signature.
+   *
+   * Kept so that changing storage after publishing can be recognised for what
+   * it is: a migration, not a setting change. Comparing against this is a
+   * *state*, not an event, which is what lets the warning be a panel that
+   * stays until the situation is resolved rather than a Notice fired on some
+   * keystroke and then gone.
+   */
+  lastPublishedTarget: string | null
 }
 
 export const DEFAULT_SETTINGS: Settings = {
   version: SETTINGS_VERSION,
   destination: {
     type: 's3',
+    // The recommended provider, so a fresh vault opens on it. Its own defaults
+    // are the same values a fresh vault had before the catalogue existed.
+    provider: 'r2',
     endpoint: '',
     bucket: '',
     region: 'auto',
@@ -93,6 +115,7 @@ export const DEFAULT_SETTINGS: Settings = {
   lastSnapshotId: null,
   lastPublishedAt: null,
   lastBuildTriggeredAt: null,
+  lastPublishedTarget: null,
 }
 
 function cloneDefaults(): Settings {
@@ -127,13 +150,81 @@ export function migrateSettings(raw: unknown): Settings {
     }
   }
 
+  settings.destination.provider = resolveProvider(stored.destination)
+
   settings.lastSnapshotId = typeof stored.lastSnapshotId === 'string' ? stored.lastSnapshotId : null
   settings.lastPublishedAt = typeof stored.lastPublishedAt === 'number' ? stored.lastPublishedAt : null
   settings.lastBuildTriggeredAt =
     typeof stored.lastBuildTriggeredAt === 'number' ? stored.lastBuildTriggeredAt : null
+  settings.lastPublishedTarget =
+    typeof stored.lastPublishedTarget === 'string'
+      ? stored.lastPublishedTarget
+      : // A vault that published before this field existed did so with the
+        // settings it still holds. Assuming that is what makes the "you have
+        // moved your storage" warning work for people upgrading, rather than
+        // only for people who publish once more first.
+        settings.lastSnapshotId
+        ? storageTarget(settings.destination)
+        : null
   settings.version = SETTINGS_VERSION
   return settings
 }
+
+/**
+ * Which provider label a stored destination gets.
+ *
+ * Inference runs *only* when the endpoint is byte-identical to what a template
+ * produces, trailing slashes aside, which the signer already ignores
+ * (`s3.ts` strips them before building a URL). Anything else is "Other". So
+ * migration can never change a working configuration: the worst a wrong guess
+ * costs is a label, because nothing derived from it is ever sent.
+ *
+ * A stored id we do not recognise (one from a newer build, arriving here after
+ * a downgrade) is re-inferred rather than kept. Keeping it would mean a UI that
+ * cannot render its own state, and re-inferring loses nothing: the endpoint is
+ * the source of truth, and a newer build will label it with its own table
+ * again on the way back up.
+ */
+function resolveProvider(stored: Partial<S3Config & { provider?: unknown }> | undefined): ProviderId {
+  if (isProviderId(stored?.provider)) return stored.provider
+  const endpoint = typeof stored?.endpoint === 'string' ? stored.endpoint : ''
+  // An empty endpoint is "not set up yet", not "unrecognisable", so it keeps
+  // the recommended default instead of falling to Other.
+  if (!endpoint.trim()) return DEFAULT_SETTINGS.destination.provider
+  return inferProvider(endpoint).id
+}
+
+/**
+ * Everything about a destination that decides *where* an object lives.
+ *
+ * Region is deliberately absent: it changes how a request is signed, not what
+ * it addresses, and a wrong one fails loudly on the next request rather than
+ * quietly building the wrong site. The provider id is absent for the same kind
+ * of reason: it is a label, so relabelling storage that has not moved must not
+ * look like a migration.
+ */
+export function storageTarget(destination: Pick<S3Config, 'endpoint' | 'bucket' | 'prefix' | 'forcePathStyle'>): string {
+  const endpoint = destination.endpoint.trim().replace(/\/+$/, '')
+  const prefix = (destination.prefix ?? '').replace(/^\/+|\/+$/g, '')
+  const addressing = destination.forcePathStyle === false ? 'host' : 'path'
+  return `${endpoint}|${destination.bucket.trim()}|${prefix}|${addressing}`
+}
+
+/**
+ * True when the site's content lives somewhere other than where the plugin is
+ * about to publish. See the warning in the settings tab: three separate things
+ * go wrong at once here, and the user is told about none of them by default.
+ */
+export function hasStorageMoved(settings: Settings): boolean {
+  if (!settings.lastSnapshotId || !settings.lastPublishedTarget) return false
+  if (!isDestinationConfigured(settings)) return false
+  return storageTarget(settings.destination) !== settings.lastPublishedTarget
+}
+
+export const STORAGE_MOVED_WARNING =
+  "Your site's content lives in the old storage. Publishing here uploads everything again, and your site " +
+  "keeps building from the old storage until you update the values in your host's settings. " +
+  'Step 4 of the setup guide has them.'
 
 function asStringArray(value: unknown): string[] {
   if (!Array.isArray(value)) return []
@@ -149,9 +240,15 @@ function asBooleanRecord(value: unknown): Record<string, boolean> {
   return out
 }
 
+/** Every field a request needs, on the destination alone. */
+export function isDestinationReady(destination: S3Config): boolean {
+  return Boolean(
+    destination.endpoint && destination.bucket && destination.accessKeyId && destination.secretAccessKey,
+  )
+}
+
 export function isDestinationConfigured(settings: Settings): boolean {
-  const d = settings.destination
-  return Boolean(d.endpoint && d.bucket && d.accessKeyId && d.secretAccessKey)
+  return isDestinationReady(settings.destination)
 }
 
 /** Enough to start a build. */
