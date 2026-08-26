@@ -17,7 +17,17 @@
  * under plain Node and the tests need no DOM, no Obsidian, and no network.
  */
 
-export type ProviderId = 'r2' | 'aws' | 'b2' | 'wasabi' | 'minio' | 'other'
+export type ProviderId = 'r2' | 'gateway' | 'aws' | 'b2' | 'wasabi' | 'minio' | 'other'
+
+/**
+ * Which destination implementation an entry's settings drive, and therefore the
+ * `type` discriminant its stored destination carries.
+ *
+ * Everything in this table except the gateway is S3, which is why it is
+ * optional and defaults there. It is the one thing in this file that is not
+ * merely presentation: `main.ts` builds a different class from it.
+ */
+export type ProviderKind = 's3' | 'gateway'
 
 /**
  * What we expect `Test connection` to find. It is an expectation, never a
@@ -41,6 +51,8 @@ export interface ProviderVariable {
 
 export interface StorageProvider {
   id: ProviderId
+  /** Absent means 's3'. */
+  kind?: ProviderKind
   name: string
   /** One line: what this is, and what it costs. */
   summary: string
@@ -57,7 +69,11 @@ export interface StorageProvider {
   fixedRegion: string | null
   forcePathStyle: boolean
   consoleUrl?: string
+  /** Overrides "Open <name>", which reads badly for a name that is a sentence. */
+  consoleLabel?: string
   keysUrl?: string
+  /** Overrides "How to create keys", for storage where there are no keys. */
+  keysLabel?: string
   /** Step 1 of the setup guide, in this provider's own words. */
   setup: string[]
   /** Appended to "bucket not found", which used to name R2 at every provider. */
@@ -106,6 +122,46 @@ export const PROVIDERS: readonly StorageProvider[] = [
     ],
     missingBucketHint:
       'Check the bucket name, and that the endpoint holds the right account ID from the R2 overview page.',
+  },
+  {
+    id: 'gateway',
+    kind: 'gateway',
+    // Not "Cloudflare Workers": the hosting picker two sections down already
+    // has an entry by that name meaning where the *site* is built, and two
+    // identical labels meaning entirely different things is worse than a
+    // longer one. "Gateway" is our word for it, not the user's, and it should
+    // not appear in the interface at all.
+    name: 'Cloudflare R2 without keys',
+    summary: 'Your keys stay in Cloudflare. Obsidian only holds a token that reaches this one bucket.',
+    concurrency: 'Two devices can publish safely.',
+    // R2 is underneath, so this is the same promise as R2's, made for the same
+    // reason: the Worker passes the conditional straight through to it.
+    expects: 'safe',
+    // Free-form, because the address is whatever wrangler printed and there is
+    // no template that could produce it.
+    endpointTemplate: null,
+    variable: {
+      label: 'Worker address',
+      placeholder: 'https://open-publish-gateway.your-subdomain.workers.dev',
+      help: 'What wrangler printed when you deployed the gateway, including https://.',
+      docsToken: 'worker-url',
+      pattern: ADDRESS_PATTERN,
+      error: ADDRESS_ERROR,
+    },
+    // Neither is used: the Worker holds the bucket, and a gateway request is
+    // not signed. They are here because the table's shape is S3's.
+    fixedRegion: null,
+    forcePathStyle: true,
+    consoleUrl: 'https://dash.cloudflare.com/?to=/:account/workers',
+    consoleLabel: 'Open Cloudflare Workers',
+    setup: [
+      'Open the Cloudflare dashboard and go to R2. Use the bucket your site already publishes to, or create one and leave it private.',
+      'Deploy the Open Publish gateway Worker to your own Cloudflare account, pointed at that bucket. Its repository has the commands, and there are four of them.',
+      'Set a token on the Worker with "wrangler secret put TOKEN". Nobody issues this one: it is whatever you choose. "openssl rand -base64 32" is a good source.',
+      'Copy the address wrangler printed. You will paste it, and the token, on the next step.',
+      'Your site build still reads the bucket directly, so you also need a read-only R2 token for it in a later step. This route removes the read-write keys, not both.',
+    ],
+    missingBucketHint: 'Check the Worker address, and that the Worker is bound to the bucket your site is built from.',
   },
   {
     id: 'aws',
@@ -262,6 +318,18 @@ export function providerById(id: string | undefined): StorageProvider {
 
 export function isProviderId(value: unknown): value is ProviderId {
   return typeof value === 'string' && PROVIDERS.some((provider) => provider.id === value)
+}
+
+/**
+ * Which implementation this provider's settings drive.
+ *
+ * The one question about the catalogue whose answer is load-bearing, so it is
+ * asked here rather than by comparing ids at the call sites. An unknown id
+ * falls back to "Other", which is S3, which is the right answer for anything
+ * that arrived from a build that knew about a provider this one does not.
+ */
+export function providerKind(id: string | undefined): ProviderKind {
+  return providerById(id).kind ?? 's3'
 }
 
 /** True when the user types the whole endpoint rather than one blank in it. */

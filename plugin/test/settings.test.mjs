@@ -411,3 +411,86 @@ test('the build that follows it does clear the warning', () => {
   assert.equal(hasHostMoved(settings), false)
   assert.equal(settings.lastPublishedHostTarget, 'cloudflare-pages')
 })
+
+// --- the gateway ---------------------------------------------------------
+
+test('a vault configured for direct S3 loads exactly as it did before the gateway existed', () => {
+  const settings = migrateSettings({
+    destination: { endpoint: R2_ENDPOINT, bucket: 'my-notes', accessKeyId: 'k', secretAccessKey: 's' },
+  })
+  assert.equal(settings.destination.type, 's3')
+  assert.equal(settings.destination.provider, 'r2')
+  assert.equal(settings.destination.accessKeyId, 'k')
+  assert.equal(settings.destination.workerUrl, undefined, 'nothing from the other shape leaks in')
+  assert.equal(settings.destination.token, undefined)
+})
+
+test('a stored gateway loads as one, and holds a token instead of keys', () => {
+  const settings = migrateSettings({
+    destination: {
+      type: 'gateway',
+      provider: 'gateway',
+      workerUrl: 'https://gw.someone.workers.dev',
+      token: 'shh',
+      prefix: '/sites/notes/',
+    },
+  })
+  assert.equal(settings.destination.type, 'gateway')
+  assert.equal(settings.destination.provider, 'gateway')
+  assert.equal(settings.destination.workerUrl, 'https://gw.someone.workers.dev')
+  assert.equal(settings.destination.token, 'shh')
+  assert.equal(settings.destination.prefix, 'sites/notes')
+  assert.equal(settings.destination.accessKeyId, undefined, 'a gateway has no keys to carry')
+})
+
+test('a gateway with nothing usable in it is empty rather than half-typed', () => {
+  const settings = migrateSettings({ destination: { type: 'gateway', workerUrl: 42, token: null } })
+  assert.deepEqual(settings.destination, {
+    type: 'gateway',
+    provider: 'gateway',
+    workerUrl: '',
+    token: '',
+    prefix: '',
+  })
+  assert.equal(isDestinationConfigured(settings), false)
+})
+
+test('a gateway is ready on an address and a token, and not before', () => {
+  const half = migrateSettings({ destination: { type: 'gateway', workerUrl: 'https://gw.workers.dev' } })
+  assert.equal(isDestinationConfigured(half), false, 'an address with no token reaches nothing')
+
+  half.destination.token = 'shh'
+  assert.equal(isDestinationConfigured(half), true)
+})
+
+test('a gateway label on an S3 destination is re-inferred, not honoured', () => {
+  // Half of a switch, arriving from a crash or a hand-edit. Honouring it would
+  // render a Worker form over a bucket's credentials.
+  const settings = migrateSettings({
+    destination: { provider: 'gateway', endpoint: R2_ENDPOINT, bucket: 'b', accessKeyId: 'k', secretAccessKey: 's' },
+  })
+  assert.equal(settings.destination.type, 's3')
+  assert.equal(settings.destination.provider, 'r2')
+})
+
+test('putting a gateway in front of the bucket you already publish to counts as a move', () => {
+  // The content has not gone anywhere. The route the build must be told about
+  // has, and the read-only keys in the host's environment are still the old
+  // ones, so this is exactly the case the warning exists for.
+  const settings = migrateSettings({
+    destination: { endpoint: R2_ENDPOINT, bucket: 'my-notes', accessKeyId: 'k', secretAccessKey: 's' },
+    lastSnapshotId: 'snap-1',
+  })
+  assert.equal(hasStorageMoved(settings), false)
+
+  settings.destination = { type: 'gateway', provider: 'gateway', workerUrl: 'https://gw.workers.dev', token: 't' }
+  assert.equal(hasStorageMoved(settings), true)
+})
+
+test('two gateways are told apart by address and prefix, and by nothing else', () => {
+  const gateway = (extra) => ({ type: 'gateway', provider: 'gateway', workerUrl: 'https://gw.workers.dev', token: 't', ...extra })
+  assert.equal(storageTarget(gateway()), storageTarget(gateway({ token: 'rotated' })), 'rotating a token moves nothing')
+  assert.notEqual(storageTarget(gateway()), storageTarget(gateway({ prefix: 'notes' })))
+  assert.notEqual(storageTarget(gateway()), storageTarget(gateway({ workerUrl: 'https://other.workers.dev' })))
+  assert.doesNotMatch(storageTarget(gateway()), /\bt\b/, 'the token is a credential and never goes in a signature')
+})

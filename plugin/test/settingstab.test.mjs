@@ -132,6 +132,88 @@ test('switching provider keeps the bucket and the credentials', () => {
   assert.equal(plugin.settings.destination.endpoint, '', 'an account ID is not a region, so it is not carried over')
 })
 
+test('choosing the gateway swaps the form: one address and one token, no bucket and no keys', () => {
+  const { root, plugin } = open({
+    destination: { endpoint: R2_ENDPOINT, bucket: 'my-notes', accessKeyId: 'AKIA', secretAccessKey: 'shh' },
+  })
+  const dropdown = inputIn(rowNamed(root, 'Storage provider'))
+  dropdown.value = 'gateway'
+  dispatch(dropdown, 'input')
+
+  assert.equal(plugin.settings.destination.type, 'gateway')
+  assert.equal(plugin.settings.destination.accessKeyId, undefined, 'a key nothing uses is pure added risk')
+  assert.equal(plugin.settings.destination.secretAccessKey, undefined)
+
+  const after = plugin.settings.destination
+  const { root: gateway } = open({ destination: after })
+  assert.ok(rowNamed(gateway, 'Worker address'))
+  assert.ok(rowNamed(gateway, 'Token'))
+  assert.equal(rowNamed(gateway, 'Bucket'), null)
+  assert.equal(rowNamed(gateway, 'Access key ID'), null)
+  assert.equal(rowNamed(gateway, 'Region'), null, 'nothing here is signed, so there is no region to sign it for')
+})
+
+test('the token is a password field, exactly as the secret key was', () => {
+  const { root } = open({ destination: { type: 'gateway', workerUrl: 'https://gw.workers.dev', token: 'shh' } })
+  assert.equal(inputIn(rowNamed(root, 'Token')).type, 'password')
+})
+
+test('switching away from the gateway takes the token out of data.json with it', () => {
+  const { root, plugin } = open({
+    destination: { type: 'gateway', workerUrl: 'https://gw.workers.dev', token: 'shh' },
+  })
+  const dropdown = inputIn(rowNamed(root, 'Storage provider'))
+  dropdown.value = 'r2'
+  dispatch(dropdown, 'input')
+
+  assert.equal(plugin.settings.destination.type, 's3')
+  assert.equal(plugin.settings.destination.token, undefined)
+  assert.equal(plugin.settings.destination.workerUrl, undefined)
+  assert.equal(plugin.settings.destination.bucket, '', 'and it starts from a fresh S3 form, not a half-filled one')
+})
+
+test('a gateway keeps the one Advanced row it has a use for', () => {
+  const { root } = open({
+    destination: { type: 'gateway', workerUrl: 'https://gw.workers.dev', token: 'shh', prefix: 'notes' },
+  })
+  assert.match(find(root, byClass('op-advanced-toggle')).textContent, /key prefix "notes"/)
+  assert.ok(rowNamed(root, 'Key prefix'))
+  assert.equal(rowNamed(root, 'Path-style addressing'), null)
+})
+
+test('a key prefix that would silently address somewhere else is refused where it is typed', () => {
+  // `a/../b` is not an invalid path, it is a valid path to somewhere else: the
+  // URL parser removes the dot segment before any request is built, so this
+  // cannot be caught downstream. The gateway Worker rejects ".." only on the
+  // listing route, where the prefix survives in a query string.
+  for (const destination of [
+    { endpoint: R2_ENDPOINT, bucket: 'b' },
+    { type: 'gateway', workerUrl: 'https://gw.workers.dev', token: 't' },
+  ]) {
+    const { root } = open({ destination })
+    const row = rowNamed(root, 'Key prefix')
+    const field = inputIn(row)
+
+    field.value = 'notes/../elsewhere'
+    dispatch(field, 'blur')
+    assert.match(errorOf(row) ?? '', /cannot contain/, `${destination.type ?? 's3'}: accepted a traversing prefix`)
+
+    field.value = 'notes/blog'
+    dispatch(field, 'blur')
+    assert.equal(errorOf(row), null, 'an ordinary prefix is still ordinary')
+  }
+})
+
+test('the credentials note is about whatever is actually stored', () => {
+  const { root: keys } = open({ destination: { endpoint: R2_ENDPOINT, bucket: 'b' } })
+  assert.match(find(keys, byClass('op-security-note')).textContent, /these keys/)
+
+  const { root: token } = open({ destination: { type: 'gateway', workerUrl: 'https://gw.workers.dev', token: 't' } })
+  const note = find(token, byClass('op-security-note')).textContent
+  assert.match(note, /this token/)
+  assert.match(note, /not encryption/, 'the one claim this must never make')
+})
+
 test('switching to Other keeps the endpoint, because nothing about it is a template', () => {
   const { root, plugin } = open({ destination: { endpoint: R2_ENDPOINT, bucket: 'my-notes' } })
   const dropdown = inputIn(rowNamed(root, 'Storage provider'))

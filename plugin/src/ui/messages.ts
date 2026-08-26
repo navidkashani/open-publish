@@ -270,8 +270,13 @@ function failedMessage(state: { code: PublishErrorCode; message: string; hint?: 
       }
     case 'storage-credentials':
       return {
-        headline: 'Storage rejected your keys',
-        body: 'They may be wrong, removed, or for a different bucket.',
+        // Both halves come from the error rather than from here, because one
+        // code now covers two very different things: an S3 key pair and a
+        // gateway token. Telling somebody holding a token that their keys may
+        // be "for a different bucket" sends them to look for a setting that
+        // does not exist on their screen.
+        headline: 'Storage rejected your details',
+        body: detailOf(state),
         buttons: [
           { label: 'Open settings', id: 'open-settings', primary: true },
           { label: 'Close', id: 'close' },

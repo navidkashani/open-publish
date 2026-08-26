@@ -10,6 +10,7 @@ import {
 } from './settings.ts'
 import type { Settings } from './settings.ts'
 import { S3Destination } from './destinations/s3.ts'
+import { GatewayDestination } from './destinations/gateway.ts'
 import { obsidianHttp } from './destinations/obsidian-http.ts'
 import type { Destination, TestResult } from './destinations/types.ts'
 import { WebhookBuilder } from './builders/webhook.ts'
@@ -174,7 +175,7 @@ export default class OpenPublishPlugin extends Plugin {
 
   // --- wiring -------------------------------------------------------------
 
-  private destinationCache: { key: string; destination: S3Destination } | null = null
+  private destinationCache: { key: string; destination: Destination } | null = null
 
   /**
    * One destination per configuration, reused.
@@ -184,6 +185,11 @@ export default class OpenPublishPlugin extends Plugin {
    * that away, so every publish rediscovers it by burning three retries with
    * backoff before falling back. The cache is keyed on the settings so editing
    * credentials still takes effect immediately.
+   *
+   * The one construction site, and the only place in the plugin that knows
+   * there is more than one kind. Everything above it, the publisher, the
+   * scanner, the collector and the self-test, depends on `Destination` and
+   * nothing narrower.
    */
   private destination(): Destination {
     if (!isDestinationConfigured(this.settings)) {
@@ -191,9 +197,14 @@ export default class OpenPublishPlugin extends Plugin {
         hint: 'Open the setup guide in Open Publish settings.',
       })
     }
-    const key = JSON.stringify(this.settings.destination)
+    const settings = this.settings.destination
+    const key = JSON.stringify(settings)
     if (this.destinationCache?.key !== key) {
-      this.destinationCache = { key, destination: new S3Destination(this.settings.destination, this.http) }
+      const destination =
+        settings.type === 'gateway'
+          ? new GatewayDestination(settings, this.http)
+          : new S3Destination(settings, this.http)
+      this.destinationCache = { key, destination }
     }
     return this.destinationCache.destination
   }

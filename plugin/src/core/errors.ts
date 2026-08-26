@@ -106,6 +106,89 @@ export function describeStorageError(
   )
 }
 
+export interface GatewayErrorContext {
+  /** The Worker's address, as configured. */
+  worker: string
+  key?: string
+}
+
+/** The `{"error": "…"}` a gateway answers failures with. */
+export function parseGatewayErrorMessage(body: string | undefined): string | undefined {
+  if (!body) return undefined
+  try {
+    const parsed = JSON.parse(body) as { error?: unknown }
+    return typeof parsed.error === 'string' ? parsed.error : undefined
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * The same table as `describeStorageError`, in the gateway's terms.
+ *
+ * Separate rather than shared because the same status means something
+ * different here, and saying the S3 sentence would send people to the wrong
+ * screen. A 401 is not "storage rejected these credentials, check the token is
+ * scoped to this bucket": there is no bucket scope to check, only one token
+ * that either matches the Worker's or does not. A 404 is not a missing bucket:
+ * the Worker holds the bucket name, so a 404 means the *address* is wrong.
+ *
+ * The codes are the existing ones, because everything downstream branches on
+ * them: `publisher.ts` refuses to retry `storage-credentials`, and
+ * `messages.ts` already knows how to render each one.
+ */
+export function describeGatewayError(
+  status: number,
+  body: string | undefined,
+  context: GatewayErrorContext,
+): PublishError {
+  const reported = parseGatewayErrorMessage(body)
+
+  if (status === 0) {
+    const detail = body?.trim()
+    return new PublishError('storage-unreachable', `Couldn't reach the Worker at ${context.worker}.`, {
+      hint: detail
+        ? `Check the Worker address, and that you are online. The connection reported: ${detail}`
+        : 'Check the Worker address, and that you are online.',
+      detail,
+    })
+  }
+
+  if (status === 401 || status === 403) {
+    return new PublishError('storage-credentials', 'The Worker rejected this token.', {
+      hint: "Check the token matches the one you set on the Worker. Run `wrangler secret put TOKEN` to set a new one, and paste the same value here.",
+    })
+  }
+
+  if (status === 404) {
+    // Only route-level 404s get here. A missing *key* is a normal answer and
+    // is turned into null before anything asks for a sentence.
+    return new PublishError('storage-missing-bucket', 'That address answered, but it is not an Open Publish gateway.', {
+      hint: 'Check the Worker address. It should be the one wrangler printed when you deployed the gateway.',
+    })
+  }
+
+  if (status === 412) {
+    return new PublishError('storage-conflict', 'The site pointer changed while this publish was running.', {
+      hint: 'Another device published in the meantime. Re-scan and publish again.',
+    })
+  }
+
+  if (status === 400) {
+    // Reachable from the settings screen, not only from a bug: the Worker
+    // refuses a key containing ".." or a backslash, and the Key prefix field is
+    // typed by hand. Blaming Open Publish would send somebody off to file an
+    // issue about a field they can fix in ten seconds.
+    return new PublishError('storage-failed', reported ?? 'The Worker refused that request.', {
+      hint: 'Check the key prefix under Storage > Advanced. It cannot contain ".." or a backslash.',
+    })
+  }
+
+  return new PublishError('storage-failed', `The Worker returned an unexpected error for ${context.key ?? '/'}.`, {
+    hint: reported ? `HTTP ${status}. It reported: ${reported}` : `HTTP ${status}. Check the Worker's logs in the Cloudflare dashboard.`,
+  })
+}
+
 /**
  * `url` is the hook URL, and the host is inferred from it rather than passed
  * in, exactly as `missingBucketHint` infers a provider from the endpoint. That

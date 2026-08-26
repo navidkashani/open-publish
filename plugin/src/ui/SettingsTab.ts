@@ -83,7 +83,10 @@ export class OpenPublishSettingTab extends PluginSettingTab {
     // surface where the choice has already been made, and the analytics
     // provider two sections down sets exactly this precedent.
     const fields = new StorageFields(containerEl, {
-      destination: this.plugin.settings.destination,
+      destination: () => this.plugin.settings.destination,
+      replaceDestination: (next) => {
+        this.plugin.settings.destination = next
+      },
       save: () => this.plugin.saveSettings(),
       showProviderPicker: true,
       test: () => this.plugin.testDestination(),
@@ -454,11 +457,19 @@ export class OpenPublishSettingTab extends PluginSettingTab {
   private renderSecurityNote(containerEl: HTMLElement): void {
     new Setting(containerEl).setName('About your credentials').setHeading()
     const note = containerEl.createDiv({ cls: 'setting-item-description op-security-note' })
+    // The same fact either way, in the terms of whatever is actually stored.
+    // Saying "these keys" to somebody who has none reads as boilerplate, and
+    // boilerplate is what people stop reading.
     note.createEl('p', {
       text:
-        'Obsidian stores plugin settings as plain text in your vault, so any other plugin you install can read ' +
-        'these keys, and they sync to your other devices. Use a token that can only reach this one bucket, ' +
-        'and revoke it in a click if you need to.',
+        this.plugin.settings.destination.type === 'gateway'
+          ? 'Obsidian stores plugin settings as plain text in your vault, so any other plugin you install can read ' +
+            'this token, and it syncs to your other devices. This is not encryption, and nothing can make it so. ' +
+            'What it changes is reach: the token gets to your Worker, which gets to one bucket, and you can replace ' +
+            'it with one command.'
+          : 'Obsidian stores plugin settings as plain text in your vault, so any other plugin you install can read ' +
+            'these keys, and they sync to your other devices. Use a token that can only reach this one bucket, ' +
+            'and revoke it in a click if you need to.',
     })
   }
 }

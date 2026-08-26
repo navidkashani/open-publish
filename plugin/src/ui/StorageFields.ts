@@ -26,21 +26,50 @@ import {
   composeEndpoint,
   isProviderId,
   providerById,
+  providerKind,
   variableValue,
 } from '../destinations/providers.ts'
 import type { ProviderId, StorageProvider } from '../destinations/providers.ts'
-import { STORAGE_MOVED_WARNING, isDestinationReady } from '../settings.ts'
-import type { Settings } from '../settings.ts'
+import {
+  STORAGE_MOVED_WARNING,
+  emptyGatewayDestination,
+  emptyS3Destination,
+  isDestinationReady,
+} from '../settings.ts'
+import type { DestinationSettings, GatewayDestinationSettings, S3DestinationSettings } from '../settings.ts'
 import { advancedLabel, renderDisclosure, validateOnBlur } from './Disclosure.ts'
 import { renderPickerList } from './PickerList.ts'
-
-type Destination = Settings['destination']
 
 /** `info` is the in-progress line, which only a panel has anywhere to put. */
 type Tone = 'ok' | 'error' | 'warning' | 'info'
 
+/**
+ * Caught here because it cannot be caught later.
+ *
+ * A prefix goes into a URL path, and a URL parser removes dot segments before
+ * anything downstream sees them: `a/../b` addresses `b`. So a prefix containing
+ * `..` does not fail, it silently reads and writes somewhere other than where
+ * the field says. The gateway Worker refuses `..` outright, but only on the
+ * listing route, where the prefix rides in a query string and nothing
+ * normalises it. On every object it is already gone.
+ *
+ * Backslashes go the same way: a URL parser reads them as separators.
+ */
+const PREFIX_PATTERN = /^(?!.*\.\.)[^\\]*$/
+const PREFIX_ERROR = 'A key prefix cannot contain ".." or a backslash. Both change which keys it addresses.'
+
 export interface StorageFieldsOptions {
-  destination: Destination
+  /**
+   * Read through a function, not held.
+   *
+   * Choosing a different *kind* of storage does not edit the destination, it
+   * replaces it: a gateway has no bucket and no keys, and an S3 destination has
+   * no Worker address. A reference taken at construction would go stale the
+   * moment somebody switched, and the form would carry on writing into an
+   * object nothing reads.
+   */
+  destination: () => DestinationSettings
+  replaceDestination: (next: DestinationSettings) => void
   save: () => Promise<void>
   /** Settings picks the provider here; the wizard has already picked on step 1. */
   showProviderPicker: boolean
@@ -64,21 +93,29 @@ export interface StorageFieldsOptions {
  * applying the same choice two slightly different ways. Bucket, prefix and
  * credentials are deliberately untouched: a provider has no opinion about them.
  */
-export function selectProvider(destination: Destination, id: ProviderId): void {
+export function selectProvider(current: DestinationSettings, id: ProviderId): DestinationSettings {
+  // Crossing between the two kinds keeps nothing, because the two shapes share
+  // no fields. That also means switching *away* from a kind takes its
+  // credentials out of `data.json`, which is the right way round: a key nothing
+  // uses any more is pure added risk.
+  if (providerKind(id) === 'gateway') {
+    return current.type === 'gateway' ? current : emptyGatewayDestination()
+  }
+
+  const base: S3DestinationSettings = current.type === 'gateway' ? emptyS3Destination() : current
   const next = applyProvider(
     {
-      provider: destination.provider,
-      endpoint: destination.endpoint,
-      region: destination.region,
+      provider: base.provider,
+      endpoint: base.endpoint,
+      region: base.region,
       // Absent means on, the way `s3.ts` reads it.
-      forcePathStyle: destination.forcePathStyle !== false,
+      forcePathStyle: base.forcePathStyle !== false,
     },
     id,
   )
-  destination.provider = next.provider
-  destination.endpoint = next.endpoint
-  destination.region = next.region
-  destination.forcePathStyle = next.forcePathStyle
+  // Bucket, prefix and credentials ride along untouched: a provider has no
+  // opinion about them.
+  return { ...base, ...next, type: 's3' }
 }
 
 export class StorageFields {
@@ -109,8 +146,8 @@ export class StorageFields {
     this.options = options
   }
 
-  private get destination(): Destination {
-    return this.options.destination
+  private get destination(): DestinationSettings {
+    return this.options.destination()
   }
 
   private get provider(): StorageProvider {
@@ -144,11 +181,54 @@ export class StorageFields {
       this.host.createDiv({ cls: 'op-notice-warning op-provider-caution', text: provider.caution })
     }
 
-    this.renderVariableField()
+    const destination = this.destination
+    if (destination.type === 'gateway') this.renderGatewayFields(destination)
+    else this.renderS3Fields(destination)
+
+    this.renderAdvanced()
+    this.renderTest()
+  }
+
+  /** One address and one token, where the other branch has four fields. */
+  private renderGatewayFields(destination: GatewayDestinationSettings): void {
+    const { variable } = this.provider
+
+    const address = new Setting(this.host).setName(variable.label)
+    address.descEl.createDiv({ text: variable.help })
+    address.addText((text) => {
+      text
+        .setPlaceholder(variable.placeholder)
+        .setValue(destination.workerUrl)
+        .onChange((value) => {
+          destination.workerUrl = value.trim().replace(/\/+$/, '')
+          this.save()
+        })
+      // On blur, never on change: an address is wrong for every character of
+      // typing it, right up until it is not.
+      validateOnBlur(address, text.inputEl, variable.pattern, variable.error)
+    })
+
+    new Setting(this.host)
+      .setName('Token')
+      .setDesc(
+        'The value you set on the Worker with "wrangler secret put TOKEN". Nobody issues this one: you chose it, ' +
+          'and you can change it on the Worker at any time.',
+      )
+      .addText((text) => {
+        text.inputEl.type = 'password'
+        text.setValue(destination.token).onChange((value) => {
+          destination.token = value.trim()
+          this.save()
+        })
+      })
+  }
+
+  private renderS3Fields(destination: S3DestinationSettings): void {
+    this.renderVariableField(destination)
 
     new Setting(this.host).setName('Bucket').addText((text) =>
-      text.setValue(this.destination.bucket).onChange((value) => {
-        this.destination.bucket = value.trim()
+      text.setValue(destination.bucket).onChange((value) => {
+        destination.bucket = value.trim()
         this.save()
       }),
     )
@@ -157,22 +237,19 @@ export class StorageFields {
       .setName('Access key ID')
       .setDesc('Use a token scoped to this bucket only, with read and write access.')
       .addText((text) =>
-        text.setValue(this.destination.accessKeyId).onChange((value) => {
-          this.destination.accessKeyId = value.trim()
+        text.setValue(destination.accessKeyId).onChange((value) => {
+          destination.accessKeyId = value.trim()
           this.save()
         }),
       )
 
     new Setting(this.host).setName('Secret access key').addText((text) => {
       text.inputEl.type = 'password'
-      text.setValue(this.destination.secretAccessKey).onChange((value) => {
-        this.destination.secretAccessKey = value.trim()
+      text.setValue(destination.secretAccessKey).onChange((value) => {
+        destination.secretAccessKey = value.trim()
         this.save()
       })
     })
-
-    this.renderAdvanced()
-    this.renderTest()
   }
 
   private renderMovedWarning(): void {
@@ -203,7 +280,7 @@ export class StorageFields {
 
   /** Switching provider is the one edit that rewrites fields the user did not touch. */
   pick(id: ProviderId): void {
-    selectProvider(this.destination, id)
+    this.options.replaceDestination(selectProvider(this.destination, id))
     // A measurement of the old provider says nothing about the new one. `save`
     // retires it; this is only here to say so at the place it matters most.
     this.measured = null
@@ -221,7 +298,7 @@ export class StorageFields {
    * actually be used, including a hand-edited one. Otherwise this would be a
    * URL built for you that you cannot see.
    */
-  private renderVariableField(): void {
+  private renderVariableField(destination: S3DestinationSettings): void {
     const provider = this.provider
     const { variable } = provider
     const setting = new Setting(this.host).setName(variable.label)
@@ -237,10 +314,10 @@ export class StorageFields {
       this.variableInput = text.inputEl
       text
         .setPlaceholder(variable.placeholder)
-        .setValue(variableValue(provider.id, this.destination.endpoint))
+        .setValue(variableValue(provider.id, destination.endpoint))
         .onChange((value) => {
-          this.destination.endpoint = composeEndpoint(provider.id, value)
-          if (variable.isRegion) this.destination.region = value.trim() || 'auto'
+          destination.endpoint = composeEndpoint(provider.id, value)
+          if (variable.isRegion) destination.region = value.trim() || 'auto'
           this.syncEndpoint('variable')
           this.save()
         })
@@ -264,20 +341,23 @@ export class StorageFields {
    * never the problem.
    */
   private syncEndpoint(source: 'variable' | 'endpoint'): void {
-    const endpoint = this.destination.endpoint
+    const destination = this.destination
+    // A gateway has no endpoint, no region and none of these three inputs.
+    if (destination.type !== 's3') return
+    const endpoint = destination.endpoint
     if (source === 'endpoint' && this.provider.variable.isRegion) {
-      const derived = variableValue(this.destination.provider, endpoint)
+      const derived = variableValue(destination.provider, endpoint)
       // An endpoint that no longer matches the template has no region to give.
       // The last one stands, and the Region field below is how it gets fixed.
-      if (derived) this.destination.region = derived
+      if (derived) destination.region = derived
     }
 
     this.endpointPreview?.setText(`Your endpoint: ${endpoint || 'not set yet'}`)
     if (source === 'variable' && this.endpointInput) this.endpointInput.value = endpoint
     if (source === 'endpoint' && this.variableInput) {
-      this.variableInput.value = variableValue(this.destination.provider, endpoint)
+      this.variableInput.value = variableValue(destination.provider, endpoint)
     }
-    if (this.regionInput) this.regionInput.value = this.destination.region
+    if (this.regionInput) this.regionInput.value = destination.region
     this.refreshAdvancedLabel()
   }
 
@@ -286,7 +366,12 @@ export class StorageFields {
   private setAdvancedLabel: ((label: string) => void) | null = null
 
   private changes(): string[] {
-    return advancedChanges(this.destination.provider, this.destination)
+    const destination = this.destination
+    if (destination.type === 'gateway') {
+      const prefix = (destination.prefix ?? '').replace(/^\/+|\/+$/g, '')
+      return prefix ? [`key prefix "${prefix}"`] : []
+    }
+    return advancedChanges(destination.provider, destination)
   }
 
   private refreshAdvancedLabel(): void {
@@ -298,6 +383,16 @@ export class StorageFields {
     const { body, setLabel } = renderDisclosure(this.host, advancedLabel(this.changes()), this.changes().length > 0)
     this.setAdvancedLabel = setLabel
 
+    const destination = this.destination
+    if (destination.type === 'gateway') {
+      this.renderPrefixField(body, destination, {
+        desc:
+          'Optional, and a second prefix on top of the one the Worker enforces. Use it only if one gateway carries ' +
+          'several sites. The Worker\'s own prefix is the part a stolen token cannot get around; this one is not.',
+      })
+      return
+    }
+
     // The endpoint is only editable here, but it is readable above at all times.
     if (provider.endpointTemplate !== null) {
       const setting = new Setting(body)
@@ -305,8 +400,8 @@ export class StorageFields {
         .setDesc('Built from the field above. Edit it only if your storage is behind a different address.')
       setting.addText((text) => {
         this.endpointInput = text.inputEl
-        text.setValue(this.destination.endpoint).onChange((value) => {
-          this.destination.endpoint = value.trim()
+        text.setValue(destination.endpoint).onChange((value) => {
+          destination.endpoint = value.trim()
           this.syncEndpoint('endpoint')
           this.save()
         })
@@ -329,23 +424,16 @@ export class StorageFields {
       )
       .addText((text) => {
         this.regionInput = text.inputEl
-        text.setValue(this.destination.region).onChange((value) => {
-          this.destination.region = value.trim() || 'auto'
+        text.setValue(destination.region).onChange((value) => {
+          destination.region = value.trim() || 'auto'
           this.refreshAdvancedLabel()
           this.save()
         })
       })
 
-    new Setting(body)
-      .setName('Key prefix')
-      .setDesc('Optional. Lets one bucket hold several sites, e.g. "notes".')
-      .addText((text) =>
-        text.setValue(this.destination.prefix ?? '').onChange((value) => {
-          this.destination.prefix = value.trim().replace(/^\/+|\/+$/g, '')
-          this.refreshAdvancedLabel()
-          this.save()
-        }),
-      )
+    this.renderPrefixField(body, destination, {
+      desc: 'Optional. Lets one bucket hold several sites, e.g. "notes".',
+    })
 
     new Setting(body)
       .setName('Path-style addressing')
@@ -355,12 +443,29 @@ export class StorageFields {
           : `Off for ${provider.name}, which uses bucket-in-hostname URLs. Turning it on also means updating OP_FORCE_PATH_STYLE in your host's build settings.`,
       )
       .addToggle((pathStyle) =>
-        pathStyle.setValue(this.destination.forcePathStyle !== false).onChange((value) => {
-          this.destination.forcePathStyle = value
+        pathStyle.setValue(destination.forcePathStyle !== false).onChange((value) => {
+          destination.forcePathStyle = value
           this.refreshAdvancedLabel()
           this.save()
         }),
       )
+  }
+
+  /** The one Advanced row both kinds have, so both cannot drift on trimming it. */
+  private renderPrefixField(
+    body: HTMLElement,
+    destination: DestinationSettings,
+    copy: { desc: string },
+  ): void {
+    const setting = new Setting(body).setName('Key prefix').setDesc(copy.desc)
+    setting.addText((text) => {
+      text.setValue(destination.prefix ?? '').onChange((value) => {
+        destination.prefix = value.trim().replace(/^\/+|\/+$/g, '')
+        this.refreshAdvancedLabel()
+        this.save()
+      })
+      validateOnBlur(setting, text.inputEl, PREFIX_PATTERN, PREFIX_ERROR)
+    })
   }
 
   // --- what this storage can actually do ---------------------------------

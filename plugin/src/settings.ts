@@ -12,7 +12,8 @@
  */
 
 import type { S3Config } from './destinations/s3.ts'
-import { inferProvider, isProviderId } from './destinations/providers.ts'
+import type { GatewayConfig } from './destinations/gateway.ts'
+import { inferProvider, isProviderId, providerKind } from './destinations/providers.ts'
 import type { ProviderId } from './destinations/providers.ts'
 import { inferHost, isHostId } from './builders/hosts.ts'
 import type { HostId } from './builders/hosts.ts'
@@ -57,16 +58,30 @@ export interface SelectionSettings {
   autoIncludeEmbeds: boolean
 }
 
+/**
+ * `provider` sits *beside* `type`, not in place of it. `type` is the
+ * destination-kind discriminant, and it is the one field here that decides
+ * which class `main.ts` builds. R2, B2 and Wasabi are all `type: 's3'`, same
+ * config and same code path; the provider is a label and a set of prefills,
+ * and `S3Destination` never sees it.
+ */
+export type S3DestinationSettings = S3Config & { type: 's3'; provider: ProviderId }
+
+/**
+ * The gateway: a Worker address and a token, and deliberately nothing else.
+ *
+ * No bucket, no region, no endpoint, because the Worker holds all three and the
+ * plugin is better off not knowing them. The cost is real and shows up in one
+ * place: the setup wizard cannot prefill the build's `OP_BUCKET` and
+ * `OP_ENDPOINT` for a gateway user, and says so rather than guessing.
+ */
+export type GatewayDestinationSettings = GatewayConfig & { type: 'gateway'; provider: 'gateway' }
+
+export type DestinationSettings = S3DestinationSettings | GatewayDestinationSettings
+
 export interface Settings {
   version: number
-  /**
-   * `provider` sits *beside* `type`, not in place of it. `type` is the
-   * destination-kind discriminant a future Git destination would need; R2, B2
-   * and Wasabi are all `type: 's3'`, same config and same code path. The
-   * provider is a label and a set of prefills, and `S3Destination` never sees
-   * it.
-   */
-  destination: S3Config & { type: 's3'; provider: ProviderId }
+  destination: DestinationSettings
   builder: WebhookBuilderSettings
   selection: SelectionSettings
   site: SnapshotSite
@@ -166,7 +181,7 @@ export function migrateSettings(raw: unknown): Settings {
   if (typeof raw !== 'object' || raw === null) return settings
   const stored = raw as Partial<Settings>
 
-  if (stored.destination) Object.assign(settings.destination, stored.destination, { type: 's3' })
+  settings.destination = resolveDestination(stored.destination)
   if (stored.builder) Object.assign(settings.builder, stored.builder, { type: 'webhook' })
   if (stored.selection) {
     Object.assign(settings.selection, stored.selection)
@@ -183,7 +198,6 @@ export function migrateSettings(raw: unknown): Settings {
     }
   }
 
-  settings.destination.provider = resolveProvider(stored.destination)
   settings.builder.host = resolveHost(stored.builder)
 
   settings.lastSnapshotId = typeof stored.lastSnapshotId === 'string' ? stored.lastSnapshotId : null
@@ -211,6 +225,56 @@ export function migrateSettings(raw: unknown): Settings {
 }
 
 /**
+ * The gateway destination a fresh switch to it starts from.
+ *
+ * A function rather than a constant, because the caller mutates what it gets
+ * back and a shared object would hand every vault the same one.
+ */
+export function emptyGatewayDestination(): GatewayDestinationSettings {
+  return { type: 'gateway', provider: 'gateway', workerUrl: '', token: '', prefix: '' }
+}
+
+/** The same, for the other shape. What a fresh vault has always started from. */
+export function emptyS3Destination(): S3DestinationSettings {
+  return cloneDefaults().destination as S3DestinationSettings
+}
+
+/**
+ * Which of the two shapes a stored destination is, and its fields.
+ *
+ * `type` is the only thing consulted, so a settings file written before the
+ * gateway existed has no way to be read as one: it has no `type`, and every
+ * field it does have is S3's. That is the whole of "a vault configured for
+ * direct S3 must load unchanged".
+ *
+ * The two branches share no fields, which is deliberate rather than tidy.
+ * Switching storage discards the credentials of the kind being left behind,
+ * so a vault that moves to the gateway stops carrying a read-write S3 key it
+ * no longer uses. A key nothing needs is pure added risk, and `data.json` is
+ * the file this whole feature exists to take secrets out of.
+ */
+function resolveDestination(stored: unknown): DestinationSettings {
+  const raw = (typeof stored === 'object' && stored !== null ? stored : {}) as Record<string, unknown>
+
+  if (raw.type === 'gateway') {
+    const gateway = emptyGatewayDestination()
+    gateway.workerUrl = asTrimmedString(raw.workerUrl)
+    gateway.token = asTrimmedString(raw.token)
+    gateway.prefix = asTrimmedString(raw.prefix).replace(/^\/+|\/+$/g, '')
+    return gateway
+  }
+
+  const s3 = cloneDefaults().destination as S3DestinationSettings
+  Object.assign(s3, raw, { type: 's3' })
+  s3.provider = resolveProvider(raw)
+  return s3
+}
+
+function asTrimmedString(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : ''
+}
+
+/**
  * Which provider label a stored destination gets.
  *
  * Inference runs *only* when the endpoint is byte-identical to what a template
@@ -225,9 +289,12 @@ export function migrateSettings(raw: unknown): Settings {
  * the source of truth, and a newer build will label it with its own table
  * again on the way back up.
  */
-function resolveProvider(stored: Partial<S3Config & { provider?: unknown }> | undefined): ProviderId {
-  if (isProviderId(stored?.provider)) return stored.provider
-  const endpoint = typeof stored?.endpoint === 'string' ? stored.endpoint : ''
+function resolveProvider(stored: Record<string, unknown>): ProviderId {
+  // A gateway label on an S3 destination is not an explicit choice, it is a
+  // half-applied switch, and honouring it would leave the UI rendering a
+  // Worker form over a bucket's credentials. Re-infer instead.
+  if (isProviderId(stored.provider) && providerKind(stored.provider) === 's3') return stored.provider
+  const endpoint = typeof stored.endpoint === 'string' ? stored.endpoint : ''
   // An empty endpoint is "not set up yet", not "unrecognisable", so it keeps
   // the recommended default instead of falling to Other.
   if (!endpoint.trim()) return DEFAULT_SETTINGS.destination.provider
@@ -267,7 +334,16 @@ function resolveHost(stored: Partial<WebhookBuilderSettings & { host?: unknown }
  * of reason: it is a label, so relabelling storage that has not moved must not
  * look like a migration.
  */
-export function storageTarget(destination: Pick<S3Config, 'endpoint' | 'bucket' | 'prefix' | 'forcePathStyle'>): string {
+export function storageTarget(destination: DestinationSettings): string {
+  if (destination.type === 'gateway') {
+    // Nothing in common with the S3 form on purpose. Pointing a gateway at the
+    // bucket you were already publishing to directly *is* a move worth
+    // warning about: the content has not gone anywhere, but the route the
+    // build must be told about has changed, and the read-only keys in the
+    // host's environment are still the old ones.
+    const worker = destination.workerUrl.trim().replace(/\/+$/, '')
+    return `gateway|${worker}|${(destination.prefix ?? '').replace(/^\/+|\/+$/g, '')}`
+  }
   const endpoint = destination.endpoint.trim().replace(/\/+$/, '')
   const prefix = (destination.prefix ?? '').replace(/^\/+|\/+$/g, '')
   const addressing = destination.forcePathStyle === false ? 'host' : 'path'
@@ -402,7 +478,8 @@ function asBooleanRecord(value: unknown): Record<string, boolean> {
 }
 
 /** Every field a request needs, on the destination alone. */
-export function isDestinationReady(destination: S3Config): boolean {
+export function isDestinationReady(destination: DestinationSettings): boolean {
+  if (destination.type === 'gateway') return Boolean(destination.workerUrl && destination.token)
   return Boolean(
     destination.endpoint && destination.bucket && destination.accessKeyId && destination.secretAccessKey,
   )

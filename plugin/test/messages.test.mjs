@@ -162,11 +162,26 @@ test('offline', () => {
   assert.deepEqual(labels(message), ['Try again', 'Close'])
 })
 
-test('wrong credentials', () => {
-  const message = publishMessage({ kind: 'failed', code: 'storage-credentials', message: 'rejected' })
-  assert.equal(message.headline, 'Storage rejected your keys')
-  assert.equal(message.body, 'They may be wrong, removed, or for a different bucket.')
-  assert.deepEqual(labels(message), ['Open settings', 'Close'])
+test('wrong credentials, in the terms of whatever was actually rejected', () => {
+  const keys = publishMessage({
+    kind: 'failed',
+    code: 'storage-credentials',
+    message: 'Storage rejected these credentials.',
+    hint: 'They may be wrong, revoked, or scoped to a different bucket.',
+  })
+  assert.equal(keys.headline, 'Storage rejected your details')
+  assert.match(keys.body, /scoped to a different bucket/)
+  assert.deepEqual(labels(keys), ['Open settings', 'Close'])
+
+  // The same code, a gateway token, and none of the advice above applies to it.
+  const token = publishMessage({
+    kind: 'failed',
+    code: 'storage-credentials',
+    message: 'The Worker rejected this token.',
+    hint: 'Check the token matches the one you set on the Worker.',
+  })
+  assert.match(token.body, /rejected this token/)
+  assert.doesNotMatch(token.body, /keys|bucket/, 'a token holder has neither to check')
 })
 
 test('someone published first', () => {

@@ -12,6 +12,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { SetupWizard, fakeApp, fakeStoragePlugin } from './harness.mjs'
 import { byClass, click, dispatch, find, findAll, visible } from './dom.mjs'
+import { PROVIDERS } from '../src/destinations/providers.ts'
 
 const R2_ENDPOINT = 'https://0123456789abcdef0123456789abcdef.r2.cloudflarestorage.com'
 
@@ -39,7 +40,7 @@ const settingNamed = (root, name) =>
 test('step 1 offers every provider, marks one, and says what each costs', () => {
   const { wizard } = open()
   const rows = providerRows(wizard)
-  assert.equal(rows.length, 6)
+  assert.equal(rows.length, PROVIDERS.length, 'every catalogue entry is offered, or one of them is unreachable')
   assert.match(wizard.contentEl.textContent, /Choose your storage/)
 
   const badges = findAll(wizard.contentEl, byClass('op-provider-badge'))
@@ -84,6 +85,56 @@ test("step 2 asks for the chosen provider's blank, not for an endpoint", () => {
   assert.ok(settingNamed(wizard.contentEl, 'Bucket'))
   assert.equal(visible(settingNamed(wizard.contentEl, 'Endpoint')), false, 'the raw endpoint is behind Advanced')
   assert.equal(settingNamed(wizard.contentEl, 'Storage provider'), null, 'step 1 already chose; Back is how you change it')
+})
+
+test('picking the gateway swaps step 1 to one token, and says the build still needs a key', () => {
+  const { wizard, plugin } = open()
+  click(rowNamed(wizard, 'Cloudflare R2 without keys'))
+
+  assert.equal(plugin.settings.destination.type, 'gateway')
+  assert.match(wizard.contentEl.textContent, /wrangler secret put TOKEN/)
+  assert.match(wizard.contentEl.textContent, /One token instead of a key pair/)
+  assert.match(wizard.contentEl.textContent, /read-only key of its own/, 'the build still needs one, and saying so is the point')
+  assert.doesNotMatch(wizard.contentEl.textContent, /Two sets of keys/)
+})
+
+test('step 2 on a gateway asks for an address and a token, and for nothing else', () => {
+  const { wizard } = open()
+  click(rowNamed(wizard, 'Cloudflare R2 without keys'))
+  goTo(wizard, 1)
+
+  assert.ok(settingNamed(wizard.contentEl, 'Worker address'))
+  assert.ok(settingNamed(wizard.contentEl, 'Token'))
+  assert.equal(settingNamed(wizard.contentEl, 'Bucket'), null)
+  assert.equal(settingNamed(wizard.contentEl, 'Access key ID'), null)
+  assert.ok(settingNamed(wizard.contentEl, 'Test connection'), 'the same button, running the same checks')
+})
+
+test('the build variables a gateway cannot fill in are blanks, not guesses', () => {
+  // The Worker holds the bucket, so the plugin does not. A guessed endpoint
+  // deploys perfectly and then builds a site with nothing in it.
+  const { wizard } = open()
+  click(rowNamed(wizard, 'Cloudflare R2 without keys'))
+  goTo(wizard, 3)
+
+  const block = find(wizard.contentEl, (node) => node.tagName === 'PRE').textContent
+  assert.match(block, /OP_BUCKET=<the bucket your Worker is bound to>/)
+  assert.match(block, /OP_ENDPOINT=https:\/\/<account-id>/)
+  // The prefix is the third one the plugin cannot know, and the only one whose
+  // absence fails silently: the build reads the bucket root and ships an empty
+  // site rather than erroring.
+  assert.match(block, /OP_PREFIX=<your Worker's PREFIX>/)
+  assert.match(wizard.contentEl.textContent, /cannot fill in the endpoint, the bucket or the prefix/)
+})
+
+test("a vault prefix rides after the Worker's, because that is where its keys actually land", () => {
+  const { wizard, plugin } = open()
+  click(rowNamed(wizard, 'Cloudflare R2 without keys'))
+  plugin.settings.destination.prefix = 'blog'
+  goTo(wizard, 3)
+
+  const block = find(wizard.contentEl, (node) => node.tagName === 'PRE').textContent
+  assert.match(block, /OP_PREFIX=<your Worker's PREFIX>\/blog/)
 })
 
 test('a test result lands in the step, not in a toast over the top of it', async () => {

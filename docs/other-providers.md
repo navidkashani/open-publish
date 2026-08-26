@@ -20,11 +20,22 @@ the build by hand.
 | Provider | Endpoint | Region | Path style | Conditional writes |
 |---|---|---|---|---|
 | **Cloudflare R2** | `https://<account-id>.r2.cloudflarestorage.com` | `auto` | on | yes |
+| **Cloudflare R2 without keys** | your Worker's address | n/a | n/a | yes |
 | **Amazon S3** | `https://s3.<region>.amazonaws.com` | the real region | off | yes |
 | **Backblaze B2** | `https://s3.<region>.backblazeb2.com` | e.g. `us-west-004` | on | check at connect |
 | **Wasabi** | `https://s3.<region>.wasabisys.com` | the real region | on | check at connect |
 | **MinIO** (self-hosted) | your server URL | `us-east-1` | on | 2024-09-13 and later |
 | **Other S3-compatible storage** | your provider's S3 API endpoint | usually `auto` | on | check at connect |
+
+**Cloudflare R2 without keys** is the same R2 bucket reached a different way:
+through a small Worker you deploy to your own account, which Cloudflare binds to
+the bucket. The plugin then holds one bearer token instead of an access key and
+secret, so no storage credential is on your device at all. Region and path style
+have no meaning there, because nothing is signed and the Worker holds the bucket
+name. See [the gateway's README](../gateway/README.md) to deploy it, and
+[security.md](security.md) for what it does and does not fix. Everyone else,
+including everyone not on Cloudflare, keeps the setup in the rest of this table:
+this route is R2-only and there is no equivalent for S3, Backblaze or Wasabi.
 
 Amazon S3 is the one entry with path style **off**: AWS documents path-style
 addressing as deprecated and virtual-host addressing as the form it is keeping.

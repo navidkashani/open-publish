@@ -18,6 +18,16 @@ import type { Disposer } from './RuleList.ts'
 import { BuildFields, renderHostList, selectHost } from './BuildFields.ts'
 import { StorageFields, renderProviderList, selectProvider } from './StorageFields.ts'
 
+/**
+ * Small counts read as words in this interface, not as digits. Anything past
+ * the end of the list is a number, which is better than a wrong word.
+ */
+const NUMBER_WORDS = ['no', 'one', 'two', 'three', 'four', 'five', 'six', 'seven']
+
+function inWords(count: number): string {
+  return NUMBER_WORDS[count] ?? String(count)
+}
+
 interface Step {
   title: string
   render: (container: HTMLElement) => void
@@ -112,7 +122,10 @@ export class SetupWizard extends Modal {
 
     const destination = this.plugin.settings.destination
     renderProviderList(container, destination.provider, (id) => {
-      selectProvider(destination, id)
+      // Replaced, not edited: crossing between keys and a token changes the
+      // shape of what is stored, and the credentials of the kind being left
+      // behind go with it.
+      this.plugin.settings.destination = selectProvider(destination, id)
       this.renderStep()
       void this.plugin.saveSettings()
     })
@@ -125,16 +138,20 @@ export class SetupWizard extends Modal {
       const link = (href: string, text: string): void => {
         links.createEl('a', { href, text, attr: { target: '_blank', rel: 'noopener' } })
       }
-      if (provider.consoleUrl) link(provider.consoleUrl, `Open ${provider.name}`)
-      if (provider.keysUrl) link(provider.keysUrl, 'How to create keys')
+      if (provider.consoleUrl) link(provider.consoleUrl, provider.consoleLabel ?? `Open ${provider.name}`)
+      if (provider.keysUrl) link(provider.keysUrl, provider.keysLabel ?? 'How to create keys')
     }
 
     container.createEl('p', {
       cls: 'op-muted',
       text:
-        'Two sets of keys, because they carry very different risk. The read-only pair only unlocks content that is ' +
-        'already public on your site. The read-write pair can replace your site, so it stays scoped to this bucket ' +
-        'and nothing else.',
+        destination.type === 'gateway'
+          ? 'One token instead of a key pair, and it is not a key: it reaches your Worker, and your Worker reaches ' +
+            'one bucket. Your site build still needs a read-only key of its own, which is a much weaker credential ' +
+            'and never passes through Obsidian.'
+          : 'Two sets of keys, because they carry very different risk. The read-only pair only unlocks content that ' +
+            'is already public on your site. The read-write pair can replace your site, so it stays scoped to this ' +
+            'bucket and nothing else.',
     })
   }
 
@@ -145,7 +162,10 @@ export class SetupWizard extends Modal {
   private renderCredentialsStep(container: HTMLElement): void {
     const result = container.createDiv({ cls: 'op-wizard-result' })
     const fields = new StorageFields(container, {
-      destination: this.plugin.settings.destination,
+      destination: () => this.plugin.settings.destination,
+      replaceDestination: (next) => {
+        this.plugin.settings.destination = next
+      },
       save: () => this.plugin.saveSettings(),
       showProviderPicker: false,
       test: () => this.plugin.testDestination(),
@@ -199,18 +219,42 @@ export class SetupWizard extends Modal {
     this.instructions(container, host.setup)
 
     const destination = this.plugin.settings.destination
+    // The build reads the bucket *directly*, whichever way the plugin writes to
+    // it, so these lines are about storage rather than about the plugin's route
+    // to it. A gateway user has to fill two of them in by hand, because the
+    // Worker holds the bucket and the plugin genuinely does not know it. That
+    // is worth saying out loud below: a guessed endpoint deploys perfectly and
+    // builds an empty site.
+    const storageLines =
+      destination.type === 'gateway'
+        ? [
+            'OP_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com',
+            'OP_BUCKET=<the bucket your Worker is bound to>',
+            'OP_REGION=auto',
+            // Always emitted, and always a blank, because the plugin's keys
+            // land under the Worker's own PREFIX *and then* this vault's
+            // prefix, and only the second half is knowable from here. Emitting
+            // just the second half is the worse mistake of the two: with a
+            // Worker prefix set, the build then reads the bucket root, finds
+            // no current.json, and ships an empty site with nothing failing.
+            `OP_PREFIX=<your Worker's PREFIX>${destination.prefix ? '/' + destination.prefix : ''}`,
+          ]
+        : [
+            `OP_ENDPOINT=${destination.endpoint || '<not set, go back a step>'}`,
+            `OP_BUCKET=${destination.bucket || '<not set, go back a step>'}`,
+            `OP_REGION=${destination.region || 'auto'}`,
+            ...(destination.prefix ? [`OP_PREFIX=${destination.prefix}`] : []),
+            // Without this line the build defaults path-style *on*
+            // (`env.OP_FORCE_PATH_STYLE !== 'false'`), so anyone who turned the
+            // toggle off got a plugin writing `bucket.endpoint/key` and a build
+            // reading `endpoint/bucket/key`. The publish succeeds and the site
+            // then cannot find `current.json`: a failure one step after the
+            // mistake, on a machine the user cannot see.
+            ...(destination.forcePathStyle === false ? ['OP_FORCE_PATH_STYLE=false'] : []),
+          ]
+
     const envLines = [
-      `OP_ENDPOINT=${destination.endpoint || '<not set, go back a step>'}`,
-      `OP_BUCKET=${destination.bucket || '<not set, go back a step>'}`,
-      `OP_REGION=${destination.region || 'auto'}`,
-      ...(destination.prefix ? [`OP_PREFIX=${destination.prefix}`] : []),
-      // Without this line the build defaults path-style *on*
-      // (`env.OP_FORCE_PATH_STYLE !== 'false'`), so anyone who turned the
-      // toggle off got a plugin writing `bucket.endpoint/key` and a build
-      // reading `endpoint/bucket/key`. The publish succeeds and the site then
-      // cannot find `current.json`: a failure one step after the mistake, on a
-      // machine the user cannot see.
-      ...(destination.forcePathStyle === false ? ['OP_FORCE_PATH_STYLE=false'] : []),
+      ...storageLines,
       // The hosts that provide no address of their own need telling, or the
       // feed, the sitemap and the 404 page are written for example.com. The
       // build now stops rather than shipping that, which makes this line the
@@ -224,12 +268,28 @@ export class SetupWizard extends Modal {
     values.createEl('div', { cls: 'op-muted', text: `Environment variables for your ${host.projectNoun}:` })
     values.createEl('pre', { text: envLines.join('\n') })
 
+    // Counted rather than stated. The number moves with the host (two of them
+    // add an OP_SITE_URL blank) and with the destination, and it is asserted as
+    // a fact in a Notice somebody then acts on.
+    const blanks = envLines.filter((line) => /<[^>]+>/.test(line)).length
     new Setting(values).addButton((button) =>
       button.setButtonText('Copy').onClick(async () => {
         await navigator.clipboard.writeText(envLines.join('\n'))
-        new Notice('Copied. Fill in the two read-only values before pasting.')
+        new Notice(`Copied. Fill in the ${inWords(blanks)} bracketed value${blanks === 1 ? '' : 's'} before pasting.`)
       }),
     )
+
+    if (destination.type === 'gateway') {
+      container.createEl('p', {
+        cls: 'op-muted',
+        text:
+          'Your build reads the bucket directly, with its own read-only key, and the gateway changes nothing about ' +
+          'that. Open Publish cannot fill in the endpoint, the bucket or the prefix for you here, because your ' +
+          'Worker holds them and this plugin deliberately does not. The first two are on the R2 overview page. ' +
+          "OP_PREFIX is your Worker's own PREFIX setting: if you left it empty, delete that part of the line, and " +
+          'delete the whole line if what is left is empty too.',
+      })
+    }
 
     // Scenario 10: adding a custom domain in the host's dashboard moves the
     // pages and leaves the feed and the sitemap pointing at the address the
