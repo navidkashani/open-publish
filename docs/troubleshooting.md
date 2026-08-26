@@ -54,10 +54,17 @@ visible otherwise.
 
 ## Builds
 
-**"The deploy hook was rejected. It may have been deleted."**
-Deploy hooks stop working if the hook, its branch, or the Pages project is
-deleted. Create a new hook (Pages project → Settings → Builds & deployments →
-Deploy hooks) and paste the new URL.
+**"The deploy hook was rejected."**
+Two causes, and the hint under the message names the likelier one for your host.
+
+A hook stops working if the hook itself, its branch, or the project is deleted.
+Create a new one and paste the new URL in.
+
+On Netlify there is a second cause: the free plan covers about 20 deploys a
+month, and once that is gone builds are disabled and the hook answers with an
+error. Netlify does not document which status code, so the plugin cannot tell
+the two apart, which is why it names both. Check your billing page before
+recreating a hook that may be fine.
 
 **"Uploaded successfully, but the site hasn't updated yet."**
 Your content is committed and stored. Only the build did not finish in the ten
@@ -68,8 +75,7 @@ causes:
 - The build environment variables are missing or wrong. The build log will say
   `Missing environment variable(s): …`.
 - A note broke the generator. The log names the file.
-- The build queued behind another one. Cloudflare Pages' free plan runs one
-  build at a time.
+- The build queued behind another one. Most free plans run one build at a time.
 
 Once fixed, use **Trigger a site build without publishing** rather than
 publishing again, or open the publish window, which offers **Rebuild site** on
@@ -91,16 +97,39 @@ coexist on macOS and Windows but collide on the Linux build machine, silently
 overwriting one another. Rename one, or give one a different `permalink` in its
 frontmatter.
 
-**"`<file>` is N MB. Cloudflare Pages cannot serve any asset over 25 MiB."**
-A hard platform limit: the file would 404 on the live site even if uploaded.
-Compress it, or host it elsewhere and link to it.
+**"`<file>` is N MB. 25.0 MB is the most a single file can be."**
+A hard platform limit, and the tightest one among the supported hosts, so it is
+applied everywhere. The file would not load on the live site even if uploaded.
+Compress it, or serve it from your storage and link to it.
 
 **"`<file>` is N MB … anything over 100 MB is refused."**
 Obsidian's `requestUrl` has no streaming or multipart upload, so a file is held
 whole in memory. Above 100 MB that is not safe to attempt.
 
-**"N files selected. Cloudflare Pages allows 20,000 assets per deployment…"**
-Narrow your include rules, or move to a paid plan (100,000 assets).
+**"N files selected. One update can hold about 20,000 files…"**
+Narrow your include rules, or move to a paid plan on your host.
+
+**The site builds, but the feed, sitemap or 404 page point at the wrong domain.**
+Those three need an absolute address, and a custom domain added in your host's
+dashboard does not reach the build. Set `OP_SITE_URL` to your real address in
+the build environment variables. On a site served from a sub-path, set
+`OP_SITE_ROOT` too, e.g. `/notes`. See
+[other-providers.md](other-providers.md#the-site-address).
+
+**The build stops with "This build is running on Cloudflare Workers Builds…".**
+Working as intended. Workers Builds provides no site address of its own, so
+without `OP_SITE_URL` the site would be built as `example.com` and nothing would
+look wrong until someone opened the feed. Set `OP_SITE_URL` and build again.
+
+**The publish waits ten minutes and then says "Saved, still waiting".**
+Usually the site URL. If it names a site that has never been built, every poll
+gets a 404, which the plugin correctly reads as "not built yet" rather than as
+an error. **Check the site** in settings diagnoses the same thing instantly, so
+it is worth pressing after any change to either address.
+
+The other cause is a deploy hook created for a branch other than the one the
+live site is built from. The build runs and deploys to a preview address while
+the plugin polls production, so the two never meet.
 
 ## Site problems
 

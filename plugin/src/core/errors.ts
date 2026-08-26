@@ -5,6 +5,7 @@
  */
 
 import { missingBucketHint } from '../destinations/providers.ts'
+import { rejectedHookHint } from '../builders/hosts.ts'
 
 export type PublishErrorCode =
   | 'storage-credentials'
@@ -105,10 +106,21 @@ export function describeStorageError(
   )
 }
 
-export function describeHookError(status: number): PublishError {
+/**
+ * `url` is the hook URL, and the host is inferred from it rather than passed
+ * in, exactly as `missingBucketHint` infers a provider from the endpoint. That
+ * keeps the URL the single source of truth and keeps the host id out of
+ * `WebhookConfig`, which never learns one exists.
+ *
+ * The reason it matters: Netlify answers a build hook with an error once the
+ * month's allowance is gone, and does not document which status. If it is 403,
+ * the old sentence sent that user off to recreate a deploy hook that was
+ * working perfectly.
+ */
+export function describeHookError(status: number, url?: string): PublishError {
   if (status === 401 || status === 403 || status === 404) {
-    return new PublishError('hook-rejected', 'The deploy hook was rejected. It may have been deleted.', {
-      hint: 'Create a new deploy hook and paste the new URL into settings.',
+    return new PublishError('hook-rejected', 'The deploy hook was rejected.', {
+      hint: rejectedHookHint(url),
     })
   }
   if (status === 0) {

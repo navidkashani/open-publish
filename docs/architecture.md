@@ -251,16 +251,31 @@ Rules that fall out of this:
 
 ## Platform limits that shaped the design
 
-Verified against Cloudflare's documentation.
+Verified against Cloudflare's documentation. Cloudflare Pages happens to hold
+the tightest value in every row, which is why these are applied on every host as
+a floor rather than per host: a limit that varies by host would be one more
+thing to get wrong, for a ceiling nobody would notice being raised.
+
+The copy is a separate matter. It lives in `core/limits.ts` beside the numbers
+and names no vendor, because two of these *block a publish*, and blocking a
+Netlify user with a sentence about Cloudflare Pages is the storage catalogue's
+R2-hint bug again with higher stakes.
 
 | Limit | Value | What it forces |
 |---|---|---|
-| Pages assets per deployment | 20,000 free | Warn at 15,000, block at 19,000 |
-| **Pages max asset size** | **25 MiB** | A 30 MB video cannot be served by Pages at all. Blocked at scan time with an explanation |
-| Pages build timeout | 20 minutes | Warn when a snapshot exceeds ~500 MB |
-| Pages builds per month (free) | 500, 1 concurrent | Throttling is mandatory, not optional |
+| Assets per deployment | 20,000 free | Warn at 15,000, block at 19,000 |
+| **Max asset size** | **25 MiB** | A 30 MB video cannot be served at all. Blocked at scan time with an explanation |
+| Build timeout | 20 minutes | Warn when a snapshot exceeds ~500 MB |
+| Builds per month (free) | 500, 1 concurrent | Throttling is mandatory, not optional |
 | `_redirects` | 2,000 rules | Rename redirects are capped, keeping the most recent |
 | R2 conditional writes | `If-Match` supported | Gives a real compare-and-swap on `current.json` |
+
+Two limits deliberately have no code behind them. Netlify's free plan is about
+20 deploys a month, and Vercel's is 100 a day; neither is enforced, because a
+minimum wait between builds cannot protect a monthly allowance (five minutes
+still permits about 8,600 a month) and silently raising somebody's throttle from
+an inference would change a setting that governs their bill. Both are stated
+instead, next to the two controls that spend them.
 
 ## Testing
 
@@ -286,6 +301,13 @@ Every core module avoids importing Obsidian values, so the real implementation
 | 2 | Setup wizard, link index, redirects, "Add linked", throttling, error mapping, guards, GC, docs | done |
 | 3 | Worker gateway and Deploy-to-Cloudflare button; mobile testing (including the rule rows' long-press); rollback UI; site options parity | next |
 | 4 | Astro starter; optional Git destination | later |
+
+Hosting presets (Cloudflare Pages, Cloudflare Workers, Netlify, Vercel and a
+free-form "Another host") work the same way, in `builders/hosts.ts`. The one
+difference is that there is nothing to compose: a deploy hook URL is opaque and
+can only be pasted, so the host id is *inferred* from it by exact match and
+never stored as a second source of truth. `WebhookBuilder` receives the same
+`WebhookConfig` it always has.
 
 Destination presets (R2, S3, B2, Wasabi, MinIO, and a free-form "Other") landed
 early, out of phase 4. They are presentation and prefill only:

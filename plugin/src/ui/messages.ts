@@ -223,8 +223,12 @@ function publishedMessage(state: {
       return {
         headline: "Saved, but your site didn't update",
         stats,
+        // Two causes, and naming only the first one used to send people off to
+        // recreate a working connection. "Build allowance" rather than the
+        // obvious word, per this file's own rule about jargon.
         body:
-          "Your notes are safe and don't need uploading again. Your host turned down the request. The connection may have been removed.",
+          "Your notes are safe and don't need uploading again. Your host turned down the request to update " +
+          'your site. Either the connection to your host was removed, or this month\'s build allowance is used up.',
         buttons: [
           { label: 'Try again', id: 'update-now', primary: true },
           { label: 'Fix in settings', id: 'open-settings' },

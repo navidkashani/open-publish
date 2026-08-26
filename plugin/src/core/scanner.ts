@@ -15,7 +15,18 @@ import type { Destination } from '../destinations/types.ts'
 import { PublishError } from './errors.ts'
 import { Hasher } from './hasher.ts'
 import { buildLinkIndex, expandEmbeds, noteMetadata, resolverFromApp } from './linkindex.ts'
-import { MAX_ASSET_BYTES, MAX_FILE_COUNT, MAX_UPLOAD_BYTES, WARN_FILE_COUNT, WARN_SNAPSHOT_BYTES, formatBytes } from './limits.ts'
+import {
+  MAX_ASSET_BYTES,
+  MAX_FILE_COUNT,
+  MAX_UPLOAD_BYTES,
+  WARN_FILE_COUNT,
+  WARN_SNAPSHOT_BYTES,
+  largeSnapshotWarning,
+  nearFileLimitWarning,
+  tooLargeToServeMessage,
+  tooLargeToUploadMessage,
+  tooManyFilesMessage,
+} from './limits.ts'
 import { getPublishFlag, isAlwaysExcluded, isSupportedFile } from './selection.ts'
 import type { SelectionRules } from './selection.ts'
 import { findSlugCollisions, slugForPath } from './slug.ts'
@@ -173,24 +184,11 @@ export async function scanVault(options: ScanOptions): Promise<ScanResult> {
     if (index % 25 === 0 || index === paths.length) onProgress?.('Hashing files…', index, paths.length)
 
     if (file.stat.size > MAX_UPLOAD_BYTES) {
-      blockers.push({
-        kind: 'too-large',
-        message:
-          `"${path}" is ${formatBytes(file.stat.size)}. Open Publish uploads whole files in memory, ` +
-          `so anything over ${formatBytes(MAX_UPLOAD_BYTES)} is refused.`,
-        paths: [path],
-      })
+      blockers.push({ kind: 'too-large', message: tooLargeToUploadMessage(path, file.stat.size), paths: [path] })
       continue
     }
     if (file.stat.size > MAX_ASSET_BYTES) {
-      blockers.push({
-        kind: 'too-large',
-        message:
-          `"${path}" is ${formatBytes(file.stat.size)}. Cloudflare Pages cannot serve any asset over ` +
-          `${formatBytes(MAX_ASSET_BYTES)}, so this file would 404 on the live site. ` +
-          'Serve it from R2 directly, or shrink it.',
-        paths: [path],
-      })
+      blockers.push({ kind: 'too-large', message: tooLargeToServeMessage(path, file.stat.size), paths: [path] })
       continue
     }
 
@@ -211,21 +209,11 @@ export async function scanVault(options: ScanOptions): Promise<ScanResult> {
   // 6. Volume guards.
   const fileCount = Object.keys(files).length
   if (fileCount > MAX_FILE_COUNT) {
-    blockers.push({
-      kind: 'too-many-files',
-      message:
-        `${fileCount} files selected. Cloudflare Pages allows 20,000 assets per deployment on the free plan ` +
-        'and the generated site adds more on top, so this build would fail. Narrow the include rules.',
-      paths: [],
-    })
+    blockers.push({ kind: 'too-many-files', message: tooManyFilesMessage(fileCount), paths: [] })
   } else if (fileCount > WARN_FILE_COUNT) {
-    warnings.push(`${fileCount} files selected, close to the 20,000-asset limit on Cloudflare Pages' free plan.`)
+    warnings.push(nearFileLimitWarning(fileCount))
   }
-  if (totalBytes > WARN_SNAPSHOT_BYTES) {
-    warnings.push(
-      `This snapshot is ${formatBytes(totalBytes)}. The build downloads all of it, and Pages builds time out at 20 minutes.`,
-    )
-  }
+  if (totalBytes > WARN_SNAPSHOT_BYTES) warnings.push(largeSnapshotWarning(totalBytes))
 
   // 7. Link index, renames, diff.
   onProgress?.('Resolving links…')

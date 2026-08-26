@@ -60,7 +60,7 @@ export class WebhookBuilder implements Builder {
     }
 
     if (response.status < 200 || response.status >= 300) {
-      throw describeHookError(response.status)
+      throw describeHookError(response.status, this.config.url)
     }
 
     let ref: string | undefined

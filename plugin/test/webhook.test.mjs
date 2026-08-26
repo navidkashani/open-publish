@@ -38,7 +38,26 @@ test('a deleted hook produces an actionable message, not a status code', async (
   const { client } = respond([{ status: 404, text: 'not found' }])
   await assert.rejects(
     () => new WebhookBuilder(config, client, noSleep).trigger('snap-1'),
-    (error) => error.code === 'hook-rejected' && /Create a new deploy hook/.test(error.hint),
+    (error) => error.code === 'hook-rejected' && /recreating the hook/.test(error.hint),
+  )
+})
+
+test('what the rejection means is read off the hook URL, not assumed', async () => {
+  // Netlify answers with an error once the month's build allowance is gone, and
+  // does not document which status. "It may have been deleted" sends that user
+  // off to recreate a hook that was working perfectly.
+  const netlify = { ...config, url: 'https://api.netlify.com/build_hooks/68a1f0c2d3e4b5a6c7d8e9f0' }
+  const { client } = respond([{ status: 403, text: '' }])
+  await assert.rejects(
+    () => new WebhookBuilder(netlify, client, noSleep).trigger('snap-1'),
+    (error) => /build allowance is used up/.test(error.hint),
+  )
+
+  const pages = { ...config, url: 'https://api.cloudflare.com/client/v4/pages/webhooks/deploy_hooks/0f7a1c' }
+  const second = respond([{ status: 403, text: '' }])
+  await assert.rejects(
+    () => new WebhookBuilder(pages, second.client, noSleep).trigger('snap-1'),
+    (error) => /Create a new deploy hook/.test(error.hint) && !/allowance/.test(error.hint),
   )
 })
 
