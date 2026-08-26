@@ -302,12 +302,26 @@ Every core module avoids importing Obsidian values, so the real implementation
 | 3 | Worker gateway and Deploy-to-Cloudflare button; mobile testing (including the rule rows' long-press); rollback UI; site options parity | next |
 | 4 | Astro starter; optional Git destination | later |
 
+Both halves of the provider work landed early, out of phase 4: storage presets
+first, then hosting. The starter also ships a `wrangler.jsonc`, so Cloudflare
+Workers Builds is a supported target rather than a documented possibility.
+Pages keeps the recommendation, for one reason: Workers Builds reports no site
+address, so `OP_SITE_URL` has to be set by hand there.
+
 Hosting presets (Cloudflare Pages, Cloudflare Workers, Netlify, Vercel and a
 free-form "Another host") work the same way, in `builders/hosts.ts`. The one
 difference is that there is nothing to compose: a deploy hook URL is opaque and
 can only be pasted, so the host id is *inferred* from it by exact match and
 never stored as a second source of truth. `WebhookBuilder` receives the same
 `WebhookConfig` it always has.
+
+What that id is allowed to decide is worth stating, because it is less than it
+looks. It picks copy, instructions, one line of the environment block, and which
+free plan is quoted next to the two controls that spend it. It changes no stored
+value, no limit, and nothing that is sent. `minIntervalMinutes` and
+`autoTrigger` in particular are never written from an inference: they govern
+somebody's monthly build allowance, and a guess is no basis for changing a
+number that decides a bill.
 
 Destination presets (R2, S3, B2, Wasabi, MinIO, and a free-form "Other") landed
 early, out of phase 4. They are presentation and prefill only:

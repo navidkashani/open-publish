@@ -11,6 +11,7 @@
     "test": "npm --prefix plugin test && node --test starters/quartz/scripts/*.test.mjs",
     "typecheck": "npm --prefix plugin run typecheck",
     "build": "npm --prefix plugin run build",
-    "check": "npm run typecheck && npm test && npm run build"
+    "check": "npm run typecheck && npm test && npm run build",
+    "verify": "npm --prefix starters/quartz run verify"
   }
 }

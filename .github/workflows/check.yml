@@ -32,3 +32,28 @@ jobs:
       - run: npm ci --prefix plugin
 
       - run: npm run check
+
+  # The other half: the three build scripts run for real, against a fake bucket
+  # and a real Quartz, asserting on the HTML that comes out.
+  #
+  # Separate from `check` because it clones a repository and installs it, so it
+  # is slow and needs the network. Pull requests stay fast; this runs after a
+  # merge, which is late enough to be useful and early enough to matter.
+  #
+  # It exists because leaving it to be run by hand meant it was not run. The
+  # overlay build had been broken since the first commit, and nothing said so
+  # until somebody typed `npm run verify` out of curiosity.
+  verify:
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      # No install step. The starter has no dependencies of its own, and the
+      # build fetches Quartz and installs it inside a temporary directory.
+      - run: npm run verify

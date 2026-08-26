@@ -13,8 +13,15 @@ import { join, relative } from 'node:path'
 
 const ROOT = new URL('../../', import.meta.url).pathname
 
-/** Build output and dependencies are not ours to write. */
-const SKIP_DIRS = new Set(['node_modules', '.git', 'public', 'dist', '.obsidian'])
+/**
+ * Build output and dependencies are not ours to write.
+ *
+ * `.quartz` is the Quartz checkout that `npm run verify` caches so repeat runs
+ * are fast. Without it here, running the build verification once left every
+ * later `npm test` failing on Richard Hamming's em dash, in a file we do not
+ * own and cannot edit.
+ */
+const SKIP_DIRS = new Set(['node_modules', '.git', '.quartz', 'public', 'dist', '.obsidian'])
 const SKIP_FILES = new Set(['main.js', 'package-lock.json'])
 const TEXT = /\.(ts|tsx|js|mjs|cjs|json|md|css|yml|yaml)$/
 

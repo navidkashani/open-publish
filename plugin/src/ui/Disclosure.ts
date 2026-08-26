@@ -13,15 +13,20 @@
 import type { Setting } from 'obsidian'
 
 /**
- * `Advanced`, or `Advanced · key prefix "notes"`, or `Advanced · 2 settings changed`.
+ * `Advanced`, or `Advanced · key prefix "notes"`, or `Advanced · 2 fields changed`.
  *
  * One changed field is named, because naming it is what makes a closed section
  * safe. Two or more are counted, because a label is not a list.
+ *
+ * "Fields" rather than "settings" on Obsidian's own advice, which discourages
+ * the word in headings. This is a summary rather than a heading, so the rule
+ * does not strictly apply, but the shorter word is no worse and sidesteps the
+ * argument entirely.
  */
 export function advancedLabel(changes: readonly string[]): string {
   if (changes.length === 0) return 'Advanced'
   if (changes.length === 1) return `Advanced · ${changes[0]}`
-  return `Advanced · ${changes.length} settings changed`
+  return `Advanced · ${changes.length} fields changed`
 }
 
 let sectionCounter = 0

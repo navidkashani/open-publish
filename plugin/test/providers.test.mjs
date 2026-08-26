@@ -177,7 +177,7 @@ test('anything the user chose is named on the label, so a closed section is neve
     prefix: 'notes',
     forcePathStyle: false,
   })
-  assert.equal(advancedLabel(two), 'Advanced · 2 settings changed')
+  assert.equal(advancedLabel(two), 'Advanced · 2 fields changed')
 })
 
 test('a hand-edited endpoint counts as changed, because it outranks the template', () => {

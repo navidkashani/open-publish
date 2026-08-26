@@ -103,7 +103,7 @@ test('two non-default advanced fields are counted rather than listed', () => {
     destination: { endpoint: R2_ENDPOINT, bucket: 'my-notes', prefix: 'notes', forcePathStyle: false },
   })
   const toggle = find(root, byClass('op-advanced-toggle'))
-  assert.equal(toggle.textContent, 'Advanced · 2 settings changed')
+  assert.equal(toggle.textContent, 'Advanced · 2 fields changed')
   assert.equal(toggle.getAttr('aria-expanded'), 'true')
 })
 
@@ -167,7 +167,7 @@ test('the blank and the endpoint behind Advanced stay in step, in both direction
   assert.equal(plugin.settings.destination.endpoint, 'https://notes.example.com')
   assert.equal(account.value, '', 'the endpoint no longer derives from an account ID, and says so')
   assert.match(root.textContent, /Your endpoint: https:\/\/notes\.example\.com/)
-  assert.match(find(root, byClass('op-advanced-toggle')).textContent, /2 settings changed/)
+  assert.match(find(root, byClass('op-advanced-toggle')).textContent, /2 fields changed/)
 })
 
 test('a malformed account ID is reported on blur, never mid-typing', () => {
