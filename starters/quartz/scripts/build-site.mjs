@@ -60,6 +60,17 @@ async function main() {
     if (await exists(file)) await cp(file, join(WORK_DIR, file), { force: true })
   }
 
+  // And so does scripts/lib, for exactly the same reason: quartz.config.ts
+  // imports resolveBaseUrl from it, and the config is built by esbuild from
+  // inside WORK_DIR, where a relative path resolves against the copy rather
+  // than the original. Missing this made every overlay build fail on "Could
+  // not resolve ./scripts/lib/site-url.mjs", which is also why `npm run verify`
+  // never validated this shape.
+  if (await exists(join('scripts', 'lib'))) {
+    await mkdir(join(WORK_DIR, 'scripts'), { recursive: true })
+    await cp(join('scripts', 'lib'), join(WORK_DIR, 'scripts', 'lib'), { recursive: true, force: true })
+  }
+
   await run('npx', ['quartz', 'build', '--output', '../public'], { cwd: WORK_DIR })
 
   const produced = await readdir('public').catch(() => [])
