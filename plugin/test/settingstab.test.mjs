@@ -528,6 +528,28 @@ test('Advanced holds the build logs URL, and opens by itself when one is set', (
   assert.equal(visible(rowNamed(withLogs, 'Build logs URL')), true)
 })
 
+test('the request method is reachable, and says so when it is not the default', () => {
+  // It was stored, read by the builder, and settable from nowhere, so only POST
+  // could ever be sent. A hook behind a relay is the case that needs it.
+  const { root, plugin } = open({ builder: { url: PAGES_HOOK } })
+  const toggle = find(buildSection(root), byClass('op-advanced-toggle'))
+  click(toggle)
+  const method = inputIn(rowNamed(root, 'Request method'))
+  assert.equal(method.value, 'POST')
+
+  method.value = 'GET'
+  dispatch(method, 'input')
+  assert.equal(plugin.settings.builder.method, 'GET')
+  assert.equal(toggle.textContent, 'Advanced · GET request')
+
+  const { root: reopened } = open({ builder: { url: PAGES_HOOK, method: 'GET' } })
+  assert.equal(
+    find(buildSection(reopened), byClass('op-advanced-toggle')).getAttr('aria-expanded'),
+    'true',
+    'nothing the user chose is hidden behind a closed section',
+  )
+})
+
 test('the check button refuses an unfinished form before making a request', async () => {
   const { root, plugin } = open({ builder: { url: PAGES_HOOK, siteUrl: '' } })
   click(find(rowNamed(root, 'Check the site'), (node) => node.tagName === 'BUTTON'))

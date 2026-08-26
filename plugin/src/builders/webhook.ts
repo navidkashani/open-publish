@@ -17,7 +17,6 @@ export interface WebhookConfig {
   url: string
   method: 'POST' | 'GET'
   siteUrl: string
-  logsUrl?: string
 }
 
 export const PUBLISH_MARKER_PATH = '_publish.json'

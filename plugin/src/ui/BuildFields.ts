@@ -83,9 +83,12 @@ export function hostNote(builder: Pick<WebhookBuilderSettings, 'host' | 'url'>):
   return `Your deploy hook looks like a ${hostById(inferred).name} one.`
 }
 
-/** The only field behind Advanced, and the only one anybody usually leaves blank. */
-export function buildAdvancedChanges(builder: Pick<WebhookBuilderSettings, 'logsUrl'>): string[] {
-  return builder.logsUrl.trim() ? ['build logs URL'] : []
+/** What is behind Advanced that is not at its default, so a closed section is never opaque. */
+export function buildAdvancedChanges(builder: Pick<WebhookBuilderSettings, 'logsUrl' | 'method'>): string[] {
+  const changes: string[] = []
+  if (builder.logsUrl.trim()) changes.push('build logs URL')
+  if (builder.method !== 'POST') changes.push(`${builder.method} request`)
+  return changes
 }
 
 export class BuildFields {
@@ -349,6 +352,25 @@ export class BuildFields {
       })
       validateOnBlur(setting, text.inputEl, ADDRESS_PATTERN, ADDRESS_ERROR)
     })
+
+    // This existed in the settings file and in `WebhookConfig`, and was
+    // reachable from nowhere, so only POST could ever be sent. Every host in
+    // the catalogue takes POST, which is why nobody noticed; the one that needs
+    // this is a hook behind a relay, and that is exactly the case "Another
+    // host" exists for.
+    new Setting(body)
+      .setName('Request method')
+      .setDesc('Deploy hooks take a POST. Switch to GET only if yours will not accept one.')
+      .addDropdown((dropdown) =>
+        dropdown
+          .addOptions({ POST: 'POST', GET: 'GET' })
+          .setValue(this.builder.method)
+          .onChange((value) => {
+            this.builder.method = value === 'GET' ? 'GET' : 'POST'
+            this.setAdvancedLabel?.(advancedLabel(buildAdvancedChanges(this.builder)))
+            this.save()
+          }),
+      )
   }
 
   /**
