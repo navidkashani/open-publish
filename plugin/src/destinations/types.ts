@@ -44,7 +44,18 @@ export interface ListEntry {
   lastModified?: number
 }
 
-export type TestResult = { ok: true } | { ok: false; reason: string; hint?: string }
+/**
+ * What a live check found out about conditional writes, as opposed to what the
+ * catalogue expected. `ignored` is the dangerous one: the provider accepted a
+ * write it should have refused, so two devices can silently overwrite each
+ * other. `unsupported` is merely weaker, and the publisher degrades to
+ * read-then-warn for it.
+ */
+export type ConcurrencySupport = 'enforced' | 'ignored' | 'unsupported'
+
+export type TestResult =
+  | { ok: true; conditionalWrites?: ConcurrencySupport }
+  | { ok: false; reason: string; hint?: string }
 
 export interface Destination {
   readonly id: string

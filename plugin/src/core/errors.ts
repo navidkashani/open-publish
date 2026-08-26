@@ -4,6 +4,8 @@
  * broke and what to change.
  */
 
+import { missingBucketHint } from '../destinations/providers.ts'
+
 export type PublishErrorCode =
   | 'storage-credentials'
   | 'storage-missing-bucket'
@@ -75,8 +77,11 @@ export function describeStorageError(
   }
 
   if (s3Code === 'NoSuchBucket' || (status === 404 && !context.key)) {
+    // The hint used to name R2 whatever the endpoint was, so an AWS user with a
+    // region mismatch got advice about a product they do not use. The context
+    // already carries the endpoint, so saying the right thing costs nothing.
     return new PublishError('storage-missing-bucket', `Bucket "${context.bucket}" was not found at this endpoint.`, {
-      hint: 'Check the bucket name and, on R2, that the endpoint contains the right account ID.',
+      hint: missingBucketHint(context.endpoint),
     })
   }
 

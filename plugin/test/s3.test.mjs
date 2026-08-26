@@ -134,18 +134,80 @@ test('list parses sizes and timestamps, and decodes XML entities', () => {
   assert.equal(parsed.nextContinuationToken, undefined)
 })
 
-test('the connection test writes, reads back, compares, and cleans up', async () => {
+/**
+ * A transport that round-trips one object, and answers the conditional write at
+ * the end of the connection test however the caller asks it to.
+ */
+function testTransport({ onConditionalPut }) {
   const payload = { value: null }
   const calls = []
   const client = async (request) => {
     calls.push(request.method)
-    if (request.method === 'PUT') { payload.value = request.body; return { status: 200, headers: {}, arrayBuffer: new ArrayBuffer(0), text: '' } }
+    if (request.method === 'PUT') {
+      if (request.headers['if-match']) return onConditionalPut(request)
+      payload.value = request.body
+      return { status: 200, headers: {}, arrayBuffer: new ArrayBuffer(0), text: '' }
+    }
     if (request.method === 'GET') return { status: 200, headers: {}, arrayBuffer: payload.value, text: '' }
     return { status: 204, headers: {}, arrayBuffer: new ArrayBuffer(0), text: '' }
   }
+  return { client, calls }
+}
+
+const ok = { status: 200, headers: {}, arrayBuffer: new ArrayBuffer(0), text: '' }
+
+test('the connection test writes, reads back, compares, probes and cleans up', async () => {
+  const { client, calls } = testTransport({
+    onConditionalPut: () => ({ status: 412, headers: {}, arrayBuffer: new ArrayBuffer(0), text: '' }),
+  })
   const result = await new S3Destination(config, client).test()
-  assert.deepEqual(result, { ok: true })
-  assert.deepEqual(calls, ['PUT', 'GET', 'DELETE'])
+  assert.deepEqual(result, { ok: true, conditionalWrites: 'enforced' })
+  assert.deepEqual(calls, ['PUT', 'GET', 'PUT', 'DELETE'], 'one extra request buys the answer people most want')
+})
+
+test('the probe uses an ETag the object cannot have, and signs it', async () => {
+  const { client } = testTransport({
+    onConditionalPut: (request) => {
+      assert.equal(request.headers['if-match'], '"00000000000000000000000000000000"')
+      assert.match(request.headers.Authorization, /SignedHeaders=[^,]*if-match/, 'R2 rejects unsigned conditionals')
+      return { status: 412, headers: {}, arrayBuffer: new ArrayBuffer(0), text: '' }
+    },
+  })
+  assert.equal((await new S3Destination(config, client).test()).conditionalWrites, 'enforced')
+})
+
+test('storage that accepts a write it should have refused is reported, not passed over', async () => {
+  // The MinIO shape: the header is accepted and ignored, so the test passes
+  // while two devices publishing at once could silently overwrite each other.
+  const { client } = testTransport({ onConditionalPut: () => ok })
+  const result = await new S3Destination(config, client).test()
+  assert.deepEqual(result, { ok: true, conditionalWrites: 'ignored' })
+})
+
+test('a probe that could not run says nothing, rather than saying "unsupported"', async () => {
+  // A dropped connection on this one request tells us nothing about the
+  // feature. Reporting "unsupported" would tell an R2 or S3 user their storage
+  // cannot do the exact thing it can, and quietly downgrade the two-device row.
+  for (const failure of [
+    { status: 0, headers: {}, arrayBuffer: new ArrayBuffer(0), text: 'network down' },
+    { status: 503, headers: {}, arrayBuffer: new ArrayBuffer(0), text: '<Error><Code>SlowDown</Code></Error>' },
+  ]) {
+    const { client } = testTransport({ onConditionalPut: () => failure })
+    const destination = new S3Destination(config, client)
+    const result = await destination.test()
+    assert.deepEqual(result, { ok: true, conditionalWrites: undefined })
+    assert.equal(destination.supportsConditionalWrites(), true, 'and nothing is learned the wrong way either')
+  }
+})
+
+test('storage with no conditional writes at all still passes, as weaker rather than broken', async () => {
+  const { client } = testTransport({
+    onConditionalPut: () => ({ status: 501, headers: {}, arrayBuffer: new ArrayBuffer(0), text: 'Not Implemented' }),
+  })
+  const destination = new S3Destination(config, client)
+  const result = await destination.test()
+  assert.deepEqual(result, { ok: true, conditionalWrites: 'unsupported' })
+  assert.equal(destination.supportsConditionalWrites(), false, 'and the publisher learns it for free')
 })
 
 test('a write-only token fails the connection test with an explanation', async () => {

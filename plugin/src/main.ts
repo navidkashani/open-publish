@@ -1,5 +1,13 @@
 import { Notice, Plugin, TFile, normalizePath } from 'obsidian'
-import { DEFAULT_SETTINGS, isDestinationConfigured, isHookConfigured, migrateSettings } from './settings.ts'
+import {
+  DEFAULT_SETTINGS,
+  STORAGE_MOVED_WARNING,
+  hasStorageMoved,
+  isDestinationConfigured,
+  isHookConfigured,
+  migrateSettings,
+  storageTarget,
+} from './settings.ts'
 import type { Settings } from './settings.ts'
 import { S3Destination } from './destinations/s3.ts'
 import { obsidianHttp } from './destinations/obsidian-http.ts'
@@ -17,7 +25,7 @@ import type { PublishSummary, SessionStatus } from './core/session.ts'
 import { PublishError, toPublishError } from './core/errors.ts'
 import { getPublishFlag, isSupportedFile, parsePublishFrontmatter } from './core/selection.ts'
 import { describeGcPlan, planGc, runGc } from './core/gc.ts'
-import { CURRENT_KEY, objectKey } from './core/snapshot.ts'
+import { runSelfTest } from './core/selftest.ts'
 import { PublishModal } from './ui/PublishModal.ts'
 import { OpenPublishSettingTab } from './ui/SettingsTab.ts'
 import { SetupWizard } from './ui/SetupWizard.ts'
@@ -247,7 +255,7 @@ export default class OpenPublishPlugin extends Plugin {
     onProgress?: (message: string, current?: number, total?: number) => void
   }): Promise<ScanResult> {
     if (!this.hasher) throw new PublishError('not-configured', 'The plugin is still starting up.')
-    return scanVault({
+    const result = await scanVault({
       app: this.app,
       destination: this.destination(),
       hasher: this.hasher,
@@ -258,6 +266,12 @@ export default class OpenPublishPlugin extends Plugin {
       onProgress: options.onProgress,
       signal: options.signal,
     })
+    // Storage that has moved since the last publish is why this screen is about
+    // to show the entire vault as new: the new bucket has no `current.json`, so
+    // the scan has nothing to diff against and every HEAD misses. The review is
+    // where that surprise lands, so it is where the reason belongs.
+    if (hasStorageMoved(this.settings)) result.warnings.push(STORAGE_MOVED_WARNING)
+    return result
   }
 
   activeSession(): PublishSession | null {
@@ -319,6 +333,10 @@ export default class OpenPublishPlugin extends Plugin {
     if (outcome?.committed) {
       this.settings.lastSnapshotId = outcome.snapshotId
       this.settings.lastPublishedAt = Date.now()
+      // Where it went, so that pointing the plugin somewhere else later can be
+      // recognised as the migration it is rather than passing for a setting
+      // change. See `hasStorageMoved`.
+      this.settings.lastPublishedTarget = storageTarget(this.settings.destination)
       if (outcome.buildTriggered) this.settings.lastBuildTriggeredAt = Date.now()
       try {
         await this.saveSettings()
@@ -409,76 +427,7 @@ export default class OpenPublishPlugin extends Plugin {
   async runStorageSelfTest(): Promise<void> {
     const notice = new Notice('Running storage self-test…', 0)
     try {
-      const destination = this.destination()
-      const prefix = '_selftest'
-      const payload = new TextEncoder().encode(`open-publish self-test ${Date.now()}`).buffer as ArrayBuffer
-      const results: string[] = []
-
-      const digest = await crypto.subtle.digest('SHA-256', payload)
-      const hash = [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('')
-      const key = `${prefix}/${objectKey(hash)}`
-
-      await destination.put(key, payload)
-      results.push('content-addressed write: ok')
-
-      // The whole point of this command is to observe the bucket, so nothing
-      // here may be answered from a cache.
-      const head = await destination.head(key, { fresh: true })
-      if (!head) throw new Error('The object could not be found after writing it.')
-      results.push('deduplication check (HEAD): ok')
-
-      const roundTrip = await destination.get(key, { fresh: true })
-      if (!roundTrip || roundTrip.byteLength !== payload.byteLength) {
-        throw new Error('The object read back with the wrong length.')
-      }
-      results.push('read back: ok')
-
-      // Compare-and-swap: write a pointer, then try to overwrite it with a
-      // stale ETag. A correct provider must reject the second write.
-      const pointerKey = `${prefix}/${CURRENT_KEY}`
-      try {
-        const first = await destination.put(pointerKey, new TextEncoder().encode('{"v":1}').buffer as ArrayBuffer, {
-          contentType: 'application/json',
-        })
-        // A provider that turns out not to support conditional writes throws
-        // here. That is a finding to report, not a reason to abandon the run:
-        // the checks above it already passed and deserve to be shown.
-        if (!first.etag || !destination.supportsConditionalWrites()) {
-          throw new PublishError('storage-failed', 'no conditional-write support')
-        }
-        await destination.put(pointerKey, new TextEncoder().encode('{"v":2}').buffer as ArrayBuffer, {
-          contentType: 'application/json',
-          ifMatch: first.etag,
-        })
-        let rejected = false
-        try {
-          await destination.put(pointerKey, new TextEncoder().encode('{"v":3}').buffer as ArrayBuffer, {
-            contentType: 'application/json',
-            ifMatch: first.etag, // deliberately stale now
-          })
-        } catch (error) {
-          rejected = error instanceof PublishError && error.code === 'storage-conflict'
-        }
-        results.push(
-          rejected
-            ? 'concurrent-publish protection: ok'
-            : 'concurrent-publish protection: NOT enforced. This provider ignores conditional writes, so two devices publishing at once could overwrite each other',
-        )
-      } catch {
-        results.push('concurrent-publish protection: unavailable on this provider')
-      }
-
-      // In a `finally` because the test objects are written before any of the
-      // checks that can fail; leaving them behind on every failed run would
-      // quietly accumulate junk in the user's bucket.
-      try {
-        await destination.delete(key)
-        await destination.delete(pointerKey)
-        results.push('cleanup: ok')
-      } catch {
-        results.push('cleanup: could not remove the test objects. They are harmless and prefixed _selftest')
-      }
-
+      const results = await runSelfTest(this.destination(), Date.now())
       notice.hide()
       new Notice(results.join('\n'), 15000)
     } catch (error) {
