@@ -29,7 +29,7 @@ const baseInput = (destination, overrides = {}) => ({
   ...overrides,
 })
 
-test('the mutable pointer is written last — this is the whole atomicity guarantee', async () => {
+test('the mutable pointer is written last: this is the whole atomicity guarantee', async () => {
   const destination = new FakeDestination()
   const outcome = await new Publisher().publish(baseInput(destination), () => {})
 
@@ -89,7 +89,7 @@ test('identical files upload once, however many paths share them', async () => {
   assert.equal(destination.writeOrder().filter((k) => k.startsWith('objects/')).length, 1)
 })
 
-test('no changes means no build — free-tier build quota is not spent on a no-op', async () => {
+test('no changes means no build: free-tier build quota is not spent on a no-op', async () => {
   const destination = new FakeDestination()
   const previousId = await computeSnapshotId(files, site, 1_700_000_000_000)
   const previous = { version: 1, id: previousId, parent: null, createdAt: 1_700_000_000_000,
@@ -148,7 +148,7 @@ test('a provider without conditional writes degrades to read-then-warn, not to c
   assert.equal(destination.writeOrder().at(-1), CURRENT_KEY)
 })
 
-test('a conflict is never retried — a precondition failure is an answer, not a blip', async () => {
+test('a conflict is never retried: a precondition failure is an answer, not a blip', async () => {
   const destination = new FakeDestination()
   destination.objects.set(CURRENT_KEY, { body: bytes('{}'), etag: 'e0', lastModified: 0 })
   let pointerPuts = 0
@@ -298,8 +298,8 @@ test('a build that never goes live is reported as a warning, not a failed publis
 })
 
 test('a provider that hides its ETag falls back to read-then-warn, not to a silent overwrite', async () => {
-  // If conditional writes are supported but the GET came back without an ETag —
-  // a proxy that strips it, a destination with no getWithEtag — there is nothing
+  // If conditional writes are supported but the GET came back without an ETag
+  // (a proxy that strips it, a destination with no getWithEtag), there is nothing
   // to compare against. Writing anyway is the one outcome the whole design
   // exists to prevent: device B overwrites device A with no error.
   const destination = new FakeDestination()

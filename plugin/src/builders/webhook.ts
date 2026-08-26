@@ -82,7 +82,7 @@ export class WebhookBuilder implements Builder {
   /**
    * Checks that the site URL is reachable and, if the site has already been
    * built once, that `_publish.json` is being served. It deliberately does NOT
-   * trigger a build — free-tier build allowances are small enough that a "test"
+   * trigger a build: free-tier build allowances are small enough that a "test"
    * button should not spend one without the user asking.
    */
   async test(): Promise<BuilderTestResult> {

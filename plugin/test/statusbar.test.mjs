@@ -1,6 +1,6 @@
 /**
  * The status bar is the only sign a publish is still going once the window is
- * closed — and it runs inside the session's subscribe callback, which the
+ * closed, and it runs inside the session's subscribe callback, which the
  * plugin calls synchronously. Anything it gets wrong shows up as a Publish
  * button that appears to do nothing, so it is worth its own tests.
  */

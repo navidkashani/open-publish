@@ -3,7 +3,7 @@
  *
  * Stands up a real HTTP server that behaves like an S3 bucket, runs the actual
  * build scripts as subprocesses against it, and inspects what lands on disk.
- * This is the verification the plan asks for — happy path, delete, corruption —
+ * This is the verification the plan asks for (happy path, delete, corruption),
  * exercised without a live Cloudflare account.
  */
 
@@ -177,7 +177,7 @@ test('a missing object names the file, not just the hash', async () => {
   }
 })
 
-test('deleting a note removes it from the site — the content dir is rebuilt, not merged', async () => {
+test('deleting a note removes it from the site: the content dir is rebuilt, not merged', async () => {
   await withBucket(
     { files: { 'keep.md': { content: 'keep', slug: 'keep' } } },
     async ({ cwd, env }) => {

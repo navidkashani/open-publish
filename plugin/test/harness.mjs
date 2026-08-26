@@ -13,9 +13,47 @@ registerHooks({
 
 export const { PublishModal } = await import('../src/ui/PublishModal.ts')
 export const { StatusBar } = await import('../src/ui/StatusBar.ts')
-export const { Platform } = await import('./obsidian-stub.mjs')
-export { notices, MODAL_MEMBERS } from './obsidian-stub.mjs'
+export const { FolderModal } = await import('../src/ui/FolderModal.ts')
+export const { Platform, TFile, TFolder } = await import('./obsidian-stub.mjs')
+export { notices, menus, modals, suggesters, MODAL_MEMBERS } from './obsidian-stub.mjs'
 export { PublishSession }
+
+/**
+ * A vault, as much of one as the settings surface asks for: a list of file
+ * paths, a list of folder paths, and whatever frontmatter matters.
+ */
+export function fakeApp({ folders = [], files = [], frontmatter = {} } = {}) {
+  const folderSet = new Set(folders)
+  const fileSet = new Set(files)
+  return {
+    vault: {
+      getFiles: () => files.map((path) => new TFile(path)),
+      getMarkdownFiles: () => files.filter((path) => path.endsWith('.md')).map((path) => new TFile(path)),
+      getAllFolders: (includeRoot = false) =>
+        (includeRoot ? ['/', ...folders] : folders).map((path) => new TFolder(path)),
+      getFolderByPath: (path) => (folderSet.has(path) ? new TFolder(path) : null),
+      getFileByPath: (path) => (fileSet.has(path) ? new TFile(path) : null),
+    },
+    metadataCache: {
+      getCache: (path) => (frontmatter[path] ? { frontmatter: frontmatter[path] } : null),
+    },
+  }
+}
+
+/** A plugin whose only job here is to hold settings and count saves. */
+export function fakeSettingsPlugin(selection = {}, site = {}) {
+  const plugin = {
+    saves: 0,
+    settings: {
+      selection: { includes: [], excludes: [], explicit: {}, autoIncludeEmbeds: true, ...selection },
+      site: { title: 'Notes', homepage: '', ...site },
+    },
+    async saveSettings() {
+      plugin.saves++
+    },
+  }
+  return plugin
+}
 
 /** A stand-in for the plugin: records what the window asked it to do. */
 export function fakePlugin(overrides = {}) {
@@ -24,7 +62,7 @@ export function fakePlugin(overrides = {}) {
     calls,
     settings: {
       builder: { siteUrl: 'https://example.test', logsUrl: 'https://logs.test', url: 'https://hook.test' },
-      selection: { explicit: {} },
+      selection: { includes: [], excludes: [], explicit: {} },
       ...overrides.settings,
     },
     session: null,

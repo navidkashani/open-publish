@@ -10,6 +10,9 @@ import { Modal, Notice, Setting } from 'obsidian'
 import type { App } from 'obsidian'
 import type OpenPublishPlugin from '../main.ts'
 import { isBuilderConfigured, isDestinationConfigured } from '../settings.ts'
+import { addRule, removeRule, summarizeRules } from './FolderRules.ts'
+import { renderFolderList } from './RuleList.ts'
+import type { Disposer } from './RuleList.ts'
 
 interface Step {
   title: string
@@ -18,6 +21,7 @@ interface Step {
 
 export class SetupWizard extends Modal {
   private stepIndex = 0
+  private disposeRows: Disposer = () => {}
 
   constructor(
     app: App,
@@ -32,6 +36,7 @@ export class SetupWizard extends Modal {
   }
 
   override onClose(): void {
+    this.disposeRows()
     this.contentEl.empty()
   }
 
@@ -50,6 +55,7 @@ export class SetupWizard extends Modal {
     const steps = this.steps()
     const step = steps[this.stepIndex]
     const { contentEl } = this
+    this.disposeRows()
     contentEl.empty()
 
     contentEl.createEl('div', { cls: 'op-wizard-progress', text: `Step ${this.stepIndex + 1} of ${steps.length}` })
@@ -90,7 +96,7 @@ export class SetupWizard extends Modal {
     })
     this.instructions(container, [
       'Open the Cloudflare dashboard and go to R2.',
-      'Create a bucket — "my-notes-publish" is a fine name. Leave it private.',
+      'Create a bucket. "my-notes-publish" is a fine name. Leave it private.',
       'Note your Account ID from the R2 overview page; the endpoint URL contains it.',
       'Go to R2 → API Tokens and create a token with Object Read & Write, scoped to this bucket only. Save the key and secret.',
       'Create a second token with Object Read only, scoped to the same bucket. That one goes to the build in a later step.',
@@ -168,7 +174,7 @@ export class SetupWizard extends Modal {
 
   private renderRepoStep(container: HTMLElement): void {
     container.createEl('p', {
-      text: 'The site generator lives in a Git repository. Your notes never go into it — only the theme and build scripts do.',
+      text: 'The site generator lives in a Git repository. Your notes never go into it. Only the theme and build scripts do.',
     })
     this.instructions(container, [
       'Open the open-publish-quartz template on GitHub.',
@@ -188,8 +194,8 @@ export class SetupWizard extends Modal {
 
     const destination = this.plugin.settings.destination
     const envLines = [
-      `OP_ENDPOINT=${destination.endpoint || '<not set — go back a step>'}`,
-      `OP_BUCKET=${destination.bucket || '<not set — go back a step>'}`,
+      `OP_ENDPOINT=${destination.endpoint || '<not set, go back a step>'}`,
+      `OP_BUCKET=${destination.bucket || '<not set, go back a step>'}`,
       `OP_REGION=${destination.region || 'auto'}`,
       ...(destination.prefix ? [`OP_PREFIX=${destination.prefix}`] : []),
       'OP_ACCESS_KEY_ID=<read-only key id>',
@@ -212,7 +218,7 @@ export class SetupWizard extends Modal {
     const note = container.createDiv({ cls: 'op-notice-info' })
     note.createEl('p', {
       text:
-        'The last two values are blank on purpose. They are the read-only token from step 1 — the build uses it, ' +
+        'The last two values are blank on purpose. They are the read-only token from step 1: the build uses it, ' +
         'the plugin never does, so Open Publish does not keep a copy.',
     })
     note.createEl('p', {
@@ -250,7 +256,7 @@ export class SetupWizard extends Modal {
 
     const result = container.createDiv({ cls: 'op-wizard-result' })
     new Setting(container)
-      .setDesc('Checks that the site responds. It does not start a build — those are limited on free plans.')
+      .setDesc('Checks that the site responds. It does not start a build, because those are limited on free plans.')
       .addButton((button) =>
         button
           .setButtonText('Check site')
@@ -270,27 +276,40 @@ export class SetupWizard extends Modal {
       )
   }
 
+  private updateIncludes(includes: string[]): void {
+    this.plugin.settings.selection.includes = includes
+    this.renderStep()
+    void this.plugin.saveSettings()
+  }
+
   private renderSelectionStep(container: HTMLElement): void {
     container.createEl('p', {
       text:
-        'Nothing is published until you say so. Add folders to publish, or put "publish: true" in a note\'s frontmatter — ' +
-        'frontmatter always wins over folder rules.',
+        'Nothing is published until you say so. Add folders to publish, or put "publish: true" in a note\'s frontmatter. ' +
+        'Frontmatter always wins over folder rules.',
     })
 
+    // The same list component settings uses, so the counts are here too: seeing
+    // "12 notes" the moment a folder is picked is the fastest way to find out
+    // you picked the wrong one.
     const selection = this.plugin.settings.selection
-    new Setting(container)
-      .setName('Folders to publish')
-      .setDesc('One per line. Leave empty to rely on frontmatter alone.')
-      .addTextArea((text) => {
-        text.inputEl.rows = 4
-        text.setValue(selection.includes.join('\n')).onChange(async (value) => {
-          selection.includes = value
-            .split('\n')
-            .map((line) => line.trim().replace(/^\/+|\/+$/g, ''))
-            .filter(Boolean)
-          await this.plugin.saveSettings()
-        })
-      })
+    new Setting(container).setName('Folders to publish').setHeading()
+    const summary = summarizeRules({
+      files: this.app.vault.getFiles().map((file) => file.path),
+      includes: selection.includes,
+      excludes: selection.excludes,
+      folderExists: (path) => this.app.vault.getFolderByPath(path) !== null,
+    })
+    this.disposeRows = renderFolderList({
+      app: this.app,
+      container,
+      stats: summary.includes,
+      taken: () => [...selection.includes, ...selection.excludes],
+      placeholder: 'Add a folder…',
+      emptyText: 'No folders yet. Leave it that way to rely on frontmatter alone.',
+      onAdd: (rule) => this.updateIncludes(addRule(selection.includes, rule)),
+      onRemove: (rule) => this.updateIncludes(removeRule(selection.includes, rule)),
+    })
 
     new Setting(container).setName('Site title').addText((text) =>
       text.setValue(this.plugin.settings.site.title).onChange(async (value) => {

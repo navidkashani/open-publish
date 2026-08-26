@@ -25,7 +25,7 @@ export interface SnapshotLink {
   raw: string
   /** Vault path of the resolved target, or null when nothing matched. */
   target: string | null
-  /** Site slug of the target — present only when `status` is `published`. */
+  /** Site slug of the target, present only when `status` is `published`. */
   slug?: string
   status: LinkStatus
   /** `![[…]]` rather than `[[…]]`. Embeds of media become images; embeds of notes stay transclusions. */
@@ -57,7 +57,7 @@ export interface SnapshotAnalytics {
  * Site options: generator-agnostic *intent*, never generator specifics.
  *
  * An option earns a place here only if it changes what content is visible, who
- * can see it, or how the site looks — and only if any reasonable static site
+ * can see it, or how the site looks, and only if any reasonable static site
  * generator could honour it. That rule is what lets a second starter (Astro,
  * Hugo, whatever) exist without the plugin knowing anything about it, and it is
  * why there is no capability-negotiation mechanism: there is nothing to
@@ -82,7 +82,7 @@ export interface SnapshotSite {
    * generator needs a special case.
    */
   homepage: string
-  /** Ask search engines to stay away. Not access control — see docs/security.md. */
+  /** Ask search engines to stay away. Not access control. See docs/security.md. */
   noIndex: boolean
   showThemeToggle: boolean
   /**
@@ -137,7 +137,7 @@ export function snapshotKey(id: string): string {
 /**
  * Everything about a snapshot that decides whether the site needs rebuilding:
  * which paths exist, what content each holds, where each one lives, and the
- * site block. Deliberately not the timestamp — see `sameContent`.
+ * site block. Deliberately not the timestamp. See `sameContent`.
  *
  * Keys are sorted all the way down so two snapshots written by different plugin
  * versions still compare equal when they describe the same site.
@@ -203,7 +203,7 @@ export function parseSnapshot(text: string): Snapshot {
   try {
     raw = JSON.parse(text)
   } catch {
-    throw new Error('Snapshot is not valid JSON — it may be truncated.')
+    throw new Error('Snapshot is not valid JSON. It may be truncated.')
   }
   if (typeof raw !== 'object' || raw === null) throw new Error('Snapshot is not an object.')
   const value = raw as Partial<Snapshot>

@@ -6,11 +6,11 @@
  * happening. Without it, "close the window and carry on" would feel like the
  * publish evaporated.
  *
- * Hidden on mobile, which has no status bar at all — so nothing here is ever
+ * Hidden on mobile, which has no status bar at all, so nothing here is ever
  * the *only* place a result is reported. Notices cover that.
  */
 
-import { Platform, setIcon } from 'obsidian'
+import { Platform, setIcon, setTooltip } from 'obsidian'
 import type { SessionStatus } from '../core/session.ts'
 import type { MessageTone, PublishState } from './messages.ts'
 import { publishMessage, statusBarLabel } from './messages.ts'
@@ -57,9 +57,11 @@ export class StatusBar {
     const message = publishMessage(state)
     setIcon(this.iconEl, ICONS[message.tone])
     this.labelEl.setText(this.label(status, state))
-    // `aria-label` is what Obsidian's own tooltips read, and it is a plain
-    // attribute — one less API between a publish and the person watching it.
-    this.el.setAttr('aria-label', [message.headline, message.stats, message.body].filter(Boolean).join(' '))
+    // Restored now that minAppVersion covers it. `setTooltip` was dropped for a
+    // hand-written `aria-label` while hunting the dead-button bug; the attribute
+    // works, but this is the API Obsidian actually maintains, and it keeps the
+    // accessible name and the tooltip from drifting apart.
+    setTooltip(this.el, [message.headline, message.stats, message.body].filter(Boolean).join(' '))
     this.el.toggleClass('op-status-bar-busy', status.state === 'running')
     this.el.show()
 

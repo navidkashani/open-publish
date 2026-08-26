@@ -5,7 +5,7 @@
  *
  * This has to run *after* the build, not before, because generators clear their
  * output directory. Writing `_publish.json` first would mean writing it into a
- * directory that is about to be deleted — and the plugin would then poll
+ * directory that is about to be deleted, and the plugin would then poll
  * forever for a marker that never appears.
  */
 
@@ -68,7 +68,7 @@ async function main() {
   )
 
   // Without no-store, a CDN can serve a stale marker and the plugin reports an
-  // old snapshot as live — worse than reporting nothing at all.
+  // old snapshot as live, worse than reporting nothing at all.
   const headers = ['/_publish.json', '  Cache-Control: no-store', '  Content-Type: application/json']
 
   if (state.site?.noIndex) {
@@ -97,13 +97,13 @@ async function main() {
     }
   }
 
-  console.log(`[open-publish] published snapshot ${state.snapshot} — ${files.length} file(s)`)
+  console.log(`[open-publish] published snapshot ${state.snapshot}, ${files.length} file(s)`)
 }
 
 const strip = (value) => String(value).replace(/^\/+/, '')
 
 /**
- * The homepage is served at `/`, not at `/index` — so a note that was renamed
+ * The homepage is served at `/`, not at `/index`, so a note that was renamed
  * *into* the homepage slot has to redirect to the root, or its old URL lands on
  * a path the generator never emitted.
  */

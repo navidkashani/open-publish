@@ -1,4 +1,4 @@
-# Runs exactly what `npm run check` runs locally — typecheck, both test suites,
+# Runs exactly what `npm run check` runs locally: typecheck, both test suites,
 # then the bundle. Deliberately the same one command a contributor already uses,
 # so CI and a local run cannot drift apart.
 name: check

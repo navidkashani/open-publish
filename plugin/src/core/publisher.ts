@@ -85,7 +85,7 @@ export interface PublishEvent {
  * just a set of paths: unticking a *changed* file means "not this edit yet",
  * not "take this page down". Those files stay on the site at the version that
  * is already live, which works because objects are content-addressed and never
- * overwritten — the old bytes are still exactly where the old hash says.
+ * overwritten: the old bytes are still exactly where the old hash says.
  *
  * Anything in neither set is absent from the snapshot, and the snapshot is the
  * complete description of the site, so it comes off.
@@ -151,7 +151,7 @@ export class Publisher {
    */
   publish(input: PublishInput, onEvent: (event: PublishEvent) => void): Promise<PublishOutcome> {
     if (this.inFlight) {
-      onEvent({ phase: 'uploading', message: 'A publish is already running — following that one.' })
+      onEvent({ phase: 'uploading', message: 'A publish is already running. Following that one.' })
       return this.inFlight
     }
     const run = this.run(input, onEvent).finally(() => {
@@ -182,7 +182,7 @@ export class Publisher {
     // Free-tier build allowances are small (Pages: 500/month). Burning one on a
     // no-op is pure waste, so this exits before touching the network at all.
     if (sameContent(snapshot, scan.previous)) {
-      onEvent({ phase: 'done', message: 'Nothing has changed since the last publish — no build needed.' })
+      onEvent({ phase: 'done', message: 'Nothing has changed since the last publish. No build needed.' })
       return {
         snapshotId: scan.previous?.id ?? snapshot.id,
         committed: false,
@@ -198,7 +198,7 @@ export class Publisher {
     let preflight = await this.preflight(snapshot, plan.kept, input, onEvent)
 
     // A file held at its published version names an *old* hash. If that object
-    // has gone missing — an over-eager clean-up, a half-migrated bucket — the
+    // has gone missing (an over-eager clean-up, a half-migrated bucket), the
     // bytes it names exist nowhere and cannot be recreated. Uploading today's
     // bytes under yesterday's hash would poison content-addressed storage for
     // every snapshot that references it, so the only honest repair is to
@@ -331,7 +331,7 @@ export class Publisher {
     return { needed, skipped, unrecoverable }
   }
 
-  /** Ask the host to rebuild — or explain, in one value, why we did not. */
+  /** Ask the host to rebuild, or explain, in one value, why we did not. */
   private async requestDeploy(
     input: PublishInput,
     snapshot: Snapshot,
@@ -362,7 +362,7 @@ export class Publisher {
    * `If-Match` on the ETag we read during the scan is a real compare-and-swap:
    * if another device published in between, the PUT is rejected and we tell the
    * user rather than silently clobbering their other machine's work. Providers
-   * without conditional writes degrade to a read-then-warn check — a lost
+   * without conditional writes degrade to a read-then-warn check: a lost
    * update is possible there, but corruption still is not.
    */
   private async commitPointer(
@@ -377,7 +377,7 @@ export class Publisher {
     // A compare-and-swap needs something to compare. Support for conditional
     // writes is not enough on its own: without an ETag from the scan there is no
     // token, and writing anyway would be an unconditional overwrite dressed up
-    // as a safe one — the exact silent lost update this whole path exists to
+    // as a safe one: the exact silent lost update this whole path exists to
     // prevent. No token means take the degraded route, same as a provider that
     // cannot do it at all.
     const hasCompareToken = scan.isFirstPublish || Boolean(scan.currentEtag)
@@ -399,7 +399,7 @@ export class Publisher {
         // through to the degraded path rather than failing the publish outright.
         onEvent({
           phase: 'committing',
-          message: 'This provider cannot do a safe swap — checking for concurrent publishes instead.',
+          message: 'This provider cannot do a safe swap. Checking for concurrent publishes instead.',
         })
       }
     }
@@ -540,12 +540,12 @@ interface UploadCandidate {
   /**
    * Whether reading `path` right now yields exactly these bytes. False for a
    * file held at its published version: its hash describes content the vault no
-   * longer has, so this object can never be uploaded — only found or lost.
+   * longer has, so this object can never be uploaded, only found or lost.
    */
   reproducible: boolean
 }
 
-/** One entry per distinct content hash — identical files upload once. */
+/** One entry per distinct content hash: identical files upload once. */
 function uploadCandidates(files: Record<string, SnapshotFile>, kept: Set<string>): UploadCandidate[] {
   const byHash = new Map<string, UploadCandidate>()
   for (const [path, file] of Object.entries(files)) {

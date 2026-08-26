@@ -2,7 +2,7 @@
  * The only file that knows we use Obsidian's `requestUrl`.
  *
  * `requestUrl` bypasses CORS, which means users never configure a bucket CORS
- * policy — one whole onboarding step deleted. It also works on mobile, unlike
+ * policy: one whole onboarding step deleted. It also works on mobile, unlike
  * anything Node-based. Its limitation (no streaming, whole body in memory) is
  * what the size limits in core/limits.ts exist to contain.
  */

@@ -22,7 +22,7 @@ export interface Builder {
   /**
    * Whether this builder can tell that a deploy landed. A hook can be set up
    * without a site address, in which case builds start but nothing can confirm
-   * them — worth saying out loud rather than spinning on a poll that will never
+   * them, worth saying out loud rather than spinning on a poll that will never
    * succeed. Absent means yes.
    */
   canVerify?(): boolean

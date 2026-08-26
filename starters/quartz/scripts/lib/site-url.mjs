@@ -2,7 +2,7 @@
  * Work out the site's absolute URL from whatever the host provides.
  *
  * Quartz needs this for RSS, the sitemap and the 404 page. Its own fallback is
- * `cfg.baseUrl ?? "example.com"` — note `??`, which only catches null and
+ * `cfg.baseUrl ?? "example.com"`. Note `??`, which only catches null and
  * undefined. Hand it an empty string and the fallback is skipped, giving
  * `new URL("https://")` and a build that dies with "Invalid URL" and no clue
  * which setting caused it.

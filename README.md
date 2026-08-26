@@ -21,14 +21,14 @@ published in Git.
   new version in a single small write, or it does not switch at all.
 - **Keeps links working.** Obsidian resolves `[[wikilinks]]` against your whole
   vault. The plugin ships that resolution alongside your notes, so a published
-  subset links correctly — and a link to a note you did not publish renders as
+  subset links correctly, and a link to a note you did not publish renders as
   plain text instead of a dead end.
 - **Brings your attachments along.** An image embedded by a published note is
   published too, wherever it lives in your vault.
 - **Redirects renamed notes.** A rename changes a URL; old links keep working.
 - **Site options that are not theme-specific.** Navigation, search, graph,
   backlinks, outline, tags, theme toggle, homepage, analytics and a
-  discourage-search-engines switch — described as intent, so a future starter
+  discourage-search-engines switch, described as intent, so a future starter
   can honour them without the plugin knowing anything about it.
 
 ## Repository layout
@@ -41,7 +41,7 @@ published in Git.
 
 ## Getting started
 
-Follow **[docs/setup-cloudflare.md](docs/setup-cloudflare.md)** — about ten
+Follow **[docs/setup-cloudflare.md](docs/setup-cloudflare.md)**: about ten
 minutes, no terminal, nothing to install outside Obsidian. Other hosts work the
 same way; see [docs/other-providers.md](docs/other-providers.md).
 
@@ -107,11 +107,11 @@ Or one piece at a time:
 
 ```bash
 npm run typecheck
-npm test          # 281 tests: no network, no Obsidian, no browser
+npm test          # 332 tests: no network, no Obsidian, no browser
 npm run build     # produces plugin/main.js
 ```
 
-The tests are the specification for the parts that must not break — atomic
+The tests are the specification for the parts that must not break: atomic
 commits, garbage-collection safety, link rewriting, the tick-to-outcome table in
 the publish window, and the full build pipeline run as real subprocesses against
 a stand-in bucket. `npm run check` is what CI runs, unchanged.
@@ -122,12 +122,12 @@ To try it in a vault, copy `manifest.json`, `main.js` and `styles.css` into
 ## Status
 
 Phases 1 and 2 of the roadmap in `docs/architecture.md` are done: the plugin and
-the Quartz starter are complete and tested. Phase 3 is next — a Worker gateway
+the Quartz starter are complete and tested. Phase 3 is next: a Worker gateway
 and Deploy-to-Cloudflare button, rollback UI, and mobile.
 
 Mobile is the honest caveat. `manifest.json` does not mark the plugin
 desktop-only and the code avoids Node APIs, so it should work, but it has not
-been verified on a device — and the status bar it uses to report a publish
+been verified on a device, and the status bar it uses to report a publish
 running in the background does not exist there, leaving only notices.
 
 ## Licence

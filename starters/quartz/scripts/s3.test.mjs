@@ -1,5 +1,5 @@
 /**
- * The starter signs requests itself rather than sharing code with the plugin —
+ * The starter signs requests itself rather than sharing code with the plugin:
  * different runtimes, different crypto APIs. That is two implementations of one
  * spec, which is exactly the kind of thing that drifts silently.
  *

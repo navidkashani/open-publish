@@ -24,7 +24,7 @@ const LATIN_EXTRAS: Record<string, string> = {
  * Latin diacritics are folded (é -> e) and Cyrillic transliterated, but letters
  * from scripts we cannot transliterate (CJK, Greek, Arabic…) are preserved:
  * a percent-encoded UTF-8 URL is far friendlier than a hash. Only characters
- * that have no business in a URL — emoji, punctuation, separators — are dropped.
+ * that have no business in a URL (emoji, punctuation, separators) are dropped.
  */
 export function slugifySegment(segment: string): string {
   const folded = segment

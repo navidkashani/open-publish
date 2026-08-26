@@ -3,7 +3,7 @@
  * plugin shipped inside the snapshot.
  *
  * This is the payoff of resolving links in the plugin rather than here. Obsidian
- * resolves `[[Note]]` against the whole vault — shortest-path matching, aliases,
+ * resolves `[[Note]]` against the whole vault: shortest-path matching, aliases,
  * attachment folders. A generator seeing only the published subset cannot
  * reproduce that. So the plugin does the resolving, and this file only applies
  * the answer.
@@ -136,7 +136,7 @@ export function rewriteLinks(text, links = [], options = {}) {
   })
 
   // Measured again, against the text this pass actually walks. Rewriting a
-  // wikilink changes its length, which moves everything after it — so ranges
+  // wikilink changes its length, which moves everything after it, so ranges
   // taken from the original text would point at the wrong bytes here, and a
   // link inside a code fence would be rewritten as though it were prose.
   const markdownRanges = protectedRanges(out)

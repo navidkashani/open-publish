@@ -6,7 +6,7 @@
  * so do we, and for the same reason: people recognise their own folders faster
  * than they read their own filenames.
  *
- * Pure data — no DOM, no Obsidian — so the shape and the tick rules are unit
+ * Pure data (no DOM, no Obsidian), so the shape and the tick rules are unit
  * tested under plain Node. Rendering lives in PublishModal.
  */
 
@@ -114,7 +114,7 @@ export function tickState(node: TreeNode, selected: ReadonlySet<string>): TickSt
 /**
  * Ticking a folder ticks everything under it; unticking clears everything.
  *
- * A part-ticked folder ticks the rest rather than clearing — the click is
+ * A part-ticked folder ticks the rest rather than clearing: the click is
  * almost always "I want this folder", not "undo what I already chose".
  */
 export function toggleNode(node: TreeNode, selected: Set<string>): void {

@@ -1,7 +1,7 @@
 /**
  * Platform limits that shape the design, verified against Cloudflare docs.
  *
- * These are not arbitrary safety margins — each one is a hard wall where the
+ * These are not arbitrary safety margins: each one is a hard wall where the
  * failure, if we let the user hit it, is confusing rather than obvious.
  */
 

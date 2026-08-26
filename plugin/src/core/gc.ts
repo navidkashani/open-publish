@@ -1,9 +1,9 @@
 /**
  * Garbage collection for orphan objects.
  *
- * Interrupted publishes leave objects nothing points at. They are harmless —
- * that is the whole point of content-addressed storage — so GC is manual only,
- * conservative, and never on the publish path.
+ * Interrupted publishes leave objects nothing points at. They are harmless
+ * (that is the whole point of content-addressed storage), so GC is manual
+ * only, conservative, and never on the publish path.
  *
  * Three guards, because the failure mode (deleting a blob an in-flight build is
  * about to read) produces a broken deploy from a *successful* publish:
@@ -35,7 +35,7 @@ export interface GcOptions {
   onProgress?: (message: string) => void
 }
 
-/** Work out what could be deleted. Deletes nothing — call `runGc` for that. */
+/** Work out what could be deleted. Deletes nothing. Call `runGc` for that. */
 /**
  * An object whose age we could not read counts as new.
  *

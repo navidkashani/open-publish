@@ -1,7 +1,7 @@
 /**
  * A DOM small enough to run the publish window under `node --test`.
  *
- * The point is not coverage for its own sake — it is that the interesting bugs
+ * The point is not coverage for its own sake. It is that the interesting bugs
  * in a tree of checkboxes are *interaction* bugs, and those are invisible to a
  * unit test of the tree logic. So this models the parts of the platform that
  * actually bite:
@@ -65,6 +65,7 @@ export class StubElement {
     this.style = {}
     this.ownText = ''
     this.hidden = false
+    this.value = ''
     this.checked = false
     this.indeterminate = false
     this.disabled = false
@@ -193,6 +194,17 @@ export class StubElement {
 
 export function el(tag = 'div') {
   return new StubElement(tag)
+}
+
+/**
+ * Dispatch an arbitrary event with extra properties on it (pointer
+ * coordinates, a key name), so gestures and keyboard handling are drivable
+ * without a device or a real DOM.
+ */
+export function dispatch(target, type, props = {}) {
+  const event = Object.assign(new StubEvent(type), props)
+  target.dispatchEvent(event)
+  return event
 }
 
 /**

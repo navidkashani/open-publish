@@ -5,7 +5,7 @@ import { signRequest, uriEncode, sha256Hex, EMPTY_PAYLOAD_SHA256 } from '../src/
 /**
  * AWS's own published example ("Signature Calculations for the Authorization
  * Header: GET Object"). If our signer reproduces this byte for byte, it is
- * correct — this is the single most valuable test in the suite, because a
+ * correct. This is the single most valuable test in the suite, because a
  * signing bug shows up as an opaque 403 with no diagnostic.
  */
 test('reproduces the AWS GET Object reference signature', async () => {
@@ -105,7 +105,7 @@ test('signature changes when the body changes', async () => {
   assert.notEqual(a.headers.Authorization, b.headers.Authorization)
 })
 
-test('host is signed but never sent — it is a forbidden header', async () => {
+test('host is signed but never sent: it is a forbidden header', async () => {
   const signed = await signRequest({
     method: 'GET',
     url: 'https://acct.r2.cloudflarestorage.com/bucket/current.json',
@@ -121,7 +121,7 @@ test('host is signed but never sent — it is a forbidden header', async () => {
   assert.ok(signed.canonicalRequest.includes('host:acct.r2.cloudflarestorage.com'))
 
   // ...but not handed to the transport. Electron's net, which backs Obsidian's
-  // requestUrl, fails the whole request if we set Host ourselves — and it looks
+  // requestUrl, fails the whole request if we set Host ourselves, and it looks
   // exactly like the endpoint being unreachable.
   assert.equal(signed.headers.host, undefined)
   assert.equal(signed.headers.Host, undefined)

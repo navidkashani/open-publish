@@ -24,7 +24,7 @@ export interface PutResult {
 /**
  * Reads go through Obsidian's `requestUrl`, which uses Electron's HTTP cache.
  * A GET of a key whose whole point is to change is exactly the wrong thing to
- * serve from a cache, so every read says so — and the mutable pointer, where a
+ * serve from a cache, so every read says so, and the mutable pointer, where a
  * stale answer means publishing against a site state that no longer exists,
  * also gets a URL nothing can have cached.
  */

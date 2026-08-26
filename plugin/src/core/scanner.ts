@@ -5,7 +5,7 @@
  * The remote is always the source of truth. Every scan starts by reading
  * `current.json` from the bucket, exactly as Obsidian Publish calls its list
  * API on every scan. Local state is a hashing accelerator, never a record of
- * what is published — which is what makes publishing from a second device, or
+ * what is published, which is what makes publishing from a second device, or
  * from a reinstalled plugin, just work.
  */
 
@@ -52,7 +52,7 @@ export interface ScanResult {
   /** The snapshot we would commit, before the user's checkbox choices are applied. */
   snapshot: Snapshot
   previous: Snapshot | null
-  /** ETag of `current.json` at scan time — the compare-and-swap token for the commit. */
+  /** ETag of `current.json` at scan time, the compare-and-swap token for the commit. */
   currentEtag?: string
   /** True when there was no `current.json` at all; the commit uses If-None-Match instead. */
   isFirstPublish: boolean
@@ -65,7 +65,7 @@ export interface ScanResult {
 
   /** Auto-pulled in because a published note embeds them (design note 2.8). */
   autoIncluded: Set<string>
-  /** Resolved but not published — offered by the "Add linked" button. */
+  /** Resolved but not published, offered by the "Add linked" button. */
   linkedButUnpublished: string[]
 
   /** Hard stops. A scan with blockers cannot be published. */
@@ -128,7 +128,7 @@ export async function scanVault(options: ScanOptions): Promise<ScanResult> {
   for (const path of selected) {
     // The homepage takes the site root. Doing this here rather than in the
     // generator means links to it, and redirects from its old name, resolve to
-    // "/" automatically — no starter needs to know the concept exists.
+    // "/" automatically. No starter needs to know the concept exists.
     if (homepage && path === homepage) {
       slugByPath.set(path, 'index')
       continue
@@ -219,7 +219,7 @@ export async function scanVault(options: ScanOptions): Promise<ScanResult> {
       paths: [],
     })
   } else if (fileCount > WARN_FILE_COUNT) {
-    warnings.push(`${fileCount} files selected — close to the 20,000-asset limit on Cloudflare Pages' free plan.`)
+    warnings.push(`${fileCount} files selected, close to the 20,000-asset limit on Cloudflare Pages' free plan.`)
   }
   if (totalBytes > WARN_SNAPSHOT_BYTES) {
     warnings.push(
@@ -276,7 +276,7 @@ async function readRemoteState(destination: Destination): Promise<{
 }> {
   // `fresh` is load-bearing, not a precaution. Every diff on this screen is
   // measured against whatever this read returns, so a cached copy from before
-  // the last publish reports work that is already live as still pending — and
+  // the last publish reports work that is already live as still pending, and
   // then publishing it again rolls the site back to that older state.
   const fresh = { fresh: true }
   const pointerResponse = destination.getWithEtag

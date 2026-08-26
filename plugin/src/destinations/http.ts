@@ -7,7 +7,7 @@
  * use `requestUrl` rather than `fetch`.
  *
  * Why `requestUrl` and never `fetch` (design note 2.3): it bypasses CORS
- * entirely, so users never have to configure a bucket CORS policy — one whole
+ * entirely, so users never have to configure a bucket CORS policy: one whole
  * onboarding step and a large class of support tickets deleted. The cost is no
  * streaming and no multipart, which is why the size limits in `limits.ts` exist.
  */
@@ -30,7 +30,7 @@ export interface HttpResponse {
 
 export type HttpClient = (request: HttpRequest) => Promise<HttpResponse>
 
-/** Case-insensitive header lookup — transports disagree about casing. */
+/** Case-insensitive header lookup: transports disagree about casing. */
 export function header(response: HttpResponse, name: string): string | undefined {
   const wanted = name.toLowerCase()
   for (const [key, value] of Object.entries(response.headers)) {

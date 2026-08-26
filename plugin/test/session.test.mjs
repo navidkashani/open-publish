@@ -158,7 +158,7 @@ test('the detail line does not outlive its phase', () => {
 
 test('a run that publishes nothing still finishes cleanly', async () => {
   const { session, emit, finish } = manualSession()
-  emit({ phase: 'done', message: 'Nothing has changed since the last publish — no build needed.' })
+  emit({ phase: 'done', message: 'Nothing has changed since the last publish. No build needed.' })
   finish({ committed: false, uploaded: 0, buildTriggered: false, deploy: null })
   const status = await session.finished
   assert.equal(status.state, 'done')

@@ -1,5 +1,5 @@
 /**
- * What a tick actually does — one test per row of the table in the plan.
+ * What a tick actually does: one test per row of the table in the plan.
  *
  * These run through the real Publisher and read the snapshot it committed,
  * because the interesting failures are not in the selection arithmetic but in
@@ -125,7 +125,7 @@ test('changed + ticked -> updated', async () => {
 
 test('changed + unticked -> the old version stays live, and the page is not lost', async () => {
   // The regression test. Unticking a changed file used to drop it from the
-  // snapshot entirely, which reads as "remove this page" — so "not this edit
+  // snapshot entirely, which reads as "remove this page", so "not this edit
   // yet" silently deleted the note from the site.
   const { snapshot, outcome, destination } = await publish({
     include: new Set(['fresh.md', 'keep.md']),

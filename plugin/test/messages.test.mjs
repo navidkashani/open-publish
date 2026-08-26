@@ -10,6 +10,7 @@ import {
   reviewSummary,
   stateForSession,
   statusBarLabel,
+  upToDateStats,
 } from '../src/ui/messages.ts'
 import { PublishError } from '../src/core/errors.ts'
 
@@ -32,6 +33,41 @@ test('nothing changed', () => {
   assert.deepEqual(labels(message), ['Close'])
 })
 
+test('up to date offers only the buttons that can actually work', () => {
+  const both = publishMessage({ kind: 'up-to-date', stats: '6 notes published', canVisit: true, canRebuild: true })
+  assert.equal(both.headline, 'Your site is up to date')
+  assert.equal(both.stats, '6 notes published')
+  assert.deepEqual(labels(both), ['Rebuild site', 'Visit site', 'Close'])
+
+  assert.deepEqual(
+    labels(publishMessage({ kind: 'up-to-date', stats: '', canVisit: true, canRebuild: false })),
+    ['Visit site', 'Close'],
+  )
+  assert.deepEqual(
+    labels(publishMessage({ kind: 'up-to-date', stats: '', canVisit: false, canRebuild: true })),
+    ['Rebuild site', 'Close'],
+  )
+  assert.deepEqual(
+    labels(publishMessage({ kind: 'up-to-date', stats: '', canVisit: false, canRebuild: false })),
+    ['Close'],
+    'a window with nowhere to send you still offers a way out',
+  )
+})
+
+test('the up-to-date count separates notes from the files that came with them', () => {
+  assert.equal(upToDateStats(['a.md', 'b.md']), '2 notes published')
+  assert.equal(upToDateStats(['a.md']), '1 note published', 'singular')
+  assert.equal(upToDateStats(['a.md', 'img/one.png']), '1 note and 1 attachment published')
+  assert.equal(upToDateStats(['a.md', 'b.md', 'img/one.png', 'docs/two.pdf']), '2 notes and 2 attachments published')
+  assert.equal(upToDateStats(['img/one.png']), '1 attachment published', 'attachments alone still read')
+  assert.equal(upToDateStats([]), 'Nothing published')
+})
+
+test('the timestamp is the caller\'s, so this file never touches a locale', () => {
+  assert.equal(upToDateStats(['a.md'], '25 Aug 2026, 12:29'), '1 note published · 25 Aug 2026, 12:29')
+  assert.equal(upToDateStats(['a.md']), '1 note published', 'and it is left out entirely when unknown')
+})
+
 test('publishing offers only cancel', () => {
   const message = publishMessage({ kind: 'publishing', firstPublish: false })
   assert.equal(message.headline, 'Publishing…')
@@ -49,7 +85,7 @@ test('saved, site updating', () => {
   assert.equal(message.headline, 'Published')
   assert.equal(message.stats, '1 note updated · 1 file uploaded')
   assert.match(message.body, /Your site is updating now/)
-  assert.match(message.body, /you can close this window/)
+  assert.match(message.body, /You can close this window/)
   assert.deepEqual(labels(message), ['Visit site', 'Done'])
 })
 
@@ -150,6 +186,9 @@ test('cancelled', () => {
 test('no message in the whole table uses our jargon', () => {
   const states = [
     { kind: 'nothing-to-publish' },
+    { kind: 'nothing-to-publish', reason: 'nothing-selected' },
+    { kind: 'up-to-date', stats: '6 notes published', canVisit: true, canRebuild: true },
+    { kind: 'up-to-date', stats: '', canVisit: false, canRebuild: false },
     { kind: 'publishing', firstPublish: true },
     published({ kind: 'requested' }),
     published({ kind: 'live' }),
@@ -246,6 +285,11 @@ test('the status bar says something short and true at every stage', () => {
   assert.equal(statusBarLabel(published({ kind: 'requested' })), 'Site updating…')
   assert.equal(statusBarLabel(published({ kind: 'live' })), 'Your site is live')
   assert.equal(statusBarLabel({ kind: 'failed', code: 'aborted', message: 'x' }), 'Publish cancelled')
+  assert.equal(statusBarLabel({ kind: 'nothing-to-publish' }), 'Nothing to publish')
+  assert.equal(
+    statusBarLabel({ kind: 'up-to-date', stats: '', canVisit: false, canRebuild: false }),
+    'Your site is up to date',
+  )
 })
 
 // --- the review screen ------------------------------------------------------
@@ -285,7 +329,7 @@ test('a big removal takes two clicks', () => {
   assert.equal(guard.isArmed(), false, 'and the question is not left standing')
 })
 
-test('any tick resets the confirmation — the number on the button just changed', () => {
+test('any tick resets the confirmation: the number on the button just changed', () => {
   const guard = new RemovalGuard()
   assert.equal(guard.confirm(43), false)
   guard.reset()

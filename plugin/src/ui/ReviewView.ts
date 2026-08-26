@@ -2,7 +2,7 @@
  * The review screen: what is about to change, and what the ticks mean.
  *
  * Deliberately *not* a `Modal` subclass, and that is the point. Obsidian's
- * `Modal` sets undocumented instance fields — `selection` among them — which
+ * `Modal` sets undocumented instance fields (`selection` among them), which
  * silently shadow any method of the same name on a subclass, with no type error
  * to warn you. Keeping the state and the logic in a plain class the window owns
  * removes the whole collision surface: the only names that have to be safe are
@@ -18,13 +18,14 @@
  *   already published + ticked   -> taken off the site
  */
 
-import { Setting, setIcon } from 'obsidian'
+import { setIcon } from 'obsidian'
 import type { ScanResult } from '../core/scanner.ts'
 import type { PublishSelection } from '../core/publisher.ts'
 import type { PublishSummary } from '../core/session.ts'
 import { formatBytes } from '../core/limits.ts'
 import { snapshotContentKey } from '../core/snapshot.ts'
 import { buildTree, countSelected } from './FileTree.ts'
+import { renderLinkedNotes, renderScanNotices } from './ScanNotices.ts'
 import { TreeView } from './TreeView.ts'
 import { RemovalGuard, publishButtonLabel, removalConfirmLabel, reviewSummary } from './messages.ts'
 
@@ -78,24 +79,7 @@ export class ReviewView {
     const contentEl = this.container
     contentEl.empty()
 
-    if (scan.blockers.length > 0) {
-      const box = contentEl.createDiv({ cls: 'op-notice-error op-blockers' })
-      box.createEl('p', {
-        text:
-          scan.blockers.length === 1
-            ? 'One problem has to be fixed first:'
-            : `${scan.blockers.length} problems have to be fixed first:`,
-      })
-      for (const item of scan.blockers) {
-        const row = box.createEl('div', { cls: 'op-blocker' })
-        row.createEl('div', { text: item.message })
-        if (item.paths.length > 0) row.createEl('div', { cls: 'op-muted', text: item.paths.join(', ') })
-      }
-    }
-
-    for (const warning of scan.warnings) {
-      contentEl.createDiv({ cls: 'op-notice-warning', text: warning })
-    }
+    renderScanNotices(contentEl, scan)
 
     const summary = contentEl.createDiv({ cls: 'op-summary' })
     this.summaryEl = summary.createSpan()
@@ -116,10 +100,10 @@ export class ReviewView {
       paths: sections.removed,
       selected: null,
       open: false,
-      hint: 'No longer in your published set — deleted, excluded, or marked publish: false.',
+      hint: 'No longer in your published set (deleted, excluded, or marked publish: false).',
     })
     this.renderSection(list, {
-      title: 'Already published — select to unpublish',
+      title: 'Already published, select to unpublish',
       paths: sections.published,
       selected: this.unpublish,
       open: false,
@@ -183,8 +167,8 @@ export class ReviewView {
       },
     })
 
-    // A section can be thousands of rows on a real vault — an "Already
-    // published" list, or a removal caused by one mistyped exclude rule — so
+    // A section can be thousands of rows on a real vault (an "Already
+    // published" list, or a removal caused by one mistyped exclude rule), so
     // rows are built when it is first opened, never before.
     let built = false
     const expand = (open: boolean) => {
@@ -233,7 +217,7 @@ export class ReviewView {
     header.createSpan({ cls: 'op-section-count', text: `${sections.renames.length}` })
 
     const body = section.createDiv({ cls: 'op-section-body' })
-    body.createDiv({ cls: 'op-muted op-section-hint', text: 'Old links keep working — they redirect to the new address.' })
+    body.createDiv({ cls: 'op-muted op-section-hint', text: 'Old links keep working. They redirect to the new address.' })
     for (const rename of sections.renames) {
       const row = body.createDiv({ cls: 'op-tree-row op-row-file op-rename-row' })
       setIcon(row.createSpan({ cls: 'op-tree-icon' }), 'corner-down-right')
@@ -321,19 +305,7 @@ export class ReviewView {
   }
 
   private renderFooter(container: HTMLElement, scan: ScanResult): void {
-    if (scan.linkedButUnpublished.length > 0) {
-      new Setting(container)
-        .setName('Linked notes that are not published')
-        .setDesc(
-          `${scan.linkedButUnpublished.length} note(s) are linked from your published notes but are not published themselves. ` +
-            'Right now those links render as plain text. Adding them publishes them too.',
-        )
-        .addButton((button) =>
-          button.setButtonText('Add linked').onClick(() => {
-            this.actions.onAddLinked(scan.linkedButUnpublished)
-          }),
-        )
-    }
+    renderLinkedNotes(container, scan.linkedButUnpublished, (paths) => this.actions.onAddLinked(paths))
 
     const actions = container.createDiv({ cls: 'op-progress-actions' })
     const publish = actions.createEl('button', { cls: 'mod-cta' })
@@ -392,7 +364,7 @@ function sortIntoSections(scan: ScanResult): Sections {
   const renameTargets = new Set(scan.renames.map((rename) => rename.to))
   const renameSources = new Set(scan.renames.map((rename) => rename.from))
   return {
-    // A rename is not a new page and not a removed one — it is the same page at
+    // A rename is not a new page and not a removed one. It is the same page at
     // a new address, and its own section says so. Listing it as both would
     // invite someone to untick "new" and take their own note down.
     added: scan.added.filter((path) => !renameTargets.has(path)),

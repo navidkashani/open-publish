@@ -6,7 +6,7 @@ Your storage keys are stored in `data.json` inside your vault's
 `.obsidian/plugins/open-publish/` folder. That means:
 
 - **Plain text on disk.** Not encrypted, not obfuscated.
-- **Synced to your other devices**, if you sync your vault — including via
+- **Synced to your other devices**, if you sync your vault, including via
   Obsidian Sync, iCloud, Dropbox or Git.
 - **Readable by every other plugin you have installed.** Obsidian cannot sandbox
   plugins from one another, and says so in its own documentation.
@@ -22,7 +22,7 @@ Assume the key can leak. Make it not matter very much.
 
 Cloudflare R2 supports scoping a token to a single bucket. Do that. A leaked
 token then reaches one bucket containing content you were publishing to the
-public internet anyway — not your account, not your other buckets, not your DNS.
+public internet anyway, not your account, not your other buckets, not your DNS.
 
 ### Use two separate tokens
 
@@ -43,7 +43,7 @@ Keep it scoped to one bucket, and revoke it the moment you suspect a problem.
 
 The plugin deliberately stores only the read-write token. The read-only one is
 entered directly into your host's environment variables and never passes through
-Obsidian — a credential the plugin has no use for is pure added risk, and keeping
+Obsidian: a credential the plugin has no use for is pure added risk, and keeping
 both in `data.json` would undo the separation entirely.
 
 ### Treat the deploy hook URL as a secret
@@ -55,7 +55,7 @@ build minutes rather than data loss, but there is no reason to publish it.
 
 Cloudflare dashboard → **R2 → API Tokens** → the token → **Delete**. Takes
 effect immediately. Create a new one and paste it into the plugin; nothing else
-needs to change, because no local state is load-bearing — the next scan reads
+needs to change, because no local state is load-bearing: the next scan reads
 the truth from your bucket.
 
 ## What the plugin does not do

@@ -123,7 +123,7 @@ export class S3Destination implements Destination {
       // Not URLSearchParams: it encodes a space as `+`, while the signer reads
       // the query back through `URL.searchParams` (turning `+` into a space)
       // and re-encodes it as `%20`. The canonical request and the wire request
-      // then disagree, and every list fails with SignatureDoesNotMatch — which
+      // then disagree, and every list fails with SignatureDoesNotMatch, which
       // is one typed space in the prefix setting away.
       const params: Array<[string, string]> = [
         ['list-type', '2'],
@@ -164,7 +164,7 @@ export class S3Destination implements Destination {
     try {
       await this.put(key, payload.buffer as ArrayBuffer, { contentType: 'text/plain' })
       // The same key is reused every run, so a cached copy would be the *last*
-      // run's payload — and the mismatch would be reported as "your storage is
+      // run's payload, and the mismatch would be reported as "your storage is
       // broken" when the only thing wrong was the cache.
       const readBack = await this.get(key, { fresh: true })
       if (!readBack) {
@@ -269,7 +269,7 @@ export class S3Destination implements Destination {
 
 /**
  * A signed cache-buster. It rides in the query string, so `signRequest` covers
- * it automatically — an unsigned parameter would be rejected outright.
+ * it automatically. An unsigned parameter would be rejected outright.
  *
  * Not `Date.now()` alone: two reads inside the same millisecond would share a
  * URL, and that is precisely the back-to-back case this exists for.

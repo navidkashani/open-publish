@@ -8,7 +8,7 @@
  *    checkbox to say "yes, this note" is a needless test of dexterity.
  *  - **Nothing calls `preventDefault()` on a checkbox.** A checkbox flips
  *    itself *before* its click listeners run and, if the event is cancelled,
- *    flips back *after* they finish — silently undoing anything a listener
+ *    flips back *after* they finish, silently undoing anything a listener
  *    assigned. That is what made a clicked file spring back to unticked while
  *    its parent folder lit up instead. Ticks are driven from `change` (which
  *    fires after the value settles) or from a click on the row, never both:
@@ -77,7 +77,7 @@ export class TreeView {
       const item = container.createDiv({ cls: 'op-tree-item' })
       // The twisty is wired before the children exist, and only ever runs on a
       // click, by which time they do. Note it collapses the *children*, never
-      // the folder's own row — hiding the row would take the twisty with it.
+      // the folder's own row: hiding the row would take the twisty with it.
       let children: HTMLElement | null = null
       this.renderRow(item, node, () => children?.toggleClass('op-collapsed', !children.hasClass('op-collapsed')))
       children = item.createDiv({ cls: 'op-tree-children' })

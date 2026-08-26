@@ -33,7 +33,7 @@ const config: QuartzConfig = {
     enablePopovers: true,
     analytics: analyticsConfig(),
     locale: 'en-US',
-    // Must be undefined rather than '' when unknown — see scripts/lib/site-url.mjs.
+    // Must be undefined rather than '' when unknown. See scripts/lib/site-url.mjs.
     baseUrl: resolveBaseUrl(),
     ignorePatterns: ['private', 'templates', '.obsidian'],
     defaultDateType: 'created',

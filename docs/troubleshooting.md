@@ -14,11 +14,11 @@ the secret is shown only once at creation.
 **"Bucket `<name>` was not found at this endpoint."**
 Either the bucket name is misspelt or the endpoint points at a different
 account. On R2 the endpoint must be
-`https://<your-account-id>.r2.cloudflarestorage.com` — the account ID is on the
+`https://<your-account-id>.r2.cloudflarestorage.com`. The account ID is on the
 R2 overview page, and is not the same as your zone or user ID.
 
 **"Couldn't reach the storage endpoint."**
-A DNS or connectivity failure — the request never reached a server. Check the
+A DNS or connectivity failure: the request never reached a server. Check the
 endpoint for typos (a missing `https://` is the usual cause) and that you are
 online.
 
@@ -35,14 +35,14 @@ recent MinIO all support it.
 
 ## Builds
 
-**"The deploy hook was rejected — it may have been deleted."**
+**"The deploy hook was rejected. It may have been deleted."**
 Deploy hooks stop working if the hook, its branch, or the Pages project is
 deleted. Create a new hook (Pages project → Settings → Builds & deployments →
 Deploy hooks) and paste the new URL.
 
 **"Uploaded successfully, but the site hasn't updated yet."**
 Your content is committed and stored. Only the build did not finish in the ten
-minutes the plugin waited. **Republishing will not help** — there is nothing left
+minutes the plugin waited. **Republishing will not help**: there is nothing left
 to upload. Open your host's build log to see what the generator said. Common
 causes:
 
@@ -53,26 +53,27 @@ causes:
   build at a time.
 
 Once fixed, use **Trigger a site build without publishing** rather than
-publishing again.
+publishing again, or open the publish window, which offers **Rebuild site** on
+the "Your site is up to date" screen for exactly this case.
 
 **"Content published. The last build started N minute(s) ago…"**
 Build throttling, working as intended. Your content is live in storage; the
 build is held back to protect a limited monthly allowance. Adjust *Minimum
 minutes between builds* in settings, or trigger one manually.
 
-**"Nothing has changed since the last publish — no build needed."**
+**"Nothing has changed since the last publish. No build needed."**
 Not an error. No files and no site options changed, so no build was spent.
 
 ## Content
 
 **"N files would publish to the same URL."**
-Two files slugify to the same address — usually `Note.md` and `note.md`, which
+Two files slugify to the same address, usually `Note.md` and `note.md`, which
 coexist on macOS and Windows but collide on the Linux build machine, silently
 overwriting one another. Rename one, or give one a different `permalink` in its
 frontmatter.
 
 **"`<file>` is N MB. Cloudflare Pages cannot serve any asset over 25 MiB."**
-A hard platform limit — the file would 404 on the live site even if uploaded.
+A hard platform limit: the file would 404 on the live site even if uploaded.
 Compress it, or host it elsewhere and link to it.
 
 **"`<file>` is N MB … anything over 100 MB is refused."**
@@ -91,12 +92,14 @@ the single most common cause of a broken-looking site.
 
 **A link renders as plain text instead of a link.**
 That note is not published. Use **Add linked** in the publish window to include
-the notes your published notes point at. Rendering plain text is deliberate — a
-link to a page that does not exist is worse than no link.
+the notes your published notes point at. It is offered on the review screen and
+on the "Your site is up to date" screen, which is where a site whose content has
+stopped changing but whose links are broken actually sits. Rendering plain text
+is deliberate: a link to a page that does not exist is worse than no link.
 
 **An old URL now 404s.**
 Renames generate redirects automatically, but only when the plugin can see both
-snapshots — that is, if the note was renamed *and* the content is unchanged. A
+snapshots: that is, if the note was renamed *and* the content is unchanged. A
 rename plus an edit in the same publish looks like a delete and an add. Publish
 the rename first, then the edit.
 

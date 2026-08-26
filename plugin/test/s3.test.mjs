@@ -47,7 +47,7 @@ test('every request carries a signature and a payload hash, but no Host header',
   assert.equal(calls[0].headers.host ?? calls[0].headers.Host, undefined, 'Host is forbidden and breaks Electron')
 })
 
-test('a missing key is null, not an error — HEAD returning 404 is a normal answer', async () => {
+test('a missing key is null, not an error: HEAD returning 404 is a normal answer', async () => {
   const destination = new S3Destination(config, recorder([{ status: 404, text: '<Error><Code>NoSuchKey</Code></Error>' }]).client)
   assert.equal(await destination.head('objects/ab/missing'), null)
   const getter = new S3Destination(config, recorder([{ status: 404, text: '' }]).client)
@@ -181,7 +181,7 @@ test('a transport failure reports what actually broke, not just "check your netw
 test('reads never come from a cache', async () => {
   // Obsidian's requestUrl goes through Electron's HTTP cache. A GET of the site
   // pointer served from there means diffing against a site state that has
-  // already moved on — edits that are live show up as still pending.
+  // already moved on: edits that are live show up as still pending.
   const { client, calls } = recorder()
   const destination = new S3Destination(config, client)
   await destination.get('current.json')
@@ -218,7 +218,7 @@ test('an ordinary read keeps its plain URL', async () => {
 test('a prefix with a space still signs correctly', async () => {
   // URLSearchParams writes a space as `+`; the signer reads the query back
   // through URL.searchParams (turning `+` into a space) and re-encodes it as
-  // `%20`. The two disagree, and every list fails with SignatureDoesNotMatch —
+  // `%20`. The two disagree, and every list fails with SignatureDoesNotMatch:
   // one typed space in a free-text settings field away.
   const { client, calls } = recorder([{ status: 200, text: '<ListBucketResult></ListBucketResult>' }])
   await new S3Destination({ ...config, prefix: 'my notes' }, client).list('objects/')

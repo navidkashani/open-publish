@@ -1,8 +1,8 @@
 /**
  * Carry the snapshot's resolved title and aliases into each note's frontmatter.
  *
- * The plugin already works out a note's real title — frontmatter `title`, else
- * the first H1, else the filename — and ships it in the snapshot. Without this
+ * The plugin already works out a note's real title (frontmatter `title`, else
+ * the first H1, else the filename) and ships it in the snapshot. Without this
  * the generator falls back to the *file* name, which for us is the slug, so
  * every page ends up titled "cafe-resume" and the homepage titled "index".
  *
@@ -10,7 +10,7 @@
  * bucket is the untouched file. This applies only to the working copy handed to
  * the generator, which already has its links rewritten.
  *
- * Anything the author wrote wins — a note with its own `title:` is left alone.
+ * Anything the author wrote wins. A note with its own `title:` is left alone.
  */
 
 /** YAML double-quoted scalars accept JSON escaping. */

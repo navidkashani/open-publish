@@ -102,7 +102,7 @@ export function describeStorageError(
 
 export function describeHookError(status: number): PublishError {
   if (status === 401 || status === 403 || status === 404) {
-    return new PublishError('hook-rejected', 'The deploy hook was rejected — it may have been deleted.', {
+    return new PublishError('hook-rejected', 'The deploy hook was rejected. It may have been deleted.', {
       hint: 'Create a new deploy hook and paste the new URL into settings.',
     })
   }
@@ -134,7 +134,7 @@ export function toPublishError(error: unknown, fallbackMessage: string): Publish
   }
   if (/ECONNREFUSED|ETIMEDOUT|ECONNRESET|net::ERR_/i.test(message)) {
     return new PublishError('storage-unreachable', 'The network connection failed.', {
-      hint: 'Check your connection and try again — publishing is safe to retry.',
+      hint: 'Check your connection and try again. Publishing is safe to retry.',
       detail: message,
     })
   }

@@ -37,7 +37,7 @@ test('objects the live snapshot needs are never deleted', async () => {
   assert.deepEqual(plan.deletableObjects, [objectKey('orphan')])
 })
 
-test('recent objects are kept even when unreferenced — an in-flight build may be reading them', async () => {
+test('recent objects are kept even when unreferenced: an in-flight build may be reading them', async () => {
   const destination = seed({
     current: 's1',
     snapshots: { s1: { files: {}, at: OLD } },
@@ -88,7 +88,7 @@ test('running the plan deletes exactly what it listed', async () => {
   assert.ok(destination.objects.has(CURRENT_KEY))
 })
 
-test('the live pointer is read fresh — a stale one would delete what the site is serving', async () => {
+test('the live pointer is read fresh: a stale one would delete what the site is serving', async () => {
   const reads = []
   const destination = new FakeDestination()
   const originalGet = destination.get.bind(destination)
@@ -105,8 +105,8 @@ test('the live pointer is read fresh — a stale one would delete what the site 
 })
 
 test('an object whose age cannot be read is treated as new, never as expendable', () => {
-  // A provider that omits LastModified would otherwise turn the grace period —
-  // the thing protecting a publish already in flight — into a no-op.
+  // A provider that omits LastModified would otherwise turn the grace period
+  // (the thing protecting a publish already in flight) into a no-op.
   const entries = [
     { key: 'objects/ab/orphan-unknown-age', size: 1 },
     { key: 'objects/cd/orphan-old', size: 1, lastModified: OLD },

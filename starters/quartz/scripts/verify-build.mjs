@@ -3,7 +3,7 @@
  * End-to-end verification of the whole build half, with no cloud account.
  *
  * Stands up a fake bucket holding a small snapshot, runs the three real build
- * scripts against it, and asserts on the HTML that comes out — including the
+ * scripts against it, and asserts on the HTML that comes out, including the
  * things only a real generator can tell you: that a published link becomes an
  * <a>, that an unpublished one does NOT, and that a wikilink inside a code
  * fence survives verbatim.

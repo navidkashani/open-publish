@@ -34,7 +34,7 @@ export default class OpenPublishPlugin extends Plugin {
   private http = obsidianHttp()
   /**
    * The run in progress, if any. It lives here rather than on the modal so that
-   * closing the publish window cannot cancel a publish — and so that reopening
+   * closing the publish window cannot cancel a publish, and so that reopening
    * it attaches to the run instead of rescanning.
    */
   private session: PublishSession | null = null
@@ -171,8 +171,8 @@ export default class OpenPublishPlugin extends Plugin {
   /**
    * One destination per configuration, reused.
    *
-   * `S3Destination` learns things about the provider as it goes — chiefly that
-   * conditional writes are unsupported — and a fresh instance per call throws
+   * `S3Destination` learns things about the provider as it goes (chiefly that
+   * conditional writes are unsupported), and a fresh instance per call throws
    * that away, so every publish rediscovers it by burning three retries with
    * backoff before falling back. The cache is keyed on the settings so editing
    * credentials still takes effect immediately.
@@ -224,9 +224,9 @@ export default class OpenPublishPlugin extends Plugin {
 
   private openPublishModal(): void {
     // Mid-run the window is a view onto the session, so it opens whatever the
-    // storage settings say — there is nothing left to configure.
+    // storage settings say: there is nothing left to configure.
     if (!this.session?.isRunning() && !isDestinationConfigured(this.settings)) {
-      new Notice('Open Publish needs storage details first — opening the setup guide.')
+      new Notice('Open Publish needs storage details first. Opening the setup guide.')
       this.openSetup()
       return
     }
@@ -325,12 +325,12 @@ export default class OpenPublishPlugin extends Plugin {
         await this.saveHashCache()
       } catch {
         // Local bookkeeping only. The notes are on the site either way, and the
-        // worst this costs is a slower next scan — not worth alarming anyone.
+        // worst this costs is a slower next scan, not worth alarming anyone.
       }
     }
 
     // With the window closed the status bar is the only sign anything happened,
-    // and on mobile there is not even that — so say it out loud.
+    // and on mobile there is not even that, so say it out loud.
     if (!this.windowOpen) {
       const message = publishMessage(stateForSession(status, session.summary))
       const lines = [message.headline, message.stats, message.body].filter(Boolean).join('\n')
@@ -345,7 +345,7 @@ export default class OpenPublishPlugin extends Plugin {
   }
 
   /**
-   * Start a build without uploading anything — the fix for "content published,
+   * Start a build without uploading anything: the fix for "content published,
    * but the build did not run".
    */
   async triggerBuildOnly(): Promise<void> {
@@ -441,7 +441,7 @@ export default class OpenPublishPlugin extends Plugin {
           contentType: 'application/json',
         })
         // A provider that turns out not to support conditional writes throws
-        // here. That is a finding to report, not a reason to abandon the run —
+        // here. That is a finding to report, not a reason to abandon the run:
         // the checks above it already passed and deserve to be shown.
         if (!first.etag || !destination.supportsConditionalWrites()) {
           throw new PublishError('storage-failed', 'no conditional-write support')
@@ -462,7 +462,7 @@ export default class OpenPublishPlugin extends Plugin {
         results.push(
           rejected
             ? 'concurrent-publish protection: ok'
-            : 'concurrent-publish protection: NOT enforced — this provider ignores conditional writes, so two devices publishing at once could overwrite each other',
+            : 'concurrent-publish protection: NOT enforced. This provider ignores conditional writes, so two devices publishing at once could overwrite each other',
         )
       } catch {
         results.push('concurrent-publish protection: unavailable on this provider')
@@ -476,7 +476,7 @@ export default class OpenPublishPlugin extends Plugin {
         await destination.delete(pointerKey)
         results.push('cleanup: ok')
       } catch {
-        results.push('cleanup: could not remove the test objects — they are harmless and prefixed _selftest')
+        results.push('cleanup: could not remove the test objects. They are harmless and prefixed _selftest')
       }
 
       notice.hide()

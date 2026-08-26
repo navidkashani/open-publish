@@ -22,7 +22,7 @@ free tiers are generous and both halves live in one dashboard.
 
 Use **Test connection** in the plugin before going further. It performs a real
 PUT, GET, compare and DELETE, so a pass means the credentials genuinely have
-everything publishing needs — not just that the host resolved.
+everything publishing needs, not just that the host resolved.
 
 If a provider does not support conditional writes, the plugin detects it at
 runtime and degrades to a read-then-warn check. Publishing still works; the
@@ -53,7 +53,7 @@ Build command `npm run build`, publish directory `public`. Environment variables
 under **Site configuration → Environment variables**. Deploy hook under
 **Build & deploy → Build hooks**.
 
-Netlify's plans are credit-based — roughly 300 credits with deploys at about 15
+Netlify's plans are credit-based: roughly 300 credits with deploys at about 15
 each, so around 20 deploys a month on the free tier. Set *Minimum minutes
 between builds* higher than the Cloudflare default.
 
@@ -75,7 +75,7 @@ you need them; the cache-busting nonce on each poll covers most of the risk.
 
 Workable but awkward: it has no deploy hook, so builds are triggered by a
 `repository_dispatch` or `workflow_dispatch` webhook instead. Point the plugin's
-deploy hook URL at the GitHub API endpoint with a token — but note that a GitHub
+deploy hook URL at the GitHub API endpoint with a token, but note that a GitHub
 token is a much wider credential than a deploy hook URL, which is a poor trade
 for the design described in [security.md](security.md).
 

@@ -2,7 +2,7 @@
  * Resolved link index and embed expansion.
  *
  * Design note 2.2: raw Markdown alone is not enough. Obsidian resolves `[[Note]]`
- * against the *whole vault* — shortest-path matching, aliases, attachment
+ * against the *whole vault*: shortest-path matching, aliases, attachment
  * folders. Publish a subset and a generator cannot reproduce that, so links
  * break. The plugin already has `metadataCache`, so it emits the resolution
  * alongside the notes. Notes stay byte-identical; the intelligence travels
@@ -15,7 +15,7 @@
 import type { App, TFile } from 'obsidian'
 import type { SnapshotLink } from './snapshot.ts'
 
-/** The slice of Obsidian's API this module needs — makes it testable. */
+/** The slice of Obsidian's API this module needs, which makes it testable. */
 export interface LinkResolver {
   getFirstLinkpathDest(linkpath: string, sourcePath: string): { path: string; extension: string } | null
   getCache(path: string): {
@@ -65,7 +65,7 @@ export function splitSubpath(link: string): ParsedLink {
  * broken images. Obsidian Publish handles this with a manual "Add linked"
  * button that people forget to press; we do it automatically.
  *
- * `isBlocked` lets an explicit `publish: false` still win — that is a user
+ * `isBlocked` lets an explicit `publish: false` still win: that is a user
  * decision, not a folder rule, and auto-inclusion must never override it.
  */
 export function expandEmbeds(
@@ -106,7 +106,7 @@ export function expandEmbeds(
  * Resolve every link and embed in every published note.
  *
  * Targets that resolve but were not published are marked `unpublished` so the
- * generator can render plain text instead of a 404 — a dead-end link is a
+ * generator can render plain text instead of a 404: a dead-end link is a
  * worse experience than an un-linked phrase.
  */
 export function buildLinkIndex(

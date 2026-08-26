@@ -1,18 +1,49 @@
 import { Notice, PluginSettingTab, Setting } from 'obsidian'
 import type { App } from 'obsidian'
 import type OpenPublishPlugin from '../main.ts'
+import { isAlwaysExcluded, parsePublishFrontmatter } from '../core/selection.ts'
+import { FolderModal } from './FolderModal.ts'
+import { folderRulesSummary, summarizeRules } from './FolderRules.ts'
+import { PathSuggest, normalizeTypedPath } from './PathSuggest.ts'
+import { renderRuleRows } from './RuleList.ts'
+import type { Disposer } from './RuleList.ts'
 import { SetupWizard } from './SetupWizard.ts'
 
+const HOMEPAGE_DESC = 'The note visitors land on, e.g. "Notes/Home.md". It has to be a published note.'
+
 export class OpenPublishSettingTab extends PluginSettingTab {
-  constructor(
-    app: App,
-    private readonly plugin: OpenPublishPlugin,
-  ) {
+  private readonly plugin: OpenPublishPlugin
+
+  constructor(app: App, plugin: OpenPublishPlugin) {
     super(app, plugin)
+    this.plugin = plugin
+    // Set, but do not expect to see it. `SettingTab.icon` is real API (1.11.0)
+    // and Obsidian does build the element (`addSettingTab` runs
+    // `icon && createDiv("vertical-tab-nav-item-icon", …)`), but the app's own
+    // stylesheet then hides it for our entire group:
+    //
+    //   .vertical-tab-header-group-items[data-section="community-plugins"]
+    //     .vertical-tab-nav-item-icon { display: none }
+    //
+    // which is why no community plugin shows one. Checked against 1.13.7. It
+    // stays because it is the correct call and costs nothing if that rule ever
+    // goes; forcing it with our own CSS would override the host app to make
+    // this plugin the only odd row in the list.
+    //
+    // The Community Plugins *list* entry is a separate question with a flat no:
+    // `PluginManifest` has no icon field. Assigned in the constructor rather
+    // than declared as a field so `noImplicitOverride` does not ask for an
+    // `override` keyword on a base-class property.
+    this.icon = 'upload-cloud'
   }
+
+  /** Long-press listeners on rows that a re-render is about to throw away. */
+  private disposeRows: Disposer = () => {}
 
   override display(): void {
     const { containerEl } = this
+    this.disposeRows()
+    this.disposeRows = () => {}
     containerEl.empty()
 
     new Setting(containerEl)
@@ -179,7 +210,7 @@ export class OpenPublishSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName('Check the site')
-      .setDesc('Confirms the site URL responds and reports which snapshot it is serving. Does not start a build.')
+      .setDesc('Checks that your site is reachable and says which version it is showing. Does not start a build.')
       .addButton((button) =>
         button.setButtonText('Check').onClick(async () => {
           button.setButtonText('Checking…').setDisabled(true)
@@ -194,27 +225,25 @@ export class OpenPublishSettingTab extends PluginSettingTab {
     new Setting(containerEl).setName('What gets published').setHeading()
     const selection = this.plugin.settings.selection
 
-    new Setting(containerEl)
-      .setName('Include folders')
-      .setDesc('One folder per line. Notes inside them are published unless frontmatter says otherwise.')
-      .addTextArea((text) => {
-        text.inputEl.rows = 4
-        text.setValue(selection.includes.join('\n')).onChange(async (value) => {
-          selection.includes = splitLines(value)
-          await this.plugin.saveSettings()
-        })
-      })
+    // One row rather than two textareas. The counts are the point: a folder
+    // rule is worth showing as what it currently matches, not as text.
+    const summary = summarizeRules({
+      files: this.app.vault.getFiles().map((file) => file.path),
+      includes: selection.includes,
+      excludes: selection.excludes,
+      folderExists: (path) => this.app.vault.getFolderByPath(path) !== null,
+    })
 
     new Setting(containerEl)
-      .setName('Exclude folders')
-      .setDesc('One folder per line. Checked before includes, so an exclude inside an include wins.')
-      .addTextArea((text) => {
-        text.inputEl.rows = 4
-        text.setValue(selection.excludes.join('\n')).onChange(async (value) => {
-          selection.excludes = splitLines(value)
-          await this.plugin.saveSettings()
-        })
-      })
+      .setName('Folders')
+      .setDesc(folderRulesSummary(summary))
+      .addButton((button) =>
+        button
+          .setButtonText('Manage folders…')
+          // Reopening settings is what refreshes the counts and revalidates the
+          // homepage, which a rule change can invalidate.
+          .onClick(() => new FolderModal(this.app, this.plugin, () => this.display()).open()),
+      )
 
     new Setting(containerEl)
       .setName('Include embedded attachments automatically')
@@ -229,31 +258,122 @@ export class OpenPublishSettingTab extends PluginSettingTab {
         }),
       )
 
-    const explicitCount = Object.keys(selection.explicit).length
-    if (explicitCount > 0) {
-      new Setting(containerEl)
-        .setName('Per-file choices')
-        .setDesc(`${explicitCount} file(s) have been individually included or excluded from the publish window.`)
-        .addButton((button) =>
-          button.setButtonText('Clear').onClick(async () => {
-            selection.explicit = {}
-            await this.plugin.saveSettings()
-            this.display()
-          }),
-        )
+    this.renderOverrides(containerEl)
+  }
+
+  /**
+   * The per-file choices, as a list rather than a count.
+   *
+   * These are written by the file context menu and by "Add linked" in the
+   * publish window, so they accumulate without anyone deciding to keep a list.
+   * That is what makes "3 files" the least useful thing to say about them.
+   */
+  private renderOverrides(containerEl: HTMLElement): void {
+    const selection = this.plugin.settings.selection
+    const paths = Object.keys(selection.explicit).sort()
+    if (paths.length === 0) return
+
+    new Setting(containerEl)
+      .setName('Per-file choices')
+      .setDesc(`${paths.length} ${paths.length === 1 ? 'file' : 'files'} individually included or excluded.`)
+
+    const list = containerEl.createDiv({ cls: 'op-rule-list' })
+    this.disposeRows = renderRuleRows(
+      list,
+      paths.map((path) => ({
+        path,
+        icon: 'file-text',
+        meta: selection.explicit[path] ? 'published' : 'excluded',
+        // Frontmatter outranks the stored preference, so a note that pins its
+        // own state makes this row inert. Better to say so than to leave
+        // someone wondering why the choice does nothing.
+        warning: this.frontmatterOverride(path),
+        onRemove: () => {
+          delete selection.explicit[path]
+          this.display()
+          void this.plugin.saveSettings()
+        },
+      })),
+      '',
+    )
+
+    new Setting(containerEl).addButton((button) =>
+      button
+        .setButtonText('Clear all')
+        .setDestructive()
+        .onClick(() => {
+          selection.explicit = {}
+          this.display()
+          void this.plugin.saveSettings()
+        }),
+    )
+  }
+
+  /**
+   * The homepage, as a note picker with the check done here rather than later.
+   *
+   * All three failure states used to surface at scan time, as a warning inside
+   * the publish window, which is the wrong place and the wrong moment for
+   * something you can only fix in settings. `getFileByPath` makes the existence
+   * check exact and immediate without walking the vault.
+   */
+  private renderHomepage(containerEl: HTMLElement): void {
+    const site = this.plugin.settings.site
+    const setting = new Setting(containerEl).setName('Homepage')
+
+    const validate = (): void => {
+      const path = site.homepage
+      if (!path) {
+        setting.setDesc('A simple index page will be generated.')
+        setting.setErrorMessage(null)
+        return
+      }
+      setting.setDesc(HOMEPAGE_DESC)
+      if (!this.app.vault.getFileByPath(path)) {
+        setting.setErrorMessage('This note no longer exists.')
+        return
+      }
+      setting.setErrorMessage(
+        this.plugin.isNotePublished(path)
+          ? null
+          : "This note isn't being published, so the site will use a generated index page instead.",
+      )
     }
+
+    setting.addSearch((search) => {
+      search.setPlaceholder('Notes/Home.md').setValue(site.homepage)
+
+      const apply = async (value: string): Promise<void> => {
+        site.homepage = normalizeTypedPath(value)
+        await this.plugin.saveSettings()
+        validate()
+      }
+
+      new PathSuggest(this.app, search.inputEl, {
+        items: () =>
+          this.app.vault
+            .getMarkdownFiles()
+            .map((file) => file.path)
+            .filter((path) => !isAlwaysExcluded(path)),
+        onPick: (path) => void apply(path),
+      })
+
+      search.onChange((value) => void apply(value))
+    })
+
+    validate()
+  }
+
+  private frontmatterOverride(path: string): string | null {
+    const pinned = parsePublishFrontmatter(this.app.metadataCache.getCache(path)?.frontmatter?.['publish'])
+    if (pinned === null) return null
+    return `This note sets publish: ${pinned} in its frontmatter, which wins. This choice has no effect.`
   }
 
   private renderSite(containerEl: HTMLElement): void {
     const site = this.plugin.settings.site
 
     new Setting(containerEl).setName('Site options').setHeading()
-    containerEl.createEl('p', {
-      cls: 'setting-item-description',
-      text:
-        'These travel inside the snapshot, so changing one rebuilds the site even when no notes changed. ' +
-        'They describe what you want, not how a particular theme does it — a theme that cannot do one of these ignores it.',
-    })
 
     new Setting(containerEl)
       .setName('Site name')
@@ -265,27 +385,13 @@ export class OpenPublishSettingTab extends PluginSettingTab {
         }),
       )
 
-    new Setting(containerEl)
-      .setName('Homepage')
-      .setDesc(
-        'Vault path of the note visitors land on, e.g. "Notes/Home.md". ' +
-          'Leave empty to generate a simple index page. The note must be published.',
-      )
-      .addText((text) =>
-        text
-          .setPlaceholder('Notes/Home.md')
-          .setValue(site.homepage)
-          .onChange(async (value) => {
-            site.homepage = value.trim().replace(/^\/+/, '')
-            await this.plugin.saveSettings()
-          }),
-      )
+    this.renderHomepage(containerEl)
 
     new Setting(containerEl)
       .setName('Discourage search engines')
       .setDesc(
-        'Adds a robots rule asking search engines not to index the site. ' +
-          'It is a request, not access control — anyone with the URL can still read everything.',
+        'Asks search engines not to list your site. ' +
+          'It is a request, not a lock: anyone with the address can still read everything.',
       )
       .addToggle((toggle) =>
         toggle.setValue(site.noIndex).onChange(async (value) => {
@@ -294,6 +400,9 @@ export class OpenPublishSettingTab extends PluginSettingTab {
         }),
       )
 
+    // One heading for the eight toggles that all answer "what does a page look
+    // like". Three headings for eight toggles, two of them governing a single
+    // toggle each, was a table of contents for a list.
     new Setting(containerEl).setName('Appearance').setHeading()
 
     new Setting(containerEl)
@@ -305,8 +414,6 @@ export class OpenPublishSettingTab extends PluginSettingTab {
           await this.plugin.saveSettings()
         }),
       )
-
-    new Setting(containerEl).setName('Reading').setHeading()
 
     new Setting(containerEl)
       .setName('Strict line breaks')
@@ -320,8 +427,6 @@ export class OpenPublishSettingTab extends PluginSettingTab {
           await this.plugin.saveSettings()
         }),
       )
-
-    new Setting(containerEl).setName('Components').setHeading()
 
     const toggles: Array<['showNavigation' | 'showSearch' | 'showGraph' | 'showOutline' | 'showBacklinks' | 'showTags', string, string]> = [
       ['showNavigation', 'Navigation', 'A list of published pages alongside the content.'],
@@ -392,15 +497,15 @@ export class OpenPublishSettingTab extends PluginSettingTab {
       .setName('Last publish')
       .setDesc(
         lastPublished
-          ? `${new Date(lastPublished).toLocaleString()} — snapshot ${this.plugin.settings.lastSnapshotId ?? 'unknown'}`
+          ? `${new Date(lastPublished).toLocaleString()} (version ${this.plugin.settings.lastSnapshotId ?? 'unknown'})`
           : 'Nothing has been published from this device yet.',
       )
 
     new Setting(containerEl)
       .setName('Storage self-test')
       .setDesc(
-        'Exercises the guarantees publishing depends on: content-addressed writes, deduplication, ' +
-          'and the compare-and-swap that stops two devices overwriting each other. Touches only test keys.',
+        'Checks that your storage can do everything publishing needs. ' +
+          'Only writes test files, and deletes them after.',
       )
       .addButton((button) =>
         button.setButtonText('Run self-test').onClick(async () => {
@@ -413,8 +518,8 @@ export class OpenPublishSettingTab extends PluginSettingTab {
     new Setting(containerEl)
       .setName('Clean up unused files')
       .setDesc(
-        'Deletes objects no recent snapshot refers to. Keeps the last 5 snapshots and anything from the past 7 days, ' +
-          'and refuses to run while a publish is in progress.',
+        'Deletes files in your storage that your site no longer uses. ' +
+          'Keeps the last 5 publishes and anything from the past week. It will not run while a publish is going.',
       )
       .addButton((button) =>
         button.setButtonText('Clean up').onClick(async () => {
@@ -425,14 +530,19 @@ export class OpenPublishSettingTab extends PluginSettingTab {
       )
 
     new Setting(containerEl)
-      .setName('Clear hash cache')
-      .setDesc('Forces every file to be re-hashed on the next scan. Safe; only makes the next scan slower.')
+      .setName('Re-check every file')
+      .setDesc('Makes the next scan check every file from scratch. Safe. It only makes that one scan slower.')
       .addButton((button) =>
         button.setButtonText('Clear').onClick(async () => {
           await this.plugin.clearHashCache()
-          new Notice('Hash cache cleared.')
+          new Notice('Every file will be checked on the next scan.')
         }),
       )
+  }
+
+  override hide(): void {
+    this.disposeRows()
+    this.disposeRows = () => {}
   }
 
   private renderSecurityNote(containerEl: HTMLElement): void {
@@ -440,20 +550,9 @@ export class OpenPublishSettingTab extends PluginSettingTab {
     const note = containerEl.createDiv({ cls: 'setting-item-description op-security-note' })
     note.createEl('p', {
       text:
-        'Obsidian stores plugin settings in plain text inside your vault, and cannot sandbox plugins from one another. ' +
-        'These keys are readable by any other plugin you install, and are synced to your other devices along with the vault.',
-    })
-    note.createEl('p', {
-      text:
-        'So the protection is scope, not secrecy: use a token that can only reach this one bucket, ' +
-        'give the build environment a separate read-only token, and revoke either one in a click if you need to.',
+        'Obsidian stores plugin settings as plain text in your vault, so any other plugin you install can read ' +
+        'these keys, and they sync to your other devices. Use a token that can only reach this one bucket, ' +
+        'and revoke it in a click if you need to.',
     })
   }
-}
-
-function splitLines(value: string): string[] {
-  return value
-    .split('\n')
-    .map((line) => line.trim().replace(/^\/+|\/+$/g, ''))
-    .filter((line) => line.length > 0)
 }

@@ -6,8 +6,8 @@ The obvious way to build this is: upload the files that changed, then write a
 `manifest.json` listing them.
 
 That is not atomic. The manifest points at mutable paths, so any build that
-starts mid-upload — a retry, a second device, someone clicking "Retry
-deployment" in a dashboard — reads a half-updated tree and deploys it.
+starts mid-upload (a retry, a second device, someone clicking "Retry
+deployment" in a dashboard) reads a half-updated tree and deploys it.
 
 Obsidian Publish itself does not have this problem, because it has no build
 step: it is a client-side app that fetches Markdown on demand, so a half-updated
@@ -28,10 +28,10 @@ A publish uploads missing objects, writes a snapshot, then commits by replacing
 | Situation | What happens |
 |---|---|
 | Upload interrupted | Orphan objects, never a broken site |
-| Publish retried | Same hash, same key — idempotent |
+| Publish retried | Same hash, same key: idempotent |
 | File deleted | Absent from the next snapshot. No delete API call anywhere |
 | Two devices publish at once | Compare-and-swap rejects the loser; no corruption |
-| Rollback | Rewrite one ~60-byte file |
+| Rollback | Rewrite one ~60-byte file. Mechanically trivial, but there is no UI for it yet (roadmap phase 3) |
 | Resume after a crash | `HEAD` each object, skip what exists |
 | Garbage collection | Separate, optional, never on the publish path |
 
@@ -70,7 +70,7 @@ there, corruption does not.
 The ID is derived from the file set **and** the `site` block, so flipping a
 single site toggle produces a new snapshot and therefore a rebuild, even with no
 file changes. Republishing identical content within the same second yields the
-same ID — retries are idempotent by construction.
+same ID: retries are idempotent by construction.
 
 ## Key decisions
 
@@ -81,7 +81,7 @@ generator does it. Each starter maps them onto its own mechanisms, which is what
 lets a second starter exist without the plugin knowing anything about it.
 
 An option earns a place only if it changes what content is visible, who can see
-it, or how the site looks — **and** if any reasonable static site generator
+it, or how the site looks, **and** if any reasonable static site generator
 could honour it. That second clause is load-bearing: it is why there is no
 capability-negotiation protocol between plugin and starter. There is nothing to
 negotiate when every option is universal.
@@ -110,7 +110,7 @@ Two rules keep the contract safe as it grows:
 
 - **The starter merges the snapshot over its own defaults**, never replaces
   them. A snapshot from an older plugin will not carry keys added since, and
-  `undefined` is falsy — replacing wholesale would silently switch off search
+  `undefined` is falsy: replacing wholesale would silently switch off search
   and navigation on a live site.
 - **Unknown options are dropped and logged.** A starter that predates an option
   ignores it and says so, rather than guessing.
@@ -133,7 +133,7 @@ The version-bump convenience turned out to favour the maintainer, not the user:
 "Use this template" copies a repository, so existing users never receive template
 updates anyway.
 
-`starters/quartz/` in this repo holds only the overlay — the files we author.
+`starters/quartz/` in this repo holds only the overlay: the files we author.
 `assemble.mjs` combines it with Quartz at a pinned tag, preserving Quartz's
 history and setting an `upstream` remote so upgrades are a normal `git merge`.
 
@@ -155,11 +155,11 @@ which re-derive link resolution imperfectly.
 ### `requestUrl`, never `fetch`
 
 Obsidian's `requestUrl` bypasses CORS entirely, so **users never configure a
-bucket CORS policy** — one whole onboarding step and a large class of support
+bucket CORS policy**: one whole onboarding step and a large class of support
 tickets deleted. It accepts `ArrayBuffer` bodies and works on mobile.
 
 The cost: no streaming and no multipart, so the whole file sits in memory. Hence
-the size limits — warn above 25 MB, refuse above 100 MB.
+the size limits: warn above 25 MB, refuse above 100 MB.
 
 ### A minimal S3 client, not the AWS SDK
 
@@ -168,7 +168,7 @@ the size limits — warn above 25 MB, refuse above 100 MB.
 recent AWS SDK v3 versions send by default, which several providers reject.
 
 Four verbs is all this needs, so `destinations/sigv4.ts` signs them itself using
-Web Crypto — about 120 lines and no dependency. It is verified against AWS's own
+Web Crypto: about 120 lines and no dependency. It is verified against AWS's own
 published reference signature, and cross-checked against the starter's separate
 Node implementation so the two cannot drift.
 
@@ -181,7 +181,7 @@ Provider-neutral, no extra credentials, works everywhere.
 
 The starter also ships a `_headers` rule setting `Cache-Control: no-store` on
 that path, and the plugin adds a cache-busting nonce to every poll. A CDN
-serving a cached marker would report a stale snapshot as live — the wrong
+serving a cached marker would report a stale snapshot as live, the wrong
 direction to be wrong in.
 
 ### Auto-include embedded attachments
@@ -194,7 +194,7 @@ press.
 
 Open Publish follows `![[…]]` embeds transitively and pulls those files in
 automatically, regardless of folder rules. An explicit `publish: false` still
-wins — that is a user decision, and a convenience feature must not override it.
+wins. That is a user decision, and a convenience feature must not override it.
 
 Linked-but-not-embedded notes stay manual, behind an "Add linked" button. That
 is a content decision, not a correctness bug.
@@ -205,13 +205,13 @@ A renamed note changes its URL and breaks every external link to it. Renames are
 detectable for free: diff the previous snapshot against the new one, and a path
 that disappears while a new path appears with the same content hash is a rename.
 
-Redirects carry forward across publishes and chains collapse — rename a note
+Redirects carry forward across publishes and chains collapse: rename a note
 twice and the original URL still reaches it in one hop.
 
 ### Content-addressed keys make filename weirdness a non-issue
 
 Emoji, spaces, Cyrillic, combining characters, macOS-versus-Windows Unicode
-normalisation — the classic S3-key and URL-encoding bugs all disappear, because
+normalisation: the classic S3-key and URL-encoding bugs all disappear, because
 object keys are hex hashes. The only place a real path appears is inside the
 snapshot JSON, where it is just a string.
 
@@ -246,7 +246,7 @@ Rules that fall out of this:
   retry; never force.
 - `TRIGGERING` or `VERIFYING` failing means the content is committed and only
   the build did not run. That is a *notification* problem, not a data problem,
-  and the interface says so — because the user's instinct is to republish, and
+  and the interface says so, because the user's instinct is to republish, and
   republishing is not what fixes it.
 
 ## Platform limits that shaped the design
@@ -264,8 +264,8 @@ Verified against Cloudflare's documentation.
 
 ## Testing
 
-Every core module avoids importing Obsidian values, so the real implementation —
-not a copy — runs under plain Node. `npm test` covers:
+Every core module avoids importing Obsidian values, so the real implementation
+(not a copy) runs under plain Node. `npm test` covers:
 
 - the signer, against AWS's published reference vector
 - selection precedence, slug generation, collision detection
@@ -284,7 +284,7 @@ not a copy — runs under plain Node. `npm test` covers:
 | 0 | Walking skeleton, atomic round trip | done |
 | 1 | Scanner, hasher, selection, snapshots, S3 destination, webhook builder, publish UI | done |
 | 2 | Setup wizard, link index, redirects, "Add linked", throttling, error mapping, guards, GC, docs | done |
-| 3 | Worker gateway and Deploy-to-Cloudflare button; mobile testing; rollback UI; site options parity | next |
+| 3 | Worker gateway and Deploy-to-Cloudflare button; mobile testing (including the rule rows' long-press); rollback UI; site options parity | next |
 | 4 | Astro starter; more destination presets (B2, Wasabi, MinIO); optional Git destination | later |
 
 ## Open questions

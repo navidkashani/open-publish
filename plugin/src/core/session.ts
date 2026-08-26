@@ -2,8 +2,8 @@
  * A publish that outlives the window it was started from.
  *
  * The old flow put the AbortController on the modal and aborted it in
- * `onClose()`, which meant closing the window — the natural thing to do while
- * a site takes two minutes to rebuild — silently cancelled the publish. Moving
+ * `onClose()`, which meant closing the window (the natural thing to do while
+ * a site takes two minutes to rebuild) silently cancelled the publish. Moving
  * the run to the plugin fixes that by construction: the window becomes a view
  * onto a session it does not own, and closing a view cancels nothing.
  *
@@ -64,7 +64,7 @@ export interface PublishSessionOptions {
 
 export class PublishSession {
   readonly summary: PublishSummary
-  /** Always resolves — the failure is in the status, so nothing has to catch. */
+  /** Always resolves: the failure is in the status, so nothing has to catch. */
   readonly finished: Promise<SessionStatus>
 
   private readonly controller = new AbortController()
@@ -91,7 +91,7 @@ export class PublishSession {
   }
 
   /**
-   * A session that cannot start is still a session that finished — badly.
+   * A session that cannot start is still a session that finished, badly.
    * Letting the constructor throw would leave the caller holding nothing to
    * report the failure with, so even a synchronous throw lands in the status.
    */

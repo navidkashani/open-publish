@@ -1,4 +1,4 @@
-# Open Publish — Quartz starter
+# Open Publish: the Quartz starter
 
 The site half of Open Publish. This repository builds a website from a snapshot
 published to your object storage by the Obsidian plugin.
@@ -54,8 +54,8 @@ before assembly.)
 
 This template contains [Quartz](https://github.com/jackyzha0/quartz) by
 jackyzha0, used under the MIT licence; `LICENSE.txt` is Quartz's and stays as
-it is. The Open Publish additions — `scripts/`, `op-site.ts` and the two config
-files — are MIT as well.
+it is. The Open Publish additions (`scripts/`, `op-site.ts` and the two config
+files) are MIT as well.
 
 ## This repository is built on Quartz
 
@@ -75,7 +75,7 @@ You do not have to. A pinned version keeps working indefinitely, and most people
 never touch this.
 
 When you do want a newer Quartz, note that **"Use this template" starts your
-repository at a single commit** — GitHub does not copy history into a
+repository at a single commit**: GitHub does not copy history into a
 template-derived repo. So point it at Quartz yourself, once:
 
 ```bash
@@ -88,7 +88,7 @@ git merge upstream/v4 --allow-unrelated-histories
 template gave you a fresh history. Afterwards a plain `git merge upstream/v4`
 works.
 
-Conflicts land in `quartz.config.ts` and `quartz.layout.ts` — the files you are
+Conflicts land in `quartz.config.ts` and `quartz.layout.ts`, the files you are
 meant to own. Keep your versions of those, plus `scripts/` and `op-site.ts`.
 
 This is the one part of Open Publish that needs a terminal, and only if you opt
@@ -96,29 +96,29 @@ into it.
 
 ### Customising
 
-- **Colours, fonts, plugins** — `quartz.config.ts`
-- **Custom CSS** — `quartz/styles/custom.scss`
-- **Layout and components** — `quartz.layout.ts`, and `quartz/components/`
-- **Do not edit `op-site.ts`** — regenerated each build from your Obsidian settings
+- **Colours, fonts, plugins**: `quartz.config.ts`
+- **Custom CSS**: `quartz/styles/custom.scss`
+- **Layout and components**: `quartz.layout.ts`, and `quartz/components/`
+- **Do not edit `op-site.ts`**: regenerated each build from your Obsidian settings
 
 **`finalize.mjs`** runs *after* the generator, because generators clear their
 output directory. It writes:
 
-- `public/_publish.json` — the snapshot ID, which the plugin polls to know the
+- `public/_publish.json`: the snapshot ID, which the plugin polls to know the
   deploy is live
-- `public/_headers` — `Cache-Control: no-store` on that marker, so a CDN cannot
+- `public/_headers`: `Cache-Control: no-store` on that marker, so a CDN cannot
   make a stale snapshot look live
-- `public/_redirects` — from renamed notes, capped at the 2,000-rule platform
+- `public/_redirects`: from renamed notes, capped at the 2,000-rule platform
   limit
 
 It also fails the build loudly on an empty output directory, more than 19,000
-files, or any asset over 25 MiB — all cases where the deploy would otherwise
+files, or any asset over 25 MiB, all cases where the deploy would otherwise
 succeed and the site would be quietly broken.
 
 ## Customising
 
-- **Theme, fonts, colours, plugins** — `quartz.config.ts`, yours to edit.
-- **Layout and components** — `quartz.layout.ts`, which reads the site toggles
+- **Theme, fonts, colours, plugins**: `quartz.config.ts`, yours to edit.
+- **Layout and components**: `quartz.layout.ts`, which reads the site toggles
   from `op-site.ts`.
 - **Do not edit `op-site.ts`.** It is regenerated on every build from what you
   set in Obsidian.

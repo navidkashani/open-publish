@@ -105,7 +105,7 @@ test('a note with no links is returned unchanged', () => {
 test('a code block is still protected after an earlier link changed length', () => {
   // protectedRanges is measured against the original text, but the markdown-link
   // pass runs over the *output* of the wikilink pass. Rewriting a wikilink
-  // shifts every offset after it, so ranges computed once no longer line up —
+  // shifts every offset after it, so ranges computed once no longer line up,
   // and a link inside a code fence gets rewritten as if it were prose.
   const links = [
     { raw: 'N', target: 'Notes/N.md', status: 'published', slug: 'notes/a-deliberately-long-slug-to-shift-offsets' },

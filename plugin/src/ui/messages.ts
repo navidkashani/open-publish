@@ -7,7 +7,7 @@
  *  1. Plain words. No "snapshot", "commit", "hook", "quota", "compare-and-swap".
  *     Those are our concepts, not the reader's.
  *  2. Buttons are verbs. "Visit site", not "OK".
- *  3. Once the notes are saved, never say "failed". They *are* published — what
+ *  3. Once the notes are saved, never say "failed". They *are* published. What
  *     failed is the site update. Saying "failed" makes people republish, and
  *     republishing fixes nothing.
  *
@@ -17,6 +17,7 @@
 
 import type { PublishErrorCode } from '../core/errors.ts'
 import type { DeployOutcome } from '../core/publisher.ts'
+import { extensionOf } from '../core/selection.ts'
 import type { PublishSummary, SessionStatus } from '../core/session.ts'
 
 export type ActionId =
@@ -27,6 +28,7 @@ export type ActionId =
   | 'open-logs'
   | 'open-settings'
   | 'finish-setup'
+  | 'manage-folders'
   | 'update-now'
   | 'try-again'
   | 'rescan'
@@ -54,6 +56,14 @@ export interface PublishMessage {
 export type PublishState =
   /** `nothing-selected` is the fresh-install case: not "already matching", just empty. */
   | { kind: 'nothing-to-publish'; reason?: 'nothing-selected' }
+  /**
+   * The publish window's own version of "nothing to publish".
+   *
+   * A separate kind rather than a widened `nothing-to-publish` on purpose: that
+   * one is also how a finished session with no commit and the status bar read
+   * themselves, and neither of those has a site to visit or a build to start.
+   */
+  | { kind: 'up-to-date'; stats: string; canVisit: boolean; canRebuild: boolean }
   | { kind: 'publishing'; firstPublish: boolean }
   | { kind: 'published'; deploy: DeployOutcome; updates: number; removals: number; uploaded: number }
   | { kind: 'failed'; code: PublishErrorCode; message: string; hint?: string }
@@ -65,9 +75,23 @@ export function publishMessage(state: PublishState): PublishMessage {
         headline: 'Nothing to publish',
         body:
           state.reason === 'nothing-selected'
-            ? "No notes are marked for publishing yet. Mark a note or a folder and it'll show up here."
+            ? 'No notes are marked for publishing yet. Choose folders to publish, or put publish: true at the top of a note.'
             : 'Your site already matches your notes.',
         buttons: [{ label: 'Close', id: 'close', primary: true }],
+        tone: 'info',
+      }
+    case 'up-to-date':
+      return {
+        headline: 'Your site is up to date',
+        stats: state.stats,
+        // Every one of these is conditional, because a button that cannot work
+        // is worse than no button: it turns a calm screen into a dead end you
+        // have to test by clicking.
+        buttons: [
+          ...(state.canRebuild ? [{ label: 'Rebuild site', id: 'update-now' } as const] : []),
+          ...(state.canVisit ? [{ label: 'Visit site', id: 'visit-site', primary: true } as const] : []),
+          { label: 'Close', id: 'close' },
+        ],
         tone: 'info',
       }
     case 'publishing':
@@ -91,7 +115,7 @@ export function publishMessage(state: PublishState): PublishMessage {
  *
  * The ordering is the interesting part. `committed` is checked first and wins
  * over `error`, because once the notes are stored there is no failure left to
- * report — only a site that has or has not caught up yet. That is rule 3, in
+ * report, only a site that has or has not caught up yet. That is rule 3, in
  * code.
  */
 export function stateForSession(status: SessionStatus, summary: PublishSummary): PublishState {
@@ -126,8 +150,8 @@ function publishedMessage(state: {
   const stats = describeWhatHappened(state)
   const removalsOnly = state.removals > 0 && state.updates === 0
   const updating = removalsOnly
-    ? "It's updating now. It'll be live in a minute or two — you can close this window."
-    : "Your site is updating now. It'll be live in a minute or two — you can close this window."
+    ? "It's updating now. It'll be live in a minute or two. You can close this window."
+    : "Your site is updating now. It'll be live in a minute or two. You can close this window."
 
   switch (state.deploy.kind) {
     case 'requested':
@@ -200,7 +224,7 @@ function publishedMessage(state: {
         headline: "Saved, but your site didn't update",
         stats,
         body:
-          "Your notes are safe and don't need uploading again. Your host turned down the request — the connection may have been removed.",
+          "Your notes are safe and don't need uploading again. Your host turned down the request. The connection may have been removed.",
         buttons: [
           { label: 'Try again', id: 'update-now', primary: true },
           { label: 'Fix in settings', id: 'open-settings' },
@@ -286,7 +310,7 @@ function failedMessage(state: { code: PublishErrorCode; message: string; hint?: 
 /**
  * "1 note updated · 1 file uploaded".
  *
- * Counts what the reader asked for, not what the machine did — `uploaded` is
+ * Counts what the reader asked for, not what the machine did. `uploaded` is
  * the exception, and it earns its place because it is the part that took the
  * time.
  */
@@ -300,6 +324,33 @@ function describeWhatHappened(state: { updates: number; removals: number; upload
 
 function detailOf(state: { message: string; hint?: string }): string {
   return state.hint ? `${state.message} ${state.hint}` : state.message
+}
+
+/**
+ * "6 notes and 2 attachments published · 25 Aug 2026, 12:29".
+ *
+ * The one number worth showing on a screen where nothing is about to happen:
+ * it is the difference between "up to date" and "up to date, and here is the
+ * size of the thing that is up to date".
+ *
+ * `publishedAt` arrives already formatted. Turning a timestamp into words is
+ * locale work, and doing it here would make this module (and its tests)
+ * depend on the machine they run on.
+ */
+export function upToDateStats(paths: readonly string[], publishedAt?: string): string {
+  let notes = 0
+  let attachments = 0
+  for (const path of paths) {
+    if (extensionOf(path) === 'md') notes++
+    else attachments++
+  }
+
+  const counted: string[] = []
+  if (notes > 0) counted.push(`${notes} ${plural(notes, 'note')}`)
+  if (attachments > 0) counted.push(`${attachments} ${plural(attachments, 'attachment')}`)
+  const published = counted.length > 0 ? `${counted.join(' and ')} published` : 'Nothing published'
+
+  return publishedAt ? `${published} · ${publishedAt}` : published
 }
 
 // --- the review screen ------------------------------------------------------
@@ -335,7 +386,7 @@ export function needsRemovalConfirm(removals: number): boolean {
  *
  * A mistyped exclude rule can take a hundred pages down in one press, and
  * putting them back is a rule change plus another publish. One extra click is
- * cheap insurance — but only when the number is big enough to be a surprise,
+ * cheap insurance, but only when the number is big enough to be a surprise,
  * because a confirmation on every removal is a confirmation nobody reads.
  *
  * Any tick disarms it: the number on the button no longer describes what is on
@@ -389,6 +440,8 @@ export function statusBarLabel(state: PublishState): string {
       return publishMessage(state).headline
     case 'nothing-to-publish':
       return 'Nothing to publish'
+    case 'up-to-date':
+      return publishMessage(state).headline
   }
 }
 

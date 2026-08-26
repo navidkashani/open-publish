@@ -3,7 +3,7 @@ public/
 .quartz/
 .op-build-state.json
 
-# Fetched from your bucket on every build — never committed, and never in Git.
+# Fetched from your bucket on every build, never committed, and never in Git.
 content/
 
 # op-site.ts is regenerated on every build, but the default copy IS committed

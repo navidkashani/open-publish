@@ -2,7 +2,7 @@
  * The publish progress panel.
  *
  * Renders into a container the caller owns, and paints from a `SessionStatus`
- * rather than accumulating events — which is what lets a window reopened
+ * rather than accumulating events, which is what lets a window reopened
  * halfway through a run show the run's actual state instead of starting over.
  *
  * Two design rules live here:
@@ -140,7 +140,7 @@ export class ProgressView {
 
     if (progress.skippedCount > 0) {
       // Files already in storage are the normal case, not news. Collapsing them
-      // into one line keeps the actual uploads visible — otherwise a one-file
+      // into one line keeps the actual uploads visible. Otherwise a one-file
       // publish looks like six files of work.
       if (!this.skippedEl) {
         this.skippedEl = this.logEl.createDiv({ cls: 'op-progress-log-row op-muted' })

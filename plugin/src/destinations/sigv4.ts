@@ -83,8 +83,8 @@ export interface SignedRequest {
    * Headers to actually send.
    *
    * `host` is signed but deliberately NOT included here. It is a forbidden
-   * header: browsers reject it outright and Electron's net — which backs
-   * Obsidian's requestUrl — fails the request rather than ignoring it, which
+   * header: browsers reject it outright and Electron's net (which backs
+   * Obsidian's requestUrl) fails the request rather than ignoring it, which
    * surfaces as "couldn't reach the endpoint" and looks exactly like a network
    * outage. The transport sets Host from the URL anyway, and that is the value
    * S3 verifies the signature against, so omitting it changes nothing on the

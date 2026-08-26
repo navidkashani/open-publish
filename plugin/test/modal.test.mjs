@@ -2,17 +2,20 @@
  * The publish window, driven the way a person drives it.
  *
  * Tree logic and message wording are unit tested elsewhere; what is only
- * findable here is the wiring — whether a click on a checkbox leaves the
+ * findable here is the wiring: whether a click on a checkbox leaves the
  * checkbox where the user put it, and whether the Publish button actually
  * starts a publish.
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { byClass, click, find, findAll, visible } from './dom.mjs'
-import { MODAL_MEMBERS, PublishModal, fakePlugin } from './harness.mjs'
+import { FolderModal, MODAL_MEMBERS, PublishModal, fakeApp, fakePlugin, modals } from './harness.mjs'
 import { site } from './helpers.mjs'
 
 globalThis.window ??= { open() {}, setTimeout, clearTimeout }
+
+/** Used as a section selector throughout, so the title lives in one place. */
+const PUBLISHED_SECTION = 'Already published, select to unpublish'
 
 const file = (hash, slug) => ({ hash, size: 73, mtime: 1, slug })
 
@@ -79,13 +82,38 @@ function makeScan(overrides = {}) {
   }
 }
 
+const tick = () => new Promise((resolve) => setTimeout(resolve, 0))
+
 async function openWindow(options = {}) {
-  const { scan = makeScan(), ...rest } = options
-  const plugin = fakePlugin({ scan: async () => scan, ...rest })
-  const modal = new PublishModal({}, plugin)
+  // `app` matters only for the screens that read the vault (the folder-rule
+  // counts), so the rest of the suite can keep handing the window nothing.
+  const { scan = makeScan(), app = {}, ...rest } = options
+  const counts = { scans: 0 }
+  const plugin = fakePlugin({
+    scan: async () => {
+      counts.scans++
+      return scan
+    },
+    ...rest,
+  })
+  const modal = new PublishModal(app, plugin)
   modal.open()
-  await new Promise((resolve) => setTimeout(resolve, 0))
-  return { modal, plugin, root: modal.contentEl, scan }
+  await tick()
+  return { modal, plugin, root: modal.contentEl, scan, counts }
+}
+
+/** A vault whose snapshot is exactly what is already live. */
+function upToDate(overrides = {}) {
+  const scan = makeScan({ changed: [], unchanged: Object.keys(previous.files), ...overrides })
+  scan.snapshot.files = previous.files
+  return scan
+}
+
+/** A vault that has never chosen anything to publish. */
+function freshVault(overrides = {}) {
+  const scan = makeScan({ changed: [], unchanged: [], previous: null, isFirstPublish: true, ...overrides })
+  scan.snapshot.files = {}
+  return scan
 }
 
 const ticks = (root) => findAll(root, byClass('op-tree-tick'))
@@ -96,6 +124,10 @@ const tickFor = (root, name) => find(rowFor(root, name), byClass('op-tree-tick')
 const publishButton = (root) => {
   const actions = findAll(root, byClass('op-progress-actions')).at(-1)
   return actions && findAll(actions, (node) => node.tagName === 'BUTTON')[0]
+}
+const footerLabels = (root) => {
+  const actions = findAll(root, byClass('op-progress-actions')).at(-1)
+  return findAll(actions, (node) => node.tagName === 'BUTTON').map((node) => node.textContent)
 }
 const reviewing = (root) =>
   findAll(root, (node) => node.tagName === 'BUTTON').some((node) => node.textContent.startsWith('Publish '))
@@ -113,12 +145,12 @@ test('the window opens on a review, with only the actual change ticked', async (
 
   // Already-published files are behind a collapsed section, and none of them
   // are ticked. That is the whole fix: the screen stops implying a re-upload.
-  const alreadyPublished = section(root, 'Already published — select to unpublish')
+  const alreadyPublished = section(root, PUBLISHED_SECTION)
   assert.ok(alreadyPublished, 'the section exists')
   assert.match(find(alreadyPublished, byClass('op-section-count')).textContent, /0 of 7 selected/)
   assert.equal(findAll(alreadyPublished, byClass('op-tree-row')).filter(visible).length, 0, 'and it starts closed')
 
-  openSection(root, 'Already published — select to unpublish')
+  openSection(root, PUBLISHED_SECTION)
   assert.equal(
     ticks(alreadyPublished).some((tick) => tick.checked),
     false,
@@ -131,7 +163,7 @@ test('a checkbox stays where the click put it', async () => {
   // anything the listener assigned to `checked` was silently reverted. The file
   // looked untouched while its parent folder lit up.
   const { root } = await openWindow()
-  openSection(root, 'Already published — select to unpublish')
+  openSection(root, PUBLISHED_SECTION)
   const tick = tickFor(root, 'Home')
   assert.equal(tick.checked, false)
 
@@ -144,7 +176,7 @@ test('a checkbox stays where the click put it', async () => {
 
 test('ticking a file marks its folder as partly ticked, not fully', async () => {
   const { root } = await openWindow()
-  openSection(root, 'Already published — select to unpublish')
+  openSection(root, PUBLISHED_SECTION)
   click(tickFor(root, 'Home'))
 
   const folder = findAll(root, byClass('op-tree-row'))
@@ -157,7 +189,7 @@ test('ticking a file marks its folder as partly ticked, not fully', async () => 
 
 test('ticking a folder ticks every file under it', async () => {
   const { root } = await openWindow()
-  openSection(root, 'Already published — select to unpublish')
+  openSection(root, PUBLISHED_SECTION)
   const folder = tickFor(root, 'attachments')
   click(folder)
 
@@ -168,7 +200,7 @@ test('ticking a folder ticks every file under it', async () => {
 
 test('the counts and the button follow the ticks', async () => {
   const { root } = await openWindow()
-  openSection(root, 'Already published — select to unpublish')
+  openSection(root, PUBLISHED_SECTION)
 
   click(tickFor(root, 'This is just a test'))
   assert.equal(publishButton(root).disabled, true, 'nothing ticked, nothing to publish')
@@ -207,7 +239,7 @@ test('the window switches to progress once publishing starts', async () => {
 
 test('unticking a changed file holds it at its published version', async () => {
   const { root, plugin } = await openWindow()
-  openSection(root, 'Already published — select to unpublish')
+  openSection(root, PUBLISHED_SECTION)
   click(tickFor(root, 'This is just a test'))
   click(tickFor(root, 'Home'))
   click(publishButton(root))
@@ -252,7 +284,7 @@ test('reopening mid-run shows the run rather than rescanning', async () => {
 
 test('a big removal asks before it takes pages down', async () => {
   const { root, plugin } = await openWindow()
-  click(buttons(section(root, 'Already published — select to unpublish'), 'All')[0])
+  click(buttons(section(root, PUBLISHED_SECTION), 'All')[0])
   assert.equal(publishButton(root).textContent, 'Publish 1 change and 7 removals')
 
   click(publishButton(root))
@@ -265,7 +297,7 @@ test('a big removal asks before it takes pages down', async () => {
 
 test('a small removal publishes on the first click', async () => {
   const { root, plugin } = await openWindow()
-  openSection(root, 'Already published — select to unpublish')
+  openSection(root, PUBLISHED_SECTION)
   click(tickFor(root, 'Home'))
   click(publishButton(root))
   assert.equal(plugin.calls.publishes.length, 1, 'one removal is not worth a confirmation')
@@ -273,11 +305,11 @@ test('a small removal publishes on the first click', async () => {
 
 test('any tick withdraws the question', async () => {
   const { root, plugin } = await openWindow()
-  click(buttons(section(root, 'Already published — select to unpublish'), 'All')[0])
+  click(buttons(section(root, PUBLISHED_SECTION), 'All')[0])
   click(publishButton(root))
   assert.match(publishButton(root).textContent, /Publish anyway\?/)
 
-  openSection(root, 'Already published — select to unpublish')
+  openSection(root, PUBLISHED_SECTION)
   click(tickFor(root, 'Home'))
   assert.equal(/Publish anyway\?/.test(publishButton(root).textContent), false, 'the number moved, so the question went')
 
@@ -285,14 +317,128 @@ test('any tick withdraws the question', async () => {
   assert.equal(plugin.calls.publishes.length, 0, 'and it has to be asked again')
 })
 
-test('nothing to publish says so instead of offering a dead button', async () => {
-  const scan = makeScan({ changed: [], unchanged: Object.keys(previous.files) })
-  scan.snapshot.files = previous.files
-  const { root } = await openWindow({ scan })
-  assert.match(root.textContent, /Nothing to publish/)
-  assert.match(root.textContent, /already matches your notes/)
+// --- the empty states -------------------------------------------------------
+
+test('an up-to-date vault is told so, with the size of what is up to date', async () => {
+  const { root } = await openWindow({ scan: upToDate() })
+  assert.match(root.textContent, /Your site is up to date/)
+  assert.match(root.textContent, /7 notes and 1 attachment published/)
   assert.equal(reviewing(root), false, 'no dead Publish button to click')
-  assert.equal(publishButton(root).textContent, 'Close')
+  assert.deepEqual(footerLabels(root), ['Rebuild site', 'Visit site', 'Close'])
+})
+
+test('a healthy up-to-date screen is the headline, the counts and the footer, and nothing else', async () => {
+  // The whole difference from a pile: no card, no tinted box, and no rule
+  // above a group that has nothing in it.
+  const { root } = await openWindow({ scan: upToDate() })
+  assert.equal(findAll(root, byClass('setting-item')).length, 0, 'no rows')
+  assert.equal(findAll(root, byClass('op-offers')).length, 0, 'so no rule to open them')
+  for (const cls of ['op-result', 'op-notice-error', 'op-notice-warning']) {
+    assert.equal(findAll(root, byClass(cls)).length, 0, `${cls} has no business on this screen`)
+  }
+})
+
+test('a button that cannot work is not offered', async () => {
+  const { root } = await openWindow({
+    scan: upToDate(),
+    settings: {
+      builder: { siteUrl: '', logsUrl: '', url: '' },
+      selection: { includes: [], excludes: [], explicit: {} },
+    },
+  })
+  assert.deepEqual(footerLabels(root), ['Close'], 'no site to visit and no build to start')
+})
+
+test('Rebuild site starts a build without publishing anything', async () => {
+  // The documented recovery for "uploaded successfully, but the site hasn't
+  // updated yet", which republishing cannot fix. It was wired in the window
+  // already and simply never offered here.
+  const { root, plugin } = await openWindow({ scan: upToDate() })
+  click(buttons(root, 'Rebuild site')[0])
+  assert.equal(plugin.calls.updates, 1)
+  assert.equal(plugin.calls.publishes.length, 0, 'and it is not a publish')
+})
+
+test('a warning the scan already found is shown here rather than dropped', async () => {
+  const { root } = await openWindow({
+    scan: upToDate({ warnings: ['"Notes/Home.md" is set as your homepage but is not being published.'] }),
+  })
+  assert.match(root.textContent, /is set as your homepage but is not being published/)
+  assert.equal(findAll(root, byClass('op-notice-warning')).length, 1)
+})
+
+test('an up-to-date vault with unpublished links can still fix them', async () => {
+  // Broken links are the *steady* state of a site: nothing to publish, and
+  // something to fix. Add linked used to exist only on the review screen, so it
+  // was unreachable in exactly the state that needs it.
+  const { root, plugin, counts } = await openWindow({
+    scan: upToDate({ linkedButUnpublished: ['Notes/Draft.md'] }),
+    app: fakeApp({ files: ['Notes/Draft.md'], folders: ['Notes'] }),
+  })
+  assert.match(root.textContent, /Linked notes that are not published/)
+
+  click(buttons(root, 'Add linked')[0])
+  await tick()
+  assert.equal(plugin.settings.selection.explicit['Notes/Draft.md'], true)
+  assert.equal(counts.scans, 2, 'and the window rescans rather than leaving a stale answer')
+})
+
+test('the offers are one group under one rule', async () => {
+  const { root } = await openWindow({
+    scan: upToDate({ linkedButUnpublished: ['Notes/Draft.md'] }),
+    app: fakeApp({ files: ['Notes/Draft.md'], folders: ['Notes'] }),
+  })
+  const offers = findAll(root, byClass('op-offers'))
+  assert.equal(offers.length, 1)
+  const rows = findAll(offers[0], byClass('setting-item'))
+  assert.equal(rows.length, 2, 'the linked notes and the folders that explain them')
+  assert.ok(
+    rows.every((row) => row.hasClass('op-offer')),
+    'each row drops its own border, so the group draws exactly one rule',
+  )
+})
+
+test('Manage folders opens the dialog, and coming back rescans', async () => {
+  const { root, counts } = await openWindow({
+    scan: upToDate({ linkedButUnpublished: ['Notes/Draft.md'] }),
+    app: fakeApp({ files: ['Notes/Draft.md'], folders: ['Notes'] }),
+  })
+  const before = modals.length
+  click(buttons(root, 'Manage folders…')[0])
+
+  const dialog = modals.at(-1)
+  assert.equal(modals.length, before + 1, 'a dialog opened')
+  assert.ok(dialog instanceof FolderModal)
+  assert.equal(dialog.isOpen, true)
+
+  // Changing a rule and landing back on a stale "up to date" is worse than not
+  // offering the link at all.
+  dialog.close()
+  await tick()
+  assert.equal(counts.scans, 2)
+})
+
+test('a fresh vault is pointed at the folders it has not chosen yet', async () => {
+  const { root } = await openWindow({
+    scan: freshVault(),
+    app: fakeApp({ files: ['Notes/Home.md'], folders: ['Notes'] }),
+  })
+  assert.match(root.textContent, /Nothing to publish/)
+  assert.match(root.textContent, /No notes are marked for publishing yet/)
+  assert.match(root.textContent, /None yet\. Nothing is published by folder/)
+  assert.equal(buttons(root, 'Choose folders…').length, 1, 'and the missing step is a button, not a sentence')
+  assert.equal(reviewing(root), false)
+  assert.deepEqual(footerLabels(root), ['Close'])
+})
+
+test('the review screen draws one rule above its footer, not two', async () => {
+  // Shipping bug: the linked-notes row kept Obsidian's default border-top and
+  // sat directly above .op-progress-actions, which draws its own: two
+  // horizontal rules a dozen pixels apart.
+  const { root } = await openWindow({ scan: makeScan({ linkedButUnpublished: ['Notes/Draft.md'] }) })
+  const linked = findAll(root, byClass('setting-item'))
+  assert.equal(linked.length, 1, 'the linked-notes row is on the review screen')
+  assert.equal(linked[0].hasClass('op-offer'), true, 'and it carries no border of its own')
 })
 
 test('every section that is on screen can be read', async () => {
@@ -304,9 +450,9 @@ test('every section that is on screen can be read', async () => {
 
 test('folding a folder hides its files and leaves the folder itself clickable', async () => {
   // The obvious implementation puts the hide-class on the folder's own row too,
-  // which takes the twisty with it — a folder you can close and never reopen.
+  // which takes the twisty with it: a folder you can close and never reopen.
   const { root } = await openWindow()
-  openSection(root, 'Already published — select to unpublish')
+  openSection(root, PUBLISHED_SECTION)
 
   const folderRow = findAll(root, byClass('op-row-folder')).find(
     (row) => find(row, byClass('op-tree-name')).textContent === 'attachments',
@@ -324,7 +470,7 @@ test('folding a folder hides its files and leaves the folder itself clickable', 
 
 test('folding a folder does not tick it', async () => {
   const { root } = await openWindow()
-  openSection(root, 'Already published — select to unpublish')
+  openSection(root, PUBLISHED_SECTION)
   const folderRow = findAll(root, byClass('op-row-folder')).find(
     (row) => find(row, byClass('op-tree-name')).textContent === 'attachments',
   )
@@ -350,7 +496,7 @@ test('closing a section leaves its header there to reopen it', async () => {
 
 test('clicking a row anywhere ticks it, and clicking the box does not double back', async () => {
   const { root } = await openWindow()
-  openSection(root, 'Already published — select to unpublish')
+  openSection(root, PUBLISHED_SECTION)
 
   // The name is a much bigger target than the box, and people aim at it.
   click(find(rowFor(root, 'Home'), byClass('op-tree-name')))

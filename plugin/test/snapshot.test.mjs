@@ -34,7 +34,7 @@ test('objects are sharded by the first two hex characters', () => {
   assert.equal(objectKey('abcdef0123'), 'objects/ab/abcdef0123')
 })
 
-test('the same content in the same second produces the same id — retries are idempotent', async () => {
+test('the same content in the same second produces the same id: retries are idempotent', async () => {
   const files = { 'a.md': file('h1', 'a') }
   assert.equal(await computeSnapshotId(files, site, 1000), await computeSnapshotId(files, site, 1000))
 })
@@ -149,7 +149,7 @@ test('every site option affects the snapshot id, so flipping one triggers a rebu
   }
 })
 
-test('"nothing changed" compares content, not ids — ids carry a timestamp', () => {
+test('"nothing changed" compares content, not ids: ids carry a timestamp', () => {
   // Publishing the same notes an hour later produces a different id but must
   // still count as no change, or every no-op publish spends a build.
   const files = { 'a.md': file('h1', 'a') }

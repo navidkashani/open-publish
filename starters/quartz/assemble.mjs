@@ -11,7 +11,7 @@
  *   1. Every Quartz tutorial, doc page and forum answer applies directly.
  *      `quartz/styles/custom.scss` and all 27 components are simply present.
  *      In the clone-at-build-time shape they were not, so custom CSS silently
- *      did nothing — no error, no effect.
+ *      did nothing: no error, no effect.
  *   2. Builds stop depending on github.com and the npm registry on every
  *      publish, and Cloudflare can cache node_modules against the root lockfile.
  *   3. `git pull upstream v4` is Quartz's own documented upgrade path, with

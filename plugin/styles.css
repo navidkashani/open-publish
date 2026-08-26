@@ -4,9 +4,40 @@
 .op-modal .modal-content { max-height: 70vh; overflow-y: auto; }
 
 .op-muted { color: var(--text-muted); font-size: var(--font-ui-smaller); }
-.op-inline-icon { display: inline-flex; vertical-align: -2px; margin-right: 6px; }
 
 .op-scan-status { padding: 24px 0; color: var(--text-muted); }
+
+/*
+ * Nothing to publish is not an alert. Emptiness reads as text in flow, the way
+ * .op-scan-status above and .op-rule-empty below already do: no card, no tint,
+ * no accent rule. A healthy vault sees the headline, the counts and the footer,
+ * and nothing else.
+ */
+.op-empty { padding: 24px 0; }
+.op-empty-headline {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--font-ui-large);
+  font-weight: var(--font-semibold);
+  margin-bottom: 4px;
+}
+.op-empty-icon { display: inline-flex; align-items: center; color: var(--text-muted); }
+.op-empty-icon .svg-icon { width: 18px; height: 18px; }
+.op-empty-stats { color: var(--text-muted); font-size: var(--font-ui-small); }
+
+/*
+ * One rule opens the group, and the rows inside carry none of their own, so it
+ * reads as a single block rather than a stack of cards. Obsidian gives every
+ * .setting-item a border-top of its own inside a modal, which is what put two
+ * horizontal rules a few pixels apart above the review screen's footer.
+ */
+.op-offers {
+  padding-top: var(--op-gap);
+  margin-top: var(--op-gap);
+  border-top: 1px solid var(--background-modifier-border);
+}
+.op-offer { border-top: none; }
 
 .op-summary {
   display: flex;
@@ -16,8 +47,6 @@
   border-bottom: 1px solid var(--background-modifier-border);
   margin-bottom: var(--op-gap);
 }
-
-.op-auto-note { display: flex; align-items: center; margin-bottom: var(--op-gap); }
 
 .op-notice-error,
 .op-notice-warning,
@@ -76,7 +105,7 @@
 
 .op-section-body { padding: 2px 0 10px 8px; }
 .op-section-hint { padding: 0 0 8px 26px; }
-/* Only bodies and children carry this — never a row or a header. */
+/* Only bodies and children carry this, never a row or a header. */
 .op-collapsed { display: none; }
 
 /* The twisty is the only thing that folds a row; everything else ticks it. */
@@ -155,7 +184,7 @@
 /*
  * A part-ticked folder. Obsidian styles :checked but not :indeterminate, so
  * without this a folder with one note selected looks identical to one with
- * none — the single most confusing state the tree can be in.
+ * none: the single most confusing state the tree can be in.
  */
 .op-tree-tick:indeterminate {
   background-color: var(--interactive-accent);
@@ -191,7 +220,7 @@
 
 .op-progress-headline { font-size: var(--font-ui-medium); font-weight: var(--font-semibold); margin-bottom: 4px; }
 .op-progress-headline-done { font-size: var(--font-ui-large); }
-.op-progress-stats { color: var(--text-muted); font-size: var(--font-ui-small); margin-bottom: 10px; }
+.op-progress-stats { color: var(--text-muted); font-size: var(--font-ui-small); margin-bottom: 8px; }
 .op-progress-status { color: var(--text-muted); font-size: var(--font-ui-small); margin-bottom: 8px; }
 .op-progress-bar {
   height: 6px;
@@ -255,3 +284,54 @@
 .op-status-bar-icon { display: inline-flex; align-items: center; }
 .op-status-bar-icon .svg-icon { width: 14px; height: 14px; }
 .op-status-bar-busy .op-status-bar-icon { color: var(--interactive-accent); }
+
+/* --- folder rules ------------------------------------------------------- */
+
+.op-rule-intro { color: var(--text-muted); font-size: var(--font-ui-small); margin: 0 0 12px; }
+.op-rule-empty { padding: 6px 0 10px; }
+
+.op-rule-row {
+  padding: 6px 0;
+  border-top: none;
+  align-items: center;
+}
+.op-rule-row .setting-item-name {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: var(--font-ui-small);
+  font-weight: normal;
+}
+.op-rule-icon { display: inline-flex; color: var(--text-muted); }
+.op-rule-icon .svg-icon { width: 15px; height: 15px; }
+.op-rule-path { overflow-wrap: anywhere; }
+.op-rule-meta { color: var(--text-muted); font-size: var(--font-ui-smaller); white-space: nowrap; }
+
+.op-rule-row .setting-item-description {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.op-rule-dead .setting-item-description { color: var(--text-warning); }
+.op-rule-warning-icon { display: inline-flex; }
+.op-rule-warning-icon .svg-icon { width: 13px; height: 13px; }
+
+/* Hidden until the row is hovered, matching Obsidian Publish. `:focus-visible`
+   is what keeps the control reachable by Tab regardless of the pointer. */
+.op-rule-remove { opacity: 0; transition: opacity 100ms ease-in-out; }
+.op-rule-row:hover .op-rule-remove,
+.op-rule-remove:focus-visible { opacity: 1; }
+
+/* Deliberate deviation, pending a device pass: touch has no hover, and a
+   long-press whose gesture turns out not to fire would leave someone with no
+   way to remove a rule at all. Delete this block once the gesture is verified
+   on a real phone. */
+@media (hover: none) {
+  .op-rule-remove { opacity: 1; }
+  /* Stops the press-and-hold raising the text-selection callout instead. */
+  .op-rule-row { -webkit-touch-callout: none; user-select: none; }
+}
+
+.op-rule-add { border-top: none; padding-top: 4px; }
+.op-rule-add .setting-item-control { width: 100%; }
+.op-rule-add input { width: 100%; }

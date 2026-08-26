@@ -7,7 +7,7 @@
  * hashing a whole vault costs nothing.
  *
  * Verified against Obsidian 1.13.7. It is undocumented, so every use is guarded
- * and the fallback (readBinary + crypto.subtle) is a fully supported path — if
+ * and the fallback (readBinary + crypto.subtle) is a fully supported path: if
  * the API disappears the plugin gets slower, not broken.
  */
 
@@ -89,7 +89,7 @@ export class Hasher {
   /**
    * Drop entries for files that no longer exist, so the cache cannot grow
    * without bound across renames. Entries are keyed by path + mtime + size, so
-   * a stale entry is harmless anyway — this is housekeeping, not correctness.
+   * a stale entry is harmless anyway: this is housekeeping, not correctness.
    */
   prune(livePaths: Set<string>): void {
     for (const path of Object.keys(this.cache)) {

@@ -4,7 +4,7 @@
  * Mirrors the resolution order Obsidian Publish itself uses (frontmatter beats
  * folder rules), with one addition: an `explicit` map recording per-file
  * decisions the user made in the publish modal. Nothing here ever writes to a
- * note — selection state lives entirely in plugin settings.
+ * note: selection state lives entirely in plugin settings.
  */
 
 /** `true` = publish, `false` = never publish, `null` = offered but unchecked by default. */
@@ -53,7 +53,7 @@ export function isAlwaysExcluded(path: string): boolean {
 /**
  * Interpret a frontmatter `publish:` value.
  *
- * Accepts real booleans, the strings true/yes/false/no in any case, and 1/0 —
+ * Accepts real booleans, the strings true/yes/false/no in any case, and 1/0,
  * matching Obsidian Publish, whose resolver is:
  *
  *   if (isString(n)) { if (n=="false"||n=="no") return false

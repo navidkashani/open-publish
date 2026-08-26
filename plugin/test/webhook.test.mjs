@@ -29,7 +29,7 @@ test('triggering posts to the hook and names the snapshot in the body', async ()
   assert.equal(JSON.parse(calls[0].body).snapshot, 'snap-1')
 })
 
-test('an empty hook response is still a success — most providers return nothing', async () => {
+test('an empty hook response is still a success: most providers return nothing', async () => {
   const { client } = respond([{ status: 200, text: '' }])
   assert.deepEqual(await new WebhookBuilder(config, client, noSleep).trigger('snap-1'), { accepted: true, ref: undefined })
 })
