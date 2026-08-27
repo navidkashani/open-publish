@@ -43,8 +43,8 @@ needs and that two devices can publish safely.
 
 ## B. Site repository
 
-5. Open the `open-publish-quartz` template on GitHub and choose
-   **Use this template → Create a new repository**.
+5. Open the [Open Publish Quartz template](https://github.com/navidkashani/open-publish-quartz)
+   on GitHub and choose **Use this template → Create a new repository**.
 
    One button in the browser. Nothing to clone, nothing to install. Your notes
    never enter this repository: it holds only the site generator and the build

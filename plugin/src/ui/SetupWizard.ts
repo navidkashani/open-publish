@@ -18,6 +18,9 @@ import type { Disposer } from './RuleList.ts'
 import { BuildFields, renderHostList, selectHost } from './BuildFields.ts'
 import { StorageFields, renderProviderList, selectProvider } from './StorageFields.ts'
 
+/** The site template step 3 sends people to. Public, and "Use this template"-ready. */
+const TEMPLATE_REPO_URL = 'https://github.com/navidkashani/open-publish-quartz'
+
 /**
  * Small counts read as words in this interface, not as digits. Anything past
  * the end of the list is a number, which is better than a wrong word.
@@ -189,10 +192,17 @@ export class SetupWizard extends Modal {
       text: 'The site generator lives in a Git repository. Your notes never go into it. Only the theme and build scripts do.',
     })
     this.instructions(container, [
-      'Open the open-publish-quartz template on GitHub.',
+      'Open the Open Publish Quartz template on GitHub.',
       'Choose "Use this template" → "Create a new repository".',
       'Give it any name. There is nothing to clone and nothing to install locally.',
     ])
+
+    const links = container.createDiv({ cls: 'op-wizard-links' })
+    links.createEl('a', {
+      href: TEMPLATE_REPO_URL,
+      text: 'Open the template',
+      attr: { target: '_blank', rel: 'noopener' },
+    })
   }
 
   /**
@@ -275,7 +285,17 @@ export class SetupWizard extends Modal {
     const blanks = envLines.filter((line) => /<[^>]+>/.test(line)).length
     new Setting(values).addButton((button) =>
       button.setButtonText('Copy').onClick(async () => {
-        await navigator.clipboard.writeText(envLines.join('\n'))
+        // The clipboard is a permission, not a guarantee, and it is refused far
+        // more often on a phone than on a desktop. Failing here silently would
+        // be the worst version of it: the block above is the single most
+        // important thing to carry out of this guide, and someone who believed
+        // it copied would paste whatever was in the clipboard before.
+        try {
+          await navigator.clipboard.writeText(envLines.join('\n'))
+        } catch {
+          new Notice('Could not reach the clipboard. Select the block above and copy it by hand.', 8000)
+          return
+        }
         new Notice(`Copied. Fill in the ${inWords(blanks)} bracketed value${blanks === 1 ? '' : 's'} before pasting.`)
       }),
     )

@@ -252,6 +252,21 @@ test('the step says it is working before it says what it found', async () => {
   assert.match(find(wizard.contentEl, byClass('op-wizard-result')).textContent, /Connected/)
 })
 
+// --- the site repository ---------------------------------------------------
+
+test('step 3 links the template rather than naming it', () => {
+  // Naming a repository is not a way to reach it. The step is the one place in
+  // the guide that leaves Obsidian for a page the user has to act on, so the
+  // address has to be clickable and it has to be a real one.
+  const { wizard } = open()
+  goTo(wizard, 2)
+  const anchor = find(wizard.contentEl, (node) => node.tagName === 'A')
+  assert.ok(anchor, 'step 3 offers no link at all')
+  assert.match(anchor.getAttribute('href'), /^https:\/\/github\.com\/[\w-]+\/open-publish-quartz$/)
+  assert.equal(anchor.getAttribute('target'), '_blank')
+  assert.equal(anchor.getAttribute('rel'), 'noopener')
+})
+
 // --- choosing a host ------------------------------------------------------
 
 const NETLIFY_HOOK = 'https://api.netlify.com/build_hooks/68a1f0c2d3e4b5a6c7d8e9f0'
