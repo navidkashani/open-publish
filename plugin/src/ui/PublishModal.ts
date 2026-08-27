@@ -323,8 +323,19 @@ export class PublishModal extends Modal {
   }
 
   private openUrl(url: string): void {
-    if (url) window.open(url, '_blank')
-    else new Notice('No address is set for that yet. Add one in Open Publish settings.')
+    if (!url) {
+      new Notice('No address is set for that yet. Add one in Open Publish settings.')
+      return
+    }
+    // Deliberately not checked for a null return: Electron hands back null on a
+    // *successful* hand-off to the system browser, so treating that as failure
+    // would cry wolf on every desktop. A throw is unambiguous, and the address
+    // is worth more to someone stranded than a dead button is.
+    try {
+      window.open(url, '_blank')
+    } catch {
+      new Notice(`Could not open that. The address is:\n${url}`, 12000)
+    }
   }
 }
 
