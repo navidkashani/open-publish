@@ -45,7 +45,33 @@ const run = (cmd, cmdArgs, cwd = target) =>
   execFileSync(cmd, cmdArgs, { cwd, stdio: 'inherit' })
 
 // Files this overlay owns. Anything else comes from Quartz and stays mergeable.
-const OVERLAY_FILES = ['scripts', 'quartz.config.ts', 'quartz.layout.ts', 'op-site.ts', 'README.md']
+export const OVERLAY_FILES = [
+  'scripts',
+  'quartz.config.ts',
+  'quartz.layout.ts',
+  'op-site.ts',
+  'wrangler.jsonc',
+  'README.md',
+]
+
+/**
+ * Overlay files that are deliberately not shipped. Anything in the overlay that
+ * is in neither list fails `assemble.test.mjs`, because the alternative is what
+ * already happened once: `wrangler.jsonc` was added to the overlay, left out of
+ * the list above, and was simply missing from the template for six commits with
+ * nothing to say so.
+ */
+export const NOT_SHIPPED = [
+  // Builds the template; does not belong inside it.
+  'assemble.mjs',
+  // Tests assemble.mjs, so it goes wherever assemble.mjs does: nowhere.
+  'assemble.test.mjs',
+  // Quartz's own package.json is merged instead, by mergePackageJson below.
+  'package.json',
+  // For running the overlay's tests in place. The template's is merged from
+  // Quartz's by mergeGitignore below.
+  '.gitignore',
+]
 
 async function main() {
   if (existsSync(target)) await rm(target, { recursive: true, force: true })
@@ -64,7 +90,9 @@ async function main() {
     await rm(join(target, file), { recursive: true, force: true })
     await cp(from, join(target, file), { recursive: true })
   }
-  // assemble.mjs builds the template; it does not belong inside it.
+  // Belt and braces: assemble.mjs lives beside `scripts/`, not in it, but an
+  // older overlay put it there and a stale copy inside the template is worse
+  // than a missing one.
   await rm(join(target, 'scripts', 'assemble.mjs'), { force: true })
 
   // Quartz ships an empty content/ for its own site. Ours is fetched per build.
@@ -89,12 +117,38 @@ async function main() {
   ])
 
   if (pushTo) {
+    // The push is a force, and has to be: the template is regenerated from this
+    // overlay every time, so its tip commit is replaced rather than added to.
+    // That is safe for the people using it, because "Use this template" gives
+    // them a fresh history and their `upstream` points at Quartz, not at here.
+    // It is not safe for a commit made *on* the template and never brought
+    // back, so name what is about to be overwritten instead of overwriting it
+    // quietly.
     console.log(`Pushing to ${pushTo}…`)
     run('git', ['remote', 'add', 'origin', pushTo])
+    reportReplacedTip()
     run('git', ['push', '--force', '--quiet', '-u', 'origin', 'main'])
   }
 
   console.log(`\nAssembled at ${target}`)
+}
+
+/**
+ * Print the remote's current tip, so a commit made on the template and never
+ * backported into this overlay is visible in the log of the run that discards
+ * it. Best effort: a remote with no `main` yet is the normal first push.
+ */
+function reportReplacedTip() {
+  try {
+    run('git', ['fetch', '--quiet', '--depth', '1', 'origin', 'main'])
+    const tip = execFileSync('git', ['log', '-1', '--format=%h %ad %s', '--date=short', 'FETCH_HEAD'], {
+      cwd: target,
+      encoding: 'utf8',
+    }).trim()
+    console.log(`  replacing: ${tip}`)
+  } catch {
+    console.log('  no existing main on the remote; this is the first push.')
+  }
 }
 
 /** Keep Quartz's dependencies and bin; add the scripts the host and we need. */
@@ -125,12 +179,19 @@ async function mergeGitignore() {
     '!content/.gitkeep',
     '.op-build-state.json',
     '',
-    '# Regenerated on every build, but the default copy IS committed as the pre-publish fallback.',
+    '# Note: op-site.ts is regenerated on every build and is NOT ignored. The',
+    '# default copy is committed on purpose, as the fallback for a build that',
+    '# runs before anything has been published.',
   ]
   await writeFile(path, existing.trimEnd() + '\n' + additions.join('\n') + '\n')
 }
 
-main().catch((error) => {
-  console.error(error.message)
-  process.exit(1)
-})
+// Only when run as a command. Importing this file reads the two lists above and
+// must not assemble anything.
+const invokedDirectly = process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)
+if (invokedDirectly) {
+  main().catch((error) => {
+    console.error(error.message)
+    process.exit(1)
+  })
+}
