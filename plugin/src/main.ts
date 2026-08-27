@@ -366,7 +366,7 @@ export default class OpenPublishPlugin extends Plugin {
   }
 
   private async readVaultFile(path: string): Promise<ArrayBuffer> {
-    const file = this.app.vault.getAbstractFileByPath(path) as TFile | null
+    const file = this.app.vault.getFileByPath(path)
     if (!file) throw new PublishError('storage-failed', `"${path}" disappeared from the vault while publishing.`)
     return this.app.vault.readBinary(file)
   }
