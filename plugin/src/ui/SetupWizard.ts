@@ -165,6 +165,7 @@ export class SetupWizard extends Modal {
   private renderCredentialsStep(container: HTMLElement): void {
     const result = container.createDiv({ cls: 'op-wizard-result' })
     const fields = new StorageFields(container, {
+      app: this.app,
       destination: () => this.plugin.settings.destination,
       replaceDestination: (next) => {
         this.plugin.settings.destination = next
@@ -423,8 +424,10 @@ export class SetupWizard extends Modal {
     container.createEl('p', {
       cls: 'op-muted',
       text:
-        'One last thing worth knowing: these credentials sit in plain text in your vault and sync with it. ' +
-        'Keep the keys scoped to this one bucket, and revoke them with your storage provider if you ever need to.',
+        "One last thing worth knowing: your secret key is kept in Obsidian's keychain, on this device only, so it " +
+        'does not travel with your vault and you will link it again on each device you publish from. Every other ' +
+        'field here, the access key ID included, does sit in your vault. Keep the keys scoped to this one bucket, ' +
+        'and revoke them with your storage provider if you ever need to.',
     })
   }
 }

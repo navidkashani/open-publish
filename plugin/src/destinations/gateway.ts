@@ -6,11 +6,15 @@
  * class is the other half of that: the same nine methods `S3Destination`
  * implements, over a five-route JSON API instead of SigV4 and XML.
  *
- * Be precise about the claim. The token still lives in `data.json`, plain text,
- * synced, readable by every other Obsidian plugin. **This is not encryption.**
- * What it buys is blast radius: the token reaches one Worker, which reaches one
- * bucket (or one prefix of it, if the Worker sets PREFIX), and rotating it is
- * one action in one place.
+ * Be precise about the claim. `GatewayConfig.token` below is the real token,
+ * and it always was: what changed is where it comes from. Settings hold the
+ * *name* of an entry in Obsidian's keychain, and `main.ts` resolves one into
+ * the other at the single point a destination is built, so nothing here had to
+ * move. Out of the vault, then, and unsynced, but still readable by every other
+ * Obsidian plugin. **This is not encryption you hold the key to.** What this
+ * class buys is the other axis: blast radius. The token reaches one Worker,
+ * which reaches one bucket (or one prefix of it, if the Worker sets PREFIX),
+ * and rotating it is one action in one place.
  *
  * Same injected `HttpClient` as `S3Destination`, so this unit-tests against the
  * fake transport with no network and no Obsidian.

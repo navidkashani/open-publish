@@ -8,6 +8,8 @@ export const menus = []
 export const suggesters = []
 /** Every modal ever constructed, so a dialog opened by another one can be reached. */
 export const modals = []
+/** Every secret field ever rendered, so a test can link and unlink one. */
+export const secretFields = []
 
 export class Notice {
   constructor(message) {
@@ -162,6 +164,17 @@ export class Setting {
     return this
   }
 
+  /**
+   * The escape hatch for components the Setting has no `addX` for, which is how
+   * `SecretComponent` is reached: it needs the `App`, so it is constructed by
+   * the caller rather than by the row. The real API hands the callback a fresh
+   * child of `controlEl` and discards what comes back.
+   */
+  addComponent(build) {
+    build(this.controlEl.createDiv({ cls: 'setting-item-control-component' }))
+    return this
+  }
+
   addSearch(build) {
     build(this.#textInput('search'))
     return this
@@ -236,6 +249,56 @@ function valueComponent(inputEl, field) {
     },
   })
   return self
+}
+
+/**
+ * The keychain field, modelled on the one shipping in Obsidian rather than
+ * imagined.
+ *
+ * Three things about the real component are load-bearing here and all three are
+ * reproduced. Its value is the secret's *name*, never the secret. `setValue`
+ * with a name the keychain does not hold draws exactly what a name that was
+ * never set draws, which is why the form prints the name itself. And unlinking
+ * calls `onChange(null)`, though the published type says `string`.
+ */
+export class SecretComponent {
+  constructor(app, containerEl) {
+    this.app = app
+    this.containerEl = containerEl
+    this.settingKey = ''
+    this.disabled = false
+    this.changeCallback = null
+    this.valueEl = containerEl.createDiv({ cls: 'setting-secret-value' })
+    this.buttonEl = containerEl.createEl('button', { text: 'Link' })
+    secretFields.push(this)
+  }
+  setValue(id) {
+    this.settingKey = id
+    const value = id ? this.app.secretStorage.getSecret(id) : null
+    // Blank for a name that does not resolve, exactly as the real one is.
+    this.valueEl.setText(value === null ? '' : '\u2022\u2022\u2022\u2022\u2022\u2022\u2022')
+    this.buttonEl.setText(value === null ? 'Link' : 'Change')
+    return this
+  }
+  onChange(callback) {
+    this.changeCallback = callback
+    return this
+  }
+  setDisabled(disabled) {
+    this.disabled = disabled
+    this.buttonEl.disabled = disabled
+    return this
+  }
+  /** Test hook: pick a name in the chooser the button opens. */
+  link(id) {
+    this.setValue(id)
+    this.changeCallback?.(id)
+  }
+  /** Test hook: the X beside a linked secret, which passes null. */
+  unlink() {
+    this.setValue(null)
+    this.changeCallback?.(null)
+  }
 }
 
 export class PopoverSuggest {}
@@ -363,6 +426,26 @@ export class Menu {
     return this
   }
   close() {}
+}
+
+/**
+ * Obsidian's HTTP call, present so that `main.ts` can be loaded at all.
+ *
+ * It refuses by default rather than answering, because a stub that quietly
+ * returns 200 would let a test believe it had reached storage. A test that
+ * wants a reply installs one; the destination tests use the injected
+ * `HttpClient` instead and never come through here.
+ */
+export const requests = []
+let responder = () => {
+  throw new Error('requestUrl: no response configured for this test')
+}
+export function requestUrl(request) {
+  requests.push(request)
+  return Promise.resolve(responder(request))
+}
+requestUrl.respondWith = (next) => {
+  responder = next
 }
 
 export function setIcon(element, name) {

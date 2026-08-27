@@ -420,6 +420,18 @@
   overflow-wrap: anywhere;
 }
 
+/*
+ * The name of the keychain entry a credential lives in, printed whatever
+ * Obsidian's own field shows. It draws a name it cannot resolve exactly as it
+ * draws a name that was never set, and on a second device that is the normal
+ * first sight, so the name has to be legible from here.
+ */
+.op-secret-ref {
+  margin-top: 3px;
+  font-size: var(--font-ui-smaller);
+  overflow-wrap: anywhere;
+}
+
 .op-advanced-toggle {
   display: block;
   width: 100%;

@@ -7,8 +7,9 @@ import {
   isHookConfigured,
   migrateSettings,
   recordPublish,
+  secretRefOf,
 } from './settings.ts'
-import type { Settings } from './settings.ts'
+import type { DestinationSettings, Settings } from './settings.ts'
 import { S3Destination } from './destinations/s3.ts'
 import { GatewayDestination } from './destinations/gateway.ts'
 import { obsidianHttp } from './destinations/obsidian-http.ts'
@@ -189,7 +190,7 @@ export default class OpenPublishPlugin extends Plugin {
 
   // --- wiring -------------------------------------------------------------
 
-  private destinationCache: { key: string; destination: Destination } | null = null
+  private destinationCache: { key: string; secret: string; destination: Destination } | null = null
 
   /**
    * One destination per configuration, reused.
@@ -198,7 +199,15 @@ export default class OpenPublishPlugin extends Plugin {
    * conditional writes are unsupported), and a fresh instance per call throws
    * that away, so every publish rediscovers it by burning three retries with
    * backoff before falling back. The cache is keyed on the settings so editing
-   * credentials still takes effect immediately.
+   * any of them still takes effect immediately.
+   *
+   * The secret is compared separately because it is no longer *in* the
+   * settings. Keying on the settings alone would mean that rotating a key
+   * behind an unchanged name left this signing with the old value until
+   * Obsidian restarted: a publish failing on credentials the user had already
+   * corrected. It is not a second copy of anything, either. The destination
+   * below holds the same string for as long as it lives; this is a reference to
+   * it, kept so the next call can tell whether it is still the current one.
    *
    * The one construction site, and the only place in the plugin that knows
    * there is more than one kind. Everything above it, the publisher, the
@@ -212,15 +221,44 @@ export default class OpenPublishPlugin extends Plugin {
       })
     }
     const settings = this.settings.destination
+    const secret = this.resolveSecret(settings)
     const key = JSON.stringify(settings)
-    if (this.destinationCache?.key !== key) {
+    if (this.destinationCache?.key !== key || this.destinationCache.secret !== secret) {
       const destination =
         settings.type === 'gateway'
-          ? new GatewayDestination(settings, this.http)
-          : new S3Destination(settings, this.http)
-      this.destinationCache = { key, destination }
+          ? new GatewayDestination({ ...settings, token: secret }, this.http)
+          : new S3Destination({ ...settings, secretAccessKey: secret }, this.http)
+      this.destinationCache = { key, secret, destination }
     }
     return this.destinationCache.destination
+  }
+
+  /**
+   * The name in `data.json`, turned into the value that signs a request.
+   *
+   * The whole of the boundary this change exists to create. Above it, settings
+   * hold a reference; below it, `S3Config` and `GatewayConfig` take a real
+   * credential and have not changed at all, which is why the signer and its
+   * tests did not have to move.
+   *
+   * A missing entry is the case worth spending words on. Obsidian's keychain is
+   * per device and does not sync, so opening a synced vault on a second machine
+   * lands here with settings that look complete and no secret behind them. Left
+   * to fall through, that would reach storage as a signature failure, which
+   * reads back as "your keys were rejected" and sends people off to reissue
+   * credentials that were never wrong.
+   */
+  private resolveSecret(settings: DestinationSettings): string {
+    const ref = secretRefOf(settings)
+    const secret = this.app.secretStorage.getSecret(ref)
+    if (!secret) {
+      throw new PublishError('not-configured', `This device has no secret named "${ref}".`, {
+        hint:
+          'Obsidian keeps secrets on each device separately, so they never travel with your vault. Link it ' +
+          'again on this one in Open Publish settings.',
+      })
+    }
+    return secret
   }
 
   private builder(): Builder | null {
@@ -262,12 +300,38 @@ export default class OpenPublishPlugin extends Plugin {
   private openPublishModal(): void {
     // Mid-run the window is a view onto the session, so it opens whatever the
     // storage settings say: there is nothing left to configure.
-    if (!this.session?.isRunning() && !isDestinationConfigured(this.settings)) {
-      new Notice('Open Publish needs storage details first. Opening the setup guide.')
-      this.openSetup()
-      return
+    if (!this.session?.isRunning()) {
+      if (!isDestinationConfigured(this.settings)) {
+        new Notice('Open Publish needs storage details first. Opening the setup guide.')
+        this.openSetup()
+        return
+      }
+      // Configured, and still unable to sign anything *here*. This is the vault
+      // arriving on a second device: `data.json` syncs and Obsidian's keychain
+      // does not, so every field looks filled in and the one that matters is
+      // not on this machine.
+      //
+      // Said before the window opens rather than after a scan, because the scan
+      // cannot succeed and watching it run first teaches nothing. Settings
+      // rather than the setup guide: the guide is six steps, five of them are
+      // already done and synced, and calling this "setup" would send someone
+      // looking for work that does not exist.
+      if (!this.hasStorageSecret()) {
+        new Notice(
+          'This device does not have the storage key for this vault yet, because Obsidian keeps keys on each ' +
+            'device separately. Opening settings so you can link it.',
+          10000,
+        )
+        this.openSettings()
+        return
+      }
     }
     new PublishModal(this.app, this).open()
+  }
+
+  /** Whether the credential the settings name is on *this* device. */
+  private hasStorageSecret(): boolean {
+    return this.app.secretStorage.getSecret(secretRefOf(this.settings.destination)) !== null
   }
 
   openSetup(): void {

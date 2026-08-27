@@ -10,10 +10,10 @@ reaches this Worker and nothing else.
 ## What this does and does not fix
 
 It does not make the secret disappear. The token sits in exactly the same place
-the keys did: `data.json` inside your vault, plain text, synced to your other
-devices, readable by every other Obsidian plugin. **Nothing here is encryption**,
-and anything claiming to encrypt keys on a device is storing the decryption key
-next to them.
+the key did: Obsidian's keychain, out of your vault, and readable by every other
+Obsidian plugin, because that keychain is one shared store and reading it is
+public API. **Nothing this Worker does is encryption**, and anything claiming to
+encrypt keys on a device is storing the decryption key next to them.
 
 What changes is what a leak costs.
 

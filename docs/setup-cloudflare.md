@@ -80,10 +80,10 @@ needs and that two devices can publish safely.
    has a Copy button.
 
 > **Why the plugin does not ask for the read-only key.** It never uses it: only
-> the build does. Keeping a copy in `data.json` would put both tokens in the same
-> place, sync the pair to your other devices, and expose both to any other plugin
-> you install, all for zero benefit. Paste it from Cloudflare straight into
-> Cloudflare. The plugin only ever holds the read-write token.
+> the build does. Keeping a copy would put both tokens in the same place and
+> expose both to any other plugin you install, all for zero benefit. Paste it
+> from Cloudflare straight into Cloudflare. The plugin only ever holds the
+> read-write token.
 
 | | Lives in | Can do | If it leaks |
 |---|---|---|---|

@@ -2,17 +2,38 @@
 
 ## What is actually true
 
-Your storage keys are stored in `data.json` inside your vault's
-`.obsidian/plugins/open-publish/` folder. That means:
+Your secret key is stored in Obsidian's keychain, which is a store the app keeps
+outside your vault. Everything else stays in `data.json` inside your vault's
+`.obsidian/plugins/open-publish/` folder: the endpoint, the bucket, the access
+key ID, the deploy hook URL.
 
-- **Plain text on disk.** Not encrypted, not obfuscated.
-- **Synced to your other devices**, if you sync your vault, including via
-  Obsidian Sync, iCloud, Dropbox or Git.
-- **Readable by every other plugin you have installed.** Obsidian cannot sandbox
-  plugins from one another, and says so in its own documentation.
+For the secret, that means:
 
-No plugin can honestly claim otherwise. Anything that says it "encrypts" your
-keys is storing the decryption key next to them.
+- **Not in your vault, so it does not sync.** It does not travel to your other
+  devices, and it does not reach Obsidian Sync, iCloud, Dropbox, or a Git
+  repository somebody pushes to GitHub. The cost is the obvious one: each device
+  you publish from needs the key entered on it once.
+- **Encrypted at rest by your operating system**, where your operating system
+  offers that: macOS Keychain, Windows DPAPI, or a Linux keyring such as
+  gnome-keyring or kwallet. Obsidian says so in its own keychain settings when
+  it cannot, with a warning on the field and a notice on startup, and it stores
+  the value unencrypted in that case. Be clear about what this kind of
+  encryption is: your operating system unlocks it for Obsidian automatically, so
+  anything running as you can ask Obsidian's keychain for it and get it. It
+  protects the key from a copied disk, not from software on the machine.
+- **Readable by every other plugin you have installed.** This one did not
+  change, and it is the one that matters most. Obsidian's keychain is a single
+  shared store on the same object every plugin is handed, and the calls to list
+  and read it are public API. Obsidian cannot sandbox plugins from one another,
+  and says so in its own documentation.
+
+The access key ID is deliberately left in `data.json`. It is an identifier
+rather than a credential, it unlocks nothing on its own, and having it visible
+in a plain file is worth more than the nothing it costs.
+
+No plugin can honestly claim more than this. Anything that says it "encrypts"
+your keys *for you* is storing the decryption key next to them; what is
+described above is your operating system's store, not this plugin's.
 
 ## So the protection is blast radius, not secrecy
 
@@ -54,9 +75,15 @@ build minutes rather than data loss, but there is no reason to publish it.
 ### Revoking
 
 Cloudflare dashboard → **R2 → API Tokens** → the token → **Delete**. Takes
-effect immediately. Create a new one and paste it into the plugin; nothing else
-needs to change, because no local state is load-bearing: the next scan reads
-the truth from your bucket.
+effect immediately. Create a new one, and put the new secret into the keychain
+entry the plugin's storage settings point at, either in **Settings → Keychain**
+in Obsidian or with the Change button on the field itself. The plugin picks it up on
+the next request; nothing else needs to change, because no local state is
+load-bearing: the next scan reads the truth from your bucket.
+
+On every other device you publish from, the same rotation has to be done again,
+because the keychain does not sync. That is the one place this arrangement costs
+you work rather than saving it.
 
 ## What the plugin does not do
 
@@ -78,9 +105,10 @@ that Worker. No S3 credential is on your device at all.
 
 **Read the next paragraph before believing this fixes the problem above.**
 
-The token lives in exactly the same place the keys did: `data.json`, plain text,
-synced, readable by every other plugin. **It is not encrypted, and nothing on a
-device can encrypt it.** Everything at the top of this page is still true of it.
+The token lives in exactly the same place the key did: Obsidian's keychain, out
+of your vault, and readable by every other plugin you have installed. That last
+clause is the one that survives every improvement, and it is the reason this
+section exists. Everything at the top of this page is true of the token too.
 
 What changes is blast radius, which is the same defence as before, applied
 harder:
@@ -90,7 +118,8 @@ harder:
 | What the plugin holds | An access key and secret | One bearer token |
 | What a leak reaches | The bucket, with whatever the token was scoped to | One Worker, which reaches one bucket, or one prefix of it if you set `PREFIX` |
 | What it can do there | Anything the key was cut for | Five operations, on keys the Worker chooses |
-| Revoking it | Create a token, scope it, replace two fields | One command, replace one field |
+| Where it lives | Obsidian's keychain, out of the vault | Obsidian's keychain, out of the vault |
+| Revoking it | Create a token, scope it, replace the key in the keychain | One command, replace the value in the keychain |
 
 Two things it does not do, said plainly because a picker entry could imply
 otherwise:

@@ -140,7 +140,7 @@ test("a vault prefix rides after the Worker's, because that is where its keys ac
 test('a test result lands in the step, not in a toast over the top of it', async () => {
   const app = fakeApp({ files: [], folders: [] })
   const plugin = fakeStoragePlugin({
-    stored: { destination: { endpoint: R2_ENDPOINT, bucket: 'b', accessKeyId: 'k', secretAccessKey: 's' } },
+    stored: { destination: { endpoint: R2_ENDPOINT, bucket: 'b', accessKeyId: 'k', secretRef: 'op-r2-secret' } },
     testResult: { ok: true, conditionalWrites: 'enforced' },
   })
   const wizard = new SetupWizard(app, plugin)
@@ -171,7 +171,7 @@ const envBlock = (wizard) => find(wizard.contentEl, (node) => node.tagName === '
 
 test('the variables carry everything the build needs to find the same objects', () => {
   const { wizard } = open({
-    destination: { endpoint: R2_ENDPOINT, bucket: 'my-notes', region: 'auto', accessKeyId: 'k', secretAccessKey: 's' },
+    destination: { endpoint: R2_ENDPOINT, bucket: 'my-notes', region: 'auto', accessKeyId: 'k', secretRef: 'op-r2-secret' },
   })
   goTo(wizard, 3)
   const env = envBlock(wizard)
@@ -194,7 +194,7 @@ test('turning path-style off is passed on, or the build silently reads the wrong
       region: 'eu-west-1',
       forcePathStyle: false,
       accessKeyId: 'k',
-      secretAccessKey: 's',
+      secretRef: 'op-r2-secret',
     },
   })
   goTo(wizard, 3)
@@ -203,7 +203,7 @@ test('turning path-style off is passed on, or the build silently reads the wrong
 
 test('a key prefix still travels with the rest', () => {
   const { wizard } = open({
-    destination: { endpoint: R2_ENDPOINT, bucket: 'my-notes', prefix: 'notes', accessKeyId: 'k', secretAccessKey: 's' },
+    destination: { endpoint: R2_ENDPOINT, bucket: 'my-notes', prefix: 'notes', accessKeyId: 'k', secretRef: 'op-r2-secret' },
   })
   goTo(wizard, 3)
   assert.match(envBlock(wizard), /OP_PREFIX=notes/)
@@ -211,14 +211,14 @@ test('a key prefix still travels with the rest', () => {
 
 test('choosing a provider in the wizard leaves the bucket and keys alone', () => {
   const { wizard, plugin } = open({
-    destination: { endpoint: R2_ENDPOINT, bucket: 'my-notes', accessKeyId: 'AKIA', secretAccessKey: 'shh' },
+    destination: { endpoint: R2_ENDPOINT, bucket: 'my-notes', accessKeyId: 'AKIA', secretRef: 'op-r2-secret' },
   })
   click(rowNamed(wizard, 'Amazon S3'))
 
   const destination = plugin.settings.destination
   assert.equal(destination.bucket, 'my-notes')
   assert.equal(destination.accessKeyId, 'AKIA')
-  assert.equal(destination.secretAccessKey, 'shh')
+  assert.equal(destination.secretRef, 'op-r2-secret')
   assert.equal(destination.forcePathStyle, false, 'AWS is the one provider that is not path-style')
 })
 
@@ -236,7 +236,7 @@ test('the step says it is working before it says what it found', async () => {
   const app = fakeApp({ files: [], folders: [] })
   let release
   const plugin = fakeStoragePlugin({
-    stored: { destination: { endpoint: R2_ENDPOINT, bucket: 'b', accessKeyId: 'k', secretAccessKey: 's' } },
+    stored: { destination: { endpoint: R2_ENDPOINT, bucket: 'b', accessKeyId: 'k', secretRef: 'op-r2-secret' } },
   })
   plugin.testDestination = () => new Promise((resolve) => { release = () => resolve({ ok: true, conditionalWrites: 'enforced' }) })
 
@@ -306,7 +306,7 @@ test('a host that provides no site address gets one in its environment block', (
   // Otherwise Quartz falls back to example.com and the feed, the sitemap and
   // the 404 page all ship pointing at a domain the user does not own.
   const { wizard } = open({
-    destination: { endpoint: R2_ENDPOINT, bucket: 'my-notes', accessKeyId: 'k', secretAccessKey: 's' },
+    destination: { endpoint: R2_ENDPOINT, bucket: 'my-notes', accessKeyId: 'k', secretRef: 'op-r2-secret' },
     builder: { host: 'cloudflare-workers', siteUrl: 'https://notes.example.com' },
   })
   goTo(wizard, 3)

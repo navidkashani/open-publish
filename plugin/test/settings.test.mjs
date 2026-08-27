@@ -33,7 +33,7 @@ test('migration does not mutate the defaults object', () => {
 test('stored values survive, and unknown fields are dropped', () => {
   const settings = migrateSettings({
     version: 1,
-    destination: { endpoint: 'https://e', bucket: 'b', accessKeyId: 'k', secretAccessKey: 's', region: 'auto' },
+    destination: { endpoint: 'https://e', bucket: 'b', accessKeyId: 'k', secretRef: 'op-r2-secret', region: 'auto' },
     builder: { url: 'https://hook', siteUrl: 'https://site' },
     site: { title: 'Mine', showGraph: false },
     lastSnapshotId: 'snap-1',
@@ -62,7 +62,10 @@ test('configuration checks require every field that a request needs', () => {
   const partial = migrateSettings({ destination: { endpoint: 'https://e', bucket: 'b' } })
   assert.equal(isDestinationConfigured(partial), false, 'no credentials yet')
   partial.destination.accessKeyId = 'k'
-  partial.destination.secretAccessKey = 's'
+  // The name of a keychain entry, not the key. Whether this device still holds
+  // an entry by that name is deliberately not asked here: this file imports
+  // nothing from Obsidian, and `main.ts` is where resolution lives.
+  partial.destination.secretRef = 'op-r2-secret'
   assert.equal(isDestinationConfigured(partial), true)
 
   assert.equal(isBuilderConfigured(migrateSettings({ builder: { url: 'https://hook' } })), false, 'a site URL is needed to verify')
@@ -106,7 +109,7 @@ test('an existing R2 config is recognised without a single byte of it changing',
       bucket: 'my-notes',
       region: 'auto',
       accessKeyId: 'k',
-      secretAccessKey: 's',
+      secretRef: 'op-r2-secret',
       forcePathStyle: true,
     },
   }
@@ -170,7 +173,7 @@ test('migration is idempotent, or a synced data.json would churn on every keystr
   // `saveSettings()` runs on every character typed into a text field. A
   // migration that rewrote anything would rewrite it forever.
   const once = migrateSettings({
-    destination: { endpoint: R2_ENDPOINT, bucket: 'b', accessKeyId: 'k', secretAccessKey: 's' },
+    destination: { endpoint: R2_ENDPOINT, bucket: 'b', accessKeyId: 'k', secretRef: 'op-r2-secret' },
     lastSnapshotId: 'snap-1',
     lastPublishedAt: 1700000000000,
   })
@@ -195,7 +198,7 @@ test('the region is not part of the target: it signs a request, it does not addr
 
 test('a vault that published before this field existed is credited with its own settings', () => {
   const settings = migrateSettings({
-    destination: { endpoint: R2_ENDPOINT, bucket: 'my-notes', accessKeyId: 'k', secretAccessKey: 's' },
+    destination: { endpoint: R2_ENDPOINT, bucket: 'my-notes', accessKeyId: 'k', secretRef: 'op-r2-secret' },
     lastSnapshotId: 'snap-1',
   })
   assert.equal(settings.lastPublishedTarget, storageTarget(settings.destination))
@@ -204,7 +207,7 @@ test('a vault that published before this field existed is credited with its own 
 
 test('publishing to one bucket and then pointing at another is called out', () => {
   const settings = migrateSettings({
-    destination: { endpoint: R2_ENDPOINT, bucket: 'my-notes', accessKeyId: 'k', secretAccessKey: 's' },
+    destination: { endpoint: R2_ENDPOINT, bucket: 'my-notes', accessKeyId: 'k', secretRef: 'op-r2-secret' },
     lastSnapshotId: 'snap-1',
   })
   settings.destination.bucket = 'a-different-bucket'
@@ -213,7 +216,7 @@ test('publishing to one bucket and then pointing at another is called out', () =
 
 test('nothing is claimed before the first publish, or before storage is filled in', () => {
   const neverPublished = migrateSettings({
-    destination: { endpoint: R2_ENDPOINT, bucket: 'b', accessKeyId: 'k', secretAccessKey: 's' },
+    destination: { endpoint: R2_ENDPOINT, bucket: 'b', accessKeyId: 'k', secretRef: 'op-r2-secret' },
   })
   assert.equal(hasStorageMoved(neverPublished), false)
 
@@ -362,7 +365,7 @@ test('two devices infer the same host from the same file, so there is nothing to
 
 const published = (over = {}) =>
   migrateSettings({
-    destination: { endpoint: R2_ENDPOINT, bucket: 'my-notes', accessKeyId: 'k', secretAccessKey: 's' },
+    destination: { endpoint: R2_ENDPOINT, bucket: 'my-notes', accessKeyId: 'k', secretRef: 'op-r2-secret' },
     builder: { url: PAGES_HOOK, siteUrl: 'https://x.pages.dev' },
     ...over,
   })
@@ -417,50 +420,65 @@ test('the build that follows it does clear the warning', () => {
 
 test('a vault configured for direct S3 loads exactly as it did before the gateway existed', () => {
   const settings = migrateSettings({
-    destination: { endpoint: R2_ENDPOINT, bucket: 'my-notes', accessKeyId: 'k', secretAccessKey: 's' },
+    destination: { endpoint: R2_ENDPOINT, bucket: 'my-notes', accessKeyId: 'k', secretRef: 'op-r2-secret' },
   })
   assert.equal(settings.destination.type, 's3')
   assert.equal(settings.destination.provider, 'r2')
   assert.equal(settings.destination.accessKeyId, 'k')
   assert.equal(settings.destination.workerUrl, undefined, 'nothing from the other shape leaks in')
-  assert.equal(settings.destination.token, undefined)
+  assert.equal(settings.destination.tokenRef, undefined)
 })
 
-test('a stored gateway loads as one, and holds a token instead of keys', () => {
+test('a key stored inline by an older build is dropped, not carried forward', () => {
+  // The one migration that has to *lose* something. This plugin has never
+  // shipped, so there is no vault in the world holding one of these, but the
+  // S3 branch merges whatever `data.json` had and the next `saveSettings()`
+  // writes the merged object straight back. Without this, a key that reached
+  // `data.json` by any route at all would live there for good, which is the
+  // single thing this whole change exists to prevent.
+  const settings = migrateSettings({
+    destination: { endpoint: R2_ENDPOINT, bucket: 'b', accessKeyId: 'k', secretAccessKey: 'shh' },
+  })
+  assert.equal(settings.destination.secretAccessKey, undefined)
+  assert.equal(settings.destination.secretRef, '', 'and it is not mistaken for the name of one either')
+  assert.doesNotMatch(JSON.stringify(settings), /shh/, 'nothing that gets written back holds it')
+})
+
+test('a stored gateway loads as one, and names a token instead of holding keys', () => {
   const settings = migrateSettings({
     destination: {
       type: 'gateway',
       provider: 'gateway',
       workerUrl: 'https://gw.someone.workers.dev',
-      token: 'shh',
+      tokenRef: 'op-gateway-token',
       prefix: '/sites/notes/',
     },
   })
   assert.equal(settings.destination.type, 'gateway')
   assert.equal(settings.destination.provider, 'gateway')
   assert.equal(settings.destination.workerUrl, 'https://gw.someone.workers.dev')
-  assert.equal(settings.destination.token, 'shh')
+  assert.equal(settings.destination.tokenRef, 'op-gateway-token')
   assert.equal(settings.destination.prefix, 'sites/notes')
   assert.equal(settings.destination.accessKeyId, undefined, 'a gateway has no keys to carry')
 })
 
 test('a gateway with nothing usable in it is empty rather than half-typed', () => {
-  const settings = migrateSettings({ destination: { type: 'gateway', workerUrl: 42, token: null } })
+  const settings = migrateSettings({ destination: { type: 'gateway', workerUrl: 42, tokenRef: null } })
   assert.deepEqual(settings.destination, {
     type: 'gateway',
     provider: 'gateway',
     workerUrl: '',
-    token: '',
+    tokenRef: '',
     prefix: '',
   })
   assert.equal(isDestinationConfigured(settings), false)
 })
 
-test('a gateway is ready on an address and a token, and not before', () => {
+test('a gateway is ready on an address and a named token, and not before', () => {
   const half = migrateSettings({ destination: { type: 'gateway', workerUrl: 'https://gw.workers.dev' } })
   assert.equal(isDestinationConfigured(half), false, 'an address with no token reaches nothing')
 
-  half.destination.token = 'shh'
+  half.destination.tokenRef = 'op-gateway-token'
   assert.equal(isDestinationConfigured(half), true)
 })
 
@@ -468,7 +486,7 @@ test('a gateway label on an S3 destination is re-inferred, not honoured', () => 
   // Half of a switch, arriving from a crash or a hand-edit. Honouring it would
   // render a Worker form over a bucket's credentials.
   const settings = migrateSettings({
-    destination: { provider: 'gateway', endpoint: R2_ENDPOINT, bucket: 'b', accessKeyId: 'k', secretAccessKey: 's' },
+    destination: { provider: 'gateway', endpoint: R2_ENDPOINT, bucket: 'b', accessKeyId: 'k', secretRef: 'op-r2-secret' },
   })
   assert.equal(settings.destination.type, 's3')
   assert.equal(settings.destination.provider, 'r2')
@@ -479,21 +497,25 @@ test('putting a gateway in front of the bucket you already publish to counts as 
   // has, and the read-only keys in the host's environment are still the old
   // ones, so this is exactly the case the warning exists for.
   const settings = migrateSettings({
-    destination: { endpoint: R2_ENDPOINT, bucket: 'my-notes', accessKeyId: 'k', secretAccessKey: 's' },
+    destination: { endpoint: R2_ENDPOINT, bucket: 'my-notes', accessKeyId: 'k', secretRef: 'op-r2-secret' },
     lastSnapshotId: 'snap-1',
   })
   assert.equal(hasStorageMoved(settings), false)
 
-  settings.destination = { type: 'gateway', provider: 'gateway', workerUrl: 'https://gw.workers.dev', token: 't' }
+  settings.destination = { type: 'gateway', provider: 'gateway', workerUrl: 'https://gw.workers.dev', tokenRef: 'op-gateway-token' }
   assert.equal(hasStorageMoved(settings), true)
 })
 
 test('two gateways are told apart by address and prefix, and by nothing else', () => {
-  const gateway = (extra) => ({ type: 'gateway', provider: 'gateway', workerUrl: 'https://gw.workers.dev', token: 't', ...extra })
-  assert.equal(storageTarget(gateway()), storageTarget(gateway({ token: 'rotated' })), 'rotating a token moves nothing')
+  const gateway = (extra) => ({ type: 'gateway', provider: 'gateway', workerUrl: 'https://gw.workers.dev', tokenRef: 'op-gateway-token', ...extra })
+  assert.equal(
+    storageTarget(gateway()),
+    storageTarget(gateway({ tokenRef: 'op-gateway-token-2' })),
+    'renaming the keychain entry has not moved the storage, and must not raise the panel that says it has',
+  )
   assert.notEqual(storageTarget(gateway()), storageTarget(gateway({ prefix: 'notes' })))
   assert.notEqual(storageTarget(gateway()), storageTarget(gateway({ workerUrl: 'https://other.workers.dev' })))
-  assert.doesNotMatch(storageTarget(gateway()), /\bt\b/, 'the token is a credential and never goes in a signature')
+  assert.doesNotMatch(storageTarget(gateway()), /op-gateway-token/, 'nothing about the credential goes in a signature')
 })
 
 test('a gateway move is hedged, because the plugin cannot see which bucket it reaches', () => {
@@ -503,12 +525,12 @@ test('a gateway move is hedged, because the plugin cannot see which bucket it re
   // the old storage, when content is addressed by hash and the bucket has not
   // changed. A gateway holds no bucket name, so the honest version says "if".
   const settings = migrateSettings({
-    destination: { endpoint: R2_ENDPOINT, bucket: 'my-notes', accessKeyId: 'k', secretAccessKey: 's' },
+    destination: { endpoint: R2_ENDPOINT, bucket: 'my-notes', accessKeyId: 'k', secretRef: 'op-r2-secret' },
     lastSnapshotId: 'snap-1',
   })
   assert.match(storageMovedWarning(settings), /uploads everything again/)
 
-  settings.destination = { type: 'gateway', provider: 'gateway', workerUrl: 'https://gw.workers.dev', token: 't' }
+  settings.destination = { type: 'gateway', provider: 'gateway', workerUrl: 'https://gw.workers.dev', tokenRef: 'op-gateway-token' }
   const hedged = storageMovedWarning(settings)
   assert.equal(hasStorageMoved(settings), true, 'the route changed, so a panel is still right')
   assert.match(hedged, /If it reaches the same bucket, nothing is lost/)
@@ -518,9 +540,9 @@ test('a gateway move is hedged, because the plugin cannot see which bucket it re
 
 test('and the same hedge applies coming back off a gateway', () => {
   const settings = migrateSettings({
-    destination: { type: 'gateway', workerUrl: 'https://gw.workers.dev', token: 't' },
+    destination: { type: 'gateway', workerUrl: 'https://gw.workers.dev', tokenRef: 'op-gateway-token' },
     lastSnapshotId: 'snap-1',
   })
-  settings.destination = { type: 's3', provider: 'r2', endpoint: R2_ENDPOINT, bucket: 'my-notes', region: 'auto', accessKeyId: 'k', secretAccessKey: 's', prefix: '', forcePathStyle: true }
+  settings.destination = { type: 's3', provider: 'r2', endpoint: R2_ENDPOINT, bucket: 'my-notes', region: 'auto', accessKeyId: 'k', secretRef: 'op-r2-secret', prefix: '', forcePathStyle: true }
   assert.match(storageMovedWarning(settings), /If it reaches the same bucket/)
 })

@@ -81,9 +81,9 @@ list.
 There is one entry that is not S3: **Cloudflare R2 without keys**. You deploy
 [a small Worker](gateway/README.md) to your own Cloudflare account, Cloudflare
 binds it to your bucket, and the plugin then holds one bearer token instead of
-an access key and secret. It is not encryption, the token still lives in your
-vault in plain text, and your site build still needs a read-only R2 key of its
-own. What it changes is what a leak reaches. See
+an access key and secret. It is not encryption, the token is still readable by
+every other plugin you install, and your site build still needs a read-only R2
+key of its own. What it changes is what a leak reaches. See
 [docs/security.md](docs/security.md), which is blunt about both halves.
 
 Hosting has a picker of its own. Cloudflare Pages, Cloudflare Workers, Netlify
@@ -137,12 +137,14 @@ There is no telemetry, no analytics, and no server operated by this project.
 
 ## Credentials
 
-Storage keys are kept in Obsidian's plugin settings, which means plain text
-inside your vault, synced with it, and readable by any other plugin you install.
-Obsidian cannot sandbox plugins and says so. The protection is scope rather than
-secrecy: use a token limited to one bucket, give the build a separate read-only
-token, and revoke either in one click. [docs/security.md](docs/security.md) is
-the honest, complete version.
+Your secret key is kept in Obsidian's keychain rather than in your vault, so it
+does not sync with your notes and never lands in a Git repository. It is still
+readable by any other plugin you install: that keychain is one shared store and
+reading it is public API. Obsidian cannot sandbox plugins and says so. So the
+protection is still scope rather than secrecy: use a token limited to one
+bucket, give the build a separate read-only token, and revoke either in one
+click. [docs/security.md](docs/security.md) is the honest, complete version,
+including what "encrypted at rest" does and does not mean here.
 
 ## Development
 

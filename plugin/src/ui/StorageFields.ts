@@ -17,7 +17,8 @@
  *    says what is in there when it does not.
  */
 
-import { Notice, Setting } from 'obsidian'
+import { Notice, SecretComponent, Setting } from 'obsidian'
+import type { App } from 'obsidian'
 import type { ConcurrencySupport, TestResult } from '../destinations/types.ts'
 import {
   PROVIDERS,
@@ -57,7 +58,32 @@ type Tone = 'ok' | 'error' | 'warning' | 'info'
 const PREFIX_PATTERN = /^(?!.*\.\.)[^\\]*$/
 const PREFIX_ERROR = 'A key prefix cannot contain ".." or a backslash. Both change which keys it addresses.'
 
+/**
+ * The sentence a second device sees, and the reason this row says anything at
+ * all beyond what the component draws.
+ *
+ * `SecretComponent` renders a name it cannot resolve as an empty field reading
+ * "Link", identical to a name that was never set. On a synced vault that is the
+ * normal first sight on every device after the first, because `data.json`
+ * travels and the keychain does not. Left at that, the obvious move is to link
+ * a *new* name, which writes over the one in `data.json`, syncs back, and takes
+ * down the device that was working. So the stored name is printed here whatever
+ * the component shows, and this says why it does not resolve.
+ */
+function missingSecret(ref: string): string {
+  return (
+    `This vault publishes with a secret named "${ref}", and this device does not have it. Link it here. ` +
+    'Obsidian keeps secrets on each device separately, so they never arrive with a synced vault.'
+  )
+}
+
 export interface StorageFieldsOptions {
+  /**
+   * Needed for one thing only: the keychain that holds the credential this form
+   * no longer stores. `SecretComponent` takes it, and so does the check for
+   * whether a stored name still resolves on this device.
+   */
+  app: App
   /**
    * Read through a function, not held.
    *
@@ -100,9 +126,14 @@ export interface StorageFieldsOptions {
  */
 export function selectProvider(current: DestinationSettings, id: ProviderId): DestinationSettings {
   // Crossing between the two kinds keeps nothing, because the two shapes share
-  // no fields. That also means switching *away* from a kind takes its
-  // credentials out of `data.json`, which is the right way round: a key nothing
-  // uses any more is pure added risk.
+  // no fields. What that discards now is the *name* of a credential rather than
+  // the credential, and the keychain entry it named survives.
+  //
+  // Deliberate, and the right way round. The keychain is shared with every
+  // other plugin and is not this one's to empty; switching provider is
+  // something people switch back from; and an entry nothing references costs
+  // nothing until it is deleted in Obsidian's own keychain settings, which is
+  // where deleting it belongs and where the user can see what they are doing.
   if (providerKind(id) === 'gateway') {
     return current.type === 'gateway' ? current : emptyGatewayDestination()
   }
@@ -214,19 +245,17 @@ export class StorageFields {
       validateOnBlur(address, text.inputEl, variable.pattern, variable.error)
     })
 
-    new Setting(this.host)
-      .setName('Token')
-      .setDesc(
+    this.renderSecretField({
+      name: 'Token',
+      desc:
         'The value you set on the Worker with "wrangler secret put TOKEN". Nobody issues this one: you chose it, ' +
-          'and you can change it on the Worker at any time.',
-      )
-      .addText((text) => {
-        text.inputEl.type = 'password'
-        text.setValue(destination.token).onChange((value) => {
-          destination.token = value.trim()
-          this.save()
-        })
-      })
+        'and you can change it on the Worker at any time.',
+      suggested: 'open-publish-gateway-token',
+      ref: () => destination.tokenRef,
+      setRef: (next) => {
+        destination.tokenRef = next
+      },
+    })
   }
 
   private renderS3Fields(destination: S3DestinationSettings): void {
@@ -249,13 +278,77 @@ export class StorageFields {
         }),
       )
 
-    new Setting(this.host).setName('Secret access key').addText((text) => {
-      text.inputEl.type = 'password'
-      text.setValue(destination.secretAccessKey).onChange((value) => {
-        destination.secretAccessKey = value.trim()
+    this.renderSecretField({
+      name: 'Secret access key',
+      desc: 'The half of the pair above that is actually secret.',
+      suggested: `open-publish-${this.provider.id}-secret`,
+      ref: () => destination.secretRef,
+      setRef: (next) => {
+        destination.secretRef = next
+      },
+    })
+  }
+
+  /**
+   * The one row that does not hold what it is named after.
+   *
+   * Everything else on this form is written into `data.json`. This is a name,
+   * and the value behind it lives in Obsidian's keychain, outside the vault,
+   * where nothing that syncs a vault can carry it away. `main.ts` is the only
+   * place that turns one into the other.
+   *
+   * Shared by both kinds of destination for the reason `renderPrefixField` is:
+   * two copies of a row this delicate would drift, and this one drifting means
+   * one of them stops saying that the name is not the secret.
+   */
+  private renderSecretField(copy: {
+    name: string
+    desc: string
+    suggested: string
+    ref: () => string
+    setRef: (next: string) => void
+  }): void {
+    const setting = new Setting(this.host).setName(copy.name)
+    setting.descEl.createDiv({ text: copy.desc })
+    const stored = setting.descEl.createDiv({ cls: 'op-secret-ref' })
+
+    const describe = (): void => {
+      const ref = copy.ref()
+      if (!ref) {
+        stored.setText(
+          "Kept in Obsidian's keychain, not in your vault. Every plugin shares that keychain, so a name like " +
+            `"${copy.suggested}" keeps this one apart from theirs.`,
+        )
+        setting.setErrorMessage(null)
+        return
+      }
+      stored.setText(`Kept in Obsidian's keychain as "${ref}", not in your vault.`)
+      // Read every render rather than once: the keychain is edited elsewhere,
+      // in Obsidian's own settings, and this row has no way to hear about it.
+      const resolves = this.options.app.secretStorage.getSecret(ref) !== null
+      setting.setErrorMessage(resolves ? null : missingSecret(ref))
+    }
+
+    setting.addComponent((el) => {
+      const secret = new SecretComponent(this.options.app, el)
+      // The stored name goes into the component, and nothing ever comes back
+      // the other way except a name the user chose. In particular a name that
+      // does not resolve is left exactly as it is: that is the ordinary state
+      // of a second device, and "helpfully" clearing it would write the
+      // clearance into `data.json`, sync it, and destroy the configuration on
+      // the device that does have the secret.
+      secret.setValue(copy.ref())
+      // Typed as `string`, but the component passes null when the user clicks
+      // the X to unlink, and null is not a name.
+      secret.onChange((value: string | null) => {
+        copy.setRef(value ?? '')
+        describe()
         this.save()
       })
+      return secret
     })
+
+    describe()
   }
 
   private renderMovedWarning(warning: string): void {

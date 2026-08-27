@@ -6,9 +6,14 @@
  * token, and that token can reach this Worker and nothing else.
  *
  * Be precise about what this buys, because the honest claim is narrower than
- * the obvious one. The token still lives in `data.json` in the vault: plain
- * text, synced, readable by every other Obsidian plugin. **This is not
- * encryption.** What changes is blast radius. A leaked S3 key reaches a bucket
+ * the obvious one. The token lives in Obsidian's keychain rather than in
+ * `data.json`, so it is out of the vault and does not sync, and on most
+ * machines the operating system encrypts it at rest. It is still readable by
+ * every other Obsidian plugin, because that keychain is one shared store and
+ * reading it is public API. **That is not this Worker's doing and it is not
+ * encryption you hold the key to.** What this Worker changes is blast radius,
+ * which is a different axis entirely: where the credential lives is one
+ * question, and what it can reach is the other. A leaked S3 key reaches a bucket
  * directly, with whatever permissions it was cut with. A leaked gateway token
  * reaches one Worker, which reaches one bucket, or one prefix of it if PREFIX
  * is set, and rotating it is one `wrangler secret put` in one place. Note which

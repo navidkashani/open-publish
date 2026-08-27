@@ -83,6 +83,7 @@ export class OpenPublishSettingTab extends PluginSettingTab {
     // surface where the choice has already been made, and the analytics
     // provider two sections down sets exactly this precedent.
     const fields = new StorageFields(containerEl, {
+      app: this.app,
       destination: () => this.plugin.settings.destination,
       replaceDestination: (next) => {
         this.plugin.settings.destination = next
@@ -461,16 +462,21 @@ export class OpenPublishSettingTab extends PluginSettingTab {
     // The same fact either way, in the terms of whatever is actually stored.
     // Saying "these keys" to somebody who has none reads as boilerplate, and
     // boilerplate is what people stop reading.
+    //
+    // What survived the move into Obsidian's keychain is the sentence that
+    // matters most and the one a plugin can do least about. The keychain is one
+    // namespace on the same `app` object every plugin is handed, and
+    // `getSecret` is public API. It is out of your vault; it is not private.
     note.createEl('p', {
       text:
         this.plugin.settings.destination.type === 'gateway'
-          ? 'Obsidian stores plugin settings as plain text in your vault, so any other plugin you install can read ' +
-            'this token, and it syncs to your other devices. This is not encryption, and nothing can make it so. ' +
-            'What it changes is reach: the token gets to your Worker, which gets to one bucket, and you can replace ' +
-            'it with one command.'
-          : 'Obsidian stores plugin settings as plain text in your vault, so any other plugin you install can read ' +
-            'these keys, and they sync to your other devices. Use a token that can only reach this one bucket, ' +
-            'and revoke it in a click if you need to.',
+          ? "This token is kept in Obsidian's keychain rather than in your vault, so it does not travel with your " +
+            'notes. Any other plugin you install can still read it. This is not encryption you control, and nothing ' +
+            'can make it so. What it changes is reach: the token gets to your Worker, which gets to one bucket, and ' +
+            'you can replace it with one command.'
+          : "These keys are kept in Obsidian's keychain rather than in your vault, so they do not travel with your " +
+            'notes. Any other plugin you install can still read them. Use a token that can only reach this one ' +
+            'bucket, and revoke it in a click if you need to.',
     })
   }
 }

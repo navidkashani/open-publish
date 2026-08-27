@@ -9,7 +9,7 @@
 
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { OpenPublishSettingTab, fakeApp, fakeStoragePlugin } from './harness.mjs'
+import { OpenPublishSettingTab, fakeApp, fakeStoragePlugin, secretFields } from './harness.mjs'
 import { byClass, click, dispatch, find, findAll, visible } from './dom.mjs'
 
 const R2_ENDPOINT = 'https://0123456789abcdef0123456789abcdef.r2.cloudflarestorage.com'
@@ -28,6 +28,20 @@ const rowNamed = (root, name) =>
 const inputIn = (row) => find(row, (node) => node.tagName === 'INPUT' || node.tagName === 'SELECT')
 const descOf = (row) => find(row, byClass('setting-item-description'))?.textContent ?? ''
 const errorOf = (row) => find(row, byClass('setting-item-error'))?.textContent ?? null
+
+/**
+ * The keychain field inside a row, found by where it was drawn.
+ *
+ * `SecretComponent` is built by the caller rather than by the row, so unlike
+ * every other component here there is no `addX` call to intercept. The stub
+ * records each one it constructs; this picks the one whose element sits inside
+ * the row asked for.
+ */
+const secretIn = (row) =>
+  secretFields.findLast((field) => {
+    for (let node = field.containerEl; node; node = node.parentElement) if (node === row) return true
+    return false
+  }) ?? null
 
 test('display() renders every section without throwing', () => {
   const { root } = open()
@@ -119,7 +133,7 @@ test('Advanced opens and closes on click', () => {
 
 test('switching provider keeps the bucket and the credentials', () => {
   const { root, plugin } = open({
-    destination: { endpoint: R2_ENDPOINT, bucket: 'my-notes', accessKeyId: 'AKIA', secretAccessKey: 'shh' },
+    destination: { endpoint: R2_ENDPOINT, bucket: 'my-notes', accessKeyId: 'AKIA', secretRef: 'op-r2-secret' },
   })
   const dropdown = inputIn(rowNamed(root, 'Storage provider'))
   dropdown.value = 'aws'
@@ -127,14 +141,14 @@ test('switching provider keeps the bucket and the credentials', () => {
 
   assert.equal(plugin.settings.destination.bucket, 'my-notes')
   assert.equal(plugin.settings.destination.accessKeyId, 'AKIA')
-  assert.equal(plugin.settings.destination.secretAccessKey, 'shh')
+  assert.equal(plugin.settings.destination.secretRef, 'op-r2-secret')
   assert.equal(plugin.settings.destination.provider, 'aws')
   assert.equal(plugin.settings.destination.endpoint, '', 'an account ID is not a region, so it is not carried over')
 })
 
 test('choosing the gateway swaps the form: one address and one token, no bucket and no keys', () => {
   const { root, plugin } = open({
-    destination: { endpoint: R2_ENDPOINT, bucket: 'my-notes', accessKeyId: 'AKIA', secretAccessKey: 'shh' },
+    destination: { endpoint: R2_ENDPOINT, bucket: 'my-notes', accessKeyId: 'AKIA', secretRef: 'op-r2-secret' },
   })
   const dropdown = inputIn(rowNamed(root, 'Storage provider'))
   dropdown.value = 'gateway'
@@ -142,7 +156,7 @@ test('choosing the gateway swaps the form: one address and one token, no bucket 
 
   assert.equal(plugin.settings.destination.type, 'gateway')
   assert.equal(plugin.settings.destination.accessKeyId, undefined, 'a key nothing uses is pure added risk')
-  assert.equal(plugin.settings.destination.secretAccessKey, undefined)
+  assert.equal(plugin.settings.destination.secretRef, undefined)
 
   const after = plugin.settings.destination
   const { root: gateway } = open({ destination: after })
@@ -153,28 +167,74 @@ test('choosing the gateway swaps the form: one address and one token, no bucket 
   assert.equal(rowNamed(gateway, 'Region'), null, 'nothing here is signed, so there is no region to sign it for')
 })
 
-test('the token is a password field, exactly as the secret key was', () => {
-  const { root } = open({ destination: { type: 'gateway', workerUrl: 'https://gw.workers.dev', token: 'shh' } })
-  assert.equal(inputIn(rowNamed(root, 'Token')).type, 'password')
+test('the token row holds a keychain name, and never the token', () => {
+  // What this replaced asserted that the field was `type="password"`, which hid
+  // the token from a person looking over your shoulder and from nothing else:
+  // the value was still in `data.json` and still written into the DOM on every
+  // render. There is no text input here at all now.
+  const { root } = open(
+    { destination: { type: 'gateway', workerUrl: 'https://gw.workers.dev', tokenRef: 'op-gateway-token' } },
+    { secrets: { 'op-gateway-token': 'shh' } },
+  )
+  const row = rowNamed(root, 'Token')
+  assert.equal(inputIn(row), null, 'nothing on this row takes typing')
+  assert.equal(secretIn(row).settingKey, 'op-gateway-token', 'the component is pointed at the stored name')
+  assert.match(descOf(row), /op-gateway-token/, 'and the name is legible without opening the picker')
+  assert.doesNotMatch(root.textContent, /shh/, 'the token itself is never drawn')
 })
 
-test('switching away from the gateway takes the token out of data.json with it', () => {
+test('linking a secret stores its name, and unlinking clears the name alone', () => {
+  const { root, plugin } = open(
+    { destination: { type: 'gateway', workerUrl: 'https://gw.workers.dev' } },
+    { secrets: { 'op-gateway-token': 'shh' } },
+  )
+  const secret = secretIn(rowNamed(root, 'Token'))
+
+  secret.link('op-gateway-token')
+  assert.equal(plugin.settings.destination.tokenRef, 'op-gateway-token')
+
+  // The real component passes null here, though its published type says string.
+  secret.unlink()
+  assert.equal(plugin.settings.destination.tokenRef, '', 'null is not a name')
+})
+
+test('a name this device cannot resolve is said out loud, and never quietly cleared', () => {
+  // The ordinary state of every device after the first: `data.json` syncs and
+  // the keychain does not. Obsidian's own component draws this exactly as it
+  // draws a name that was never set, so if the row said nothing the obvious
+  // move would be to link a *new* name, overwrite the one in `data.json`, sync
+  // it back, and take down the device that was working.
   const { root, plugin } = open({
-    destination: { type: 'gateway', workerUrl: 'https://gw.workers.dev', token: 'shh' },
+    destination: { type: 'gateway', workerUrl: 'https://gw.workers.dev', tokenRef: 'op-gateway-token' },
   })
+  const row = rowNamed(root, 'Token')
+  assert.match(errorOf(row) ?? '', /this device does not have it/)
+  assert.match(errorOf(row), /op-gateway-token/, 'named, so it can be recognised or recreated')
+  assert.equal(plugin.settings.destination.tokenRef, 'op-gateway-token', 'and the name survives being unresolvable')
+})
+
+test('switching away from the gateway drops the token reference, and leaves the keychain alone', () => {
+  const { root, plugin, tab } = open(
+    { destination: { type: 'gateway', workerUrl: 'https://gw.workers.dev', tokenRef: 'op-gateway-token' } },
+    { secrets: { 'op-gateway-token': 'shh' } },
+  )
   const dropdown = inputIn(rowNamed(root, 'Storage provider'))
   dropdown.value = 'r2'
   dispatch(dropdown, 'input')
 
   assert.equal(plugin.settings.destination.type, 's3')
-  assert.equal(plugin.settings.destination.token, undefined)
+  assert.equal(plugin.settings.destination.tokenRef, undefined)
+  // Deliberate, and the half that changed. What is discarded is the reference;
+  // the keychain is shared with every other plugin and is not this one's to
+  // empty, and switching provider is something people switch back from.
+  assert.equal(tab.app.secretStorage.getSecret('op-gateway-token'), 'shh')
   assert.equal(plugin.settings.destination.workerUrl, undefined)
   assert.equal(plugin.settings.destination.bucket, '', 'and it starts from a fresh S3 form, not a half-filled one')
 })
 
 test('a gateway keeps the one Advanced row it has a use for', () => {
   const { root } = open({
-    destination: { type: 'gateway', workerUrl: 'https://gw.workers.dev', token: 'shh', prefix: 'notes' },
+    destination: { type: 'gateway', workerUrl: 'https://gw.workers.dev', tokenRef: 'op-gateway-token', prefix: 'notes' },
   })
   assert.match(find(root, byClass('op-advanced-toggle')).textContent, /key prefix "notes"/)
   assert.ok(rowNamed(root, 'Key prefix'))
@@ -188,7 +248,7 @@ test('a key prefix that would silently address somewhere else is refused where i
   // listing route, where the prefix survives in a query string.
   for (const destination of [
     { endpoint: R2_ENDPOINT, bucket: 'b' },
-    { type: 'gateway', workerUrl: 'https://gw.workers.dev', token: 't' },
+    { type: 'gateway', workerUrl: 'https://gw.workers.dev', tokenRef: 'op-gateway-token' },
   ]) {
     const { root } = open({ destination })
     const row = rowNamed(root, 'Key prefix')
@@ -206,12 +266,19 @@ test('a key prefix that would silently address somewhere else is refused where i
 
 test('the credentials note is about whatever is actually stored', () => {
   const { root: keys } = open({ destination: { endpoint: R2_ENDPOINT, bucket: 'b' } })
-  assert.match(find(keys, byClass('op-security-note')).textContent, /these keys/)
+  const keyNote = find(keys, byClass('op-security-note')).textContent
+  assert.match(keyNote, /these keys/i)
+  assert.match(keyNote, /do not travel with your notes/, 'the half of the old sentence this change made false')
 
-  const { root: token } = open({ destination: { type: 'gateway', workerUrl: 'https://gw.workers.dev', token: 't' } })
+  const { root: token } = open({
+    destination: { type: 'gateway', workerUrl: 'https://gw.workers.dev', tokenRef: 'op-gateway-token' },
+  })
   const note = find(token, byClass('op-security-note')).textContent
-  assert.match(note, /this token/)
+  assert.match(note, /this token/i)
   assert.match(note, /not encryption/, 'the one claim this must never make')
+  // The claim that survived the move, and the one people care about. Obsidian's
+  // keychain is one namespace on the same `app` object every plugin is handed.
+  assert.match(note, /Any other plugin you install can still read it/)
 })
 
 test('switching to Other keeps the endpoint, because nothing about it is a template', () => {
@@ -288,7 +355,7 @@ test('Wasabi carries its deletion cost wherever it is chosen', () => {
 test('the two-device row states the expectation, then the measured truth', async () => {
   const app = fakeApp({ files: [], folders: [] })
   const plugin = fakeStoragePlugin({
-    stored: { destination: { endpoint: R2_ENDPOINT, bucket: 'b', accessKeyId: 'k', secretAccessKey: 's' } },
+    stored: { destination: { endpoint: R2_ENDPOINT, bucket: 'b', accessKeyId: 'k', secretRef: 'op-r2-secret' } },
     testResult: { ok: true, conditionalWrites: 'ignored' },
   })
   const tab = new OpenPublishSettingTab(app, plugin)
@@ -306,7 +373,7 @@ test('the two-device row states the expectation, then the measured truth', async
 
 test('a storage target that no longer matches the published one says so', () => {
   const { root } = open({
-    destination: { endpoint: R2_ENDPOINT, bucket: 'new-bucket', accessKeyId: 'k', secretAccessKey: 's' },
+    destination: { endpoint: R2_ENDPOINT, bucket: 'new-bucket', accessKeyId: 'k', secretRef: 'op-r2-secret' },
     lastSnapshotId: 'snap-1',
     lastPublishedTarget: `${R2_ENDPOINT}|old-bucket||path`,
   })
@@ -318,7 +385,7 @@ test('a storage target that no longer matches the published one says so', () => 
 
 test('no such warning when the target is the one that was published to', () => {
   const { root } = open({
-    destination: { endpoint: R2_ENDPOINT, bucket: 'my-notes', accessKeyId: 'k', secretAccessKey: 's' },
+    destination: { endpoint: R2_ENDPOINT, bucket: 'my-notes', accessKeyId: 'k', secretRef: 'op-r2-secret' },
     lastSnapshotId: 'snap-1',
   })
   assert.equal(find(root, byClass('op-storage-moved')), null)
@@ -389,7 +456,7 @@ test('a region that disagrees with the endpoint is surfaced rather than left sil
 test('editing storage retires the last measurement rather than letting it go stale', async () => {
   const app = fakeApp({ files: [], folders: [] })
   const plugin = fakeStoragePlugin({
-    stored: { destination: { endpoint: R2_ENDPOINT, bucket: 'b', accessKeyId: 'k', secretAccessKey: 's' } },
+    stored: { destination: { endpoint: R2_ENDPOINT, bucket: 'b', accessKeyId: 'k', secretRef: 'op-r2-secret' } },
     testResult: { ok: true, conditionalWrites: 'enforced' },
   })
   const tab = new OpenPublishSettingTab(app, plugin)
@@ -414,7 +481,7 @@ test('switching provider mid-test drops the answer instead of pinning it to the 
   const app = fakeApp({ files: [], folders: [] })
   let release
   const plugin = fakeStoragePlugin({
-    stored: { destination: { endpoint: R2_ENDPOINT, bucket: 'b', accessKeyId: 'k', secretAccessKey: 's' } },
+    stored: { destination: { endpoint: R2_ENDPOINT, bucket: 'b', accessKeyId: 'k', secretRef: 'op-r2-secret' } },
   })
   plugin.testDestination = () => new Promise((resolve) => { release = () => resolve({ ok: true, conditionalWrites: 'enforced' }) })
 

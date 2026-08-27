@@ -65,7 +65,24 @@ export interface SelectionSettings {
  * config and same code path; the provider is a label and a set of prefills,
  * and `S3Destination` never sees it.
  */
-export type S3DestinationSettings = S3Config & { type: 's3'; provider: ProviderId }
+export type S3DestinationSettings = Omit<S3Config, 'secretAccessKey'> & {
+  type: 's3'
+  provider: ProviderId
+  /**
+   * The *name* of a keychain entry, never the key itself.
+   *
+   * This is the one field here that is not the signer's own config, and
+   * breaking that intersection is the whole of this design. `S3Config` still
+   * takes a real `secretAccessKey`, so `s3.ts` and `sigv4.ts` are untouched;
+   * `main.ts` is the single place that turns a name into a value, and the
+   * value never reaches `data.json`.
+   *
+   * Ids are lowercase alphanumeric with dashes, at most 64 characters, and
+   * they live in one namespace shared by every installed plugin, so the name
+   * this project suggests is prefixed with its own.
+   */
+  secretRef: string
+}
 
 /**
  * The gateway: a Worker address and a token, and deliberately nothing else.
@@ -74,8 +91,16 @@ export type S3DestinationSettings = S3Config & { type: 's3'; provider: ProviderI
  * plugin is better off not knowing them. The cost is real and shows up in one
  * place: the setup wizard cannot prefill the build's `OP_BUCKET` and
  * `OP_ENDPOINT` for a gateway user, and says so rather than guessing.
+ *
+ * Not even the token: `tokenRef` names a keychain entry, for the same reason
+ * and with the same boundary as `S3DestinationSettings.secretRef`.
  */
-export type GatewayDestinationSettings = GatewayConfig & { type: 'gateway'; provider: 'gateway' }
+export type GatewayDestinationSettings = Omit<GatewayConfig, 'token'> & {
+  type: 'gateway'
+  provider: 'gateway'
+  /** The name of a keychain entry, never the token. See `secretRef`. */
+  tokenRef: string
+}
 
 export type DestinationSettings = S3DestinationSettings | GatewayDestinationSettings
 
@@ -121,7 +146,7 @@ export const DEFAULT_SETTINGS: Settings = {
     bucket: '',
     region: 'auto',
     accessKeyId: '',
-    secretAccessKey: '',
+    secretRef: '',
     prefix: '',
     forcePathStyle: true,
   },
@@ -231,7 +256,7 @@ export function migrateSettings(raw: unknown): Settings {
  * back and a shared object would hand every vault the same one.
  */
 export function emptyGatewayDestination(): GatewayDestinationSettings {
-  return { type: 'gateway', provider: 'gateway', workerUrl: '', token: '', prefix: '' }
+  return { type: 'gateway', provider: 'gateway', workerUrl: '', tokenRef: '', prefix: '' }
 }
 
 /** The same, for the other shape. What a fresh vault has always started from. */
@@ -248,10 +273,16 @@ export function emptyS3Destination(): S3DestinationSettings {
  * direct S3 must load unchanged".
  *
  * The two branches share no fields, which is deliberate rather than tidy.
- * Switching storage discards the credentials of the kind being left behind,
- * so a vault that moves to the gateway stops carrying a read-write S3 key it
- * no longer uses. A key nothing needs is pure added risk, and `data.json` is
- * the file this whole feature exists to take secrets out of.
+ * Switching storage discards the credentials of the kind being left behind, so
+ * a vault that moves to the gateway stops carrying a reference to a read-write
+ * S3 key it no longer uses.
+ *
+ * What is discarded now is the *reference*. The keychain entry it named
+ * survives, which is a deliberate change of behaviour rather than an oversight:
+ * the keychain is shared with every other plugin and is not this plugin's to
+ * clear, switching provider is routinely a thing people switch back from, and
+ * an entry nobody references costs nothing until someone deletes it in
+ * Obsidian's own keychain settings, which is where deleting it belongs.
  */
 function resolveDestination(stored: unknown): DestinationSettings {
   const raw = (typeof stored === 'object' && stored !== null ? stored : {}) as Record<string, unknown>
@@ -259,13 +290,21 @@ function resolveDestination(stored: unknown): DestinationSettings {
   if (raw.type === 'gateway') {
     const gateway = emptyGatewayDestination()
     gateway.workerUrl = asTrimmedString(raw.workerUrl)
-    gateway.token = asTrimmedString(raw.token)
+    gateway.tokenRef = asTrimmedString(raw.tokenRef)
     gateway.prefix = asTrimmedString(raw.prefix).replace(/^\/+|\/+$/g, '')
     return gateway
   }
 
   const s3 = cloneDefaults().destination as S3DestinationSettings
-  Object.assign(s3, raw, { type: 's3' })
+  // `secretAccessKey` is dropped rather than carried across, and this is the
+  // one place that can drop it. The assign below copies whatever `data.json`
+  // held, so a file written by a build that stored the key inline would have it
+  // copied into settings and written straight back out on the next save: the
+  // secret would outlive the change meant to remove it. Named here so a reader
+  // who does not know that history cannot delete the line as dead code.
+  const { secretAccessKey: _inlinedSecret, ...rest } = raw
+  Object.assign(s3, rest, { type: 's3' })
+  s3.secretRef = asTrimmedString(raw.secretRef)
   s3.provider = resolveProvider(raw)
   return s3
 }
@@ -506,16 +545,38 @@ function asBooleanRecord(value: unknown): Record<string, boolean> {
   return out
 }
 
-/** Every field a request needs, on the destination alone. */
+/**
+ * Every field a request needs, on the destination alone.
+ *
+ * A reference is checked for being *set*, never for resolving. Whether the
+ * keychain still holds an entry by that name is a question only `main.ts` can
+ * ask, because asking it needs `app`, and this file imports nothing from
+ * Obsidian so that its tests can run under plain Node with no stub. That
+ * boundary is worth more than the slightly earlier warning it costs: the
+ * missing-entry case is reported at resolution time, in a sentence, by
+ * `destination()`.
+ */
 export function isDestinationReady(destination: DestinationSettings): boolean {
-  if (destination.type === 'gateway') return Boolean(destination.workerUrl && destination.token)
-  return Boolean(
-    destination.endpoint && destination.bucket && destination.accessKeyId && destination.secretAccessKey,
-  )
+  if (destination.type === 'gateway') return Boolean(destination.workerUrl && destination.tokenRef)
+  return Boolean(destination.endpoint && destination.bucket && destination.accessKeyId && destination.secretRef)
 }
 
 export function isDestinationConfigured(settings: Settings): boolean {
   return isDestinationReady(settings.destination)
+}
+
+/**
+ * Which keychain entry this destination's credential lives in, whichever kind
+ * it is.
+ *
+ * Here rather than in `main.ts` so that the two questions asked about that name
+ * cannot drift apart: "can this device resolve it" before a window opens, and
+ * "resolve it" when a request is about to be signed. Both are `main.ts`'s to
+ * ask, because both need `app`; which field holds the name is this file's to
+ * answer, because the shape is.
+ */
+export function secretRefOf(destination: DestinationSettings): string {
+  return destination.type === 'gateway' ? destination.tokenRef : destination.secretRef
 }
 
 /** Enough to start a build. */

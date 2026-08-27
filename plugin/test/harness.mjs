@@ -17,18 +17,38 @@ export const { StatusBar } = await import('../src/ui/StatusBar.ts')
 export const { FolderModal } = await import('../src/ui/FolderModal.ts')
 export const { OpenPublishSettingTab } = await import('../src/ui/SettingsTab.ts')
 export const { SetupWizard } = await import('../src/ui/SetupWizard.ts')
+/**
+ * The plugin class itself, which is loadable here for one reason: every
+ * `obsidian` import below it resolves to the stub. It is imported for the
+ * destination boundary in `main.ts`, which is the only place a stored secret
+ * name becomes a credential and so the only place that can be tested for it.
+ */
+export const { default: OpenPublishPlugin } = await import('../src/main.ts')
 export const { Platform, TFile, TFolder } = await import('./obsidian-stub.mjs')
-export { notices, menus, modals, suggesters, MODAL_MEMBERS } from './obsidian-stub.mjs'
+export { notices, menus, modals, suggesters, secretFields, MODAL_MEMBERS } from './obsidian-stub.mjs'
 export { PublishSession }
 
 /**
  * A vault, as much of one as the settings surface asks for: a list of file
  * paths, a list of folder paths, and whatever frontmatter matters.
  */
-export function fakeApp({ folders = [], files = [], frontmatter = {} } = {}) {
+export function fakeApp({ folders = [], files = [], frontmatter = {}, secrets = {} } = {}) {
   const folderSet = new Set(folders)
   const fileSet = new Set(files)
   return {
+    /**
+     * Obsidian's keychain, which is where the two real credentials live now.
+     *
+     * Device-local in the app and device-local here: a test that wants the
+     * second-device case builds an app with no secrets and the same settings.
+     */
+    secretStorage: {
+      getSecret: (id) => (Object.hasOwn(secrets, id) ? secrets[id] : null),
+      setSecret: (id, value) => {
+        secrets[id] = value
+      },
+      listSecrets: () => Object.keys(secrets),
+    },
     vault: {
       getFiles: () => files.map((path) => new TFile(path)),
       getMarkdownFiles: () => files.filter((path) => path.endsWith('.md')).map((path) => new TFile(path)),
