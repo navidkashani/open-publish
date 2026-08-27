@@ -39,6 +39,7 @@ published in Git.
 | `starters/quartz/` | The site repository template: fetches a snapshot and builds it with Quartz. |
 | `gateway/` | An optional Cloudflare Worker, so the plugin can reach R2 without holding a storage key. |
 | `docs/` | Setup, architecture, security, troubleshooting. |
+| `manifest.json` | The plugin manifest. It lives here, not in `plugin/`, because that is where the Obsidian community directory reads it from. The build copies it next to `main.js`; that copy is generated and gitignored, so edit this one. |
 
 ## Installing the plugin
 

@@ -6,3 +6,6 @@ plugin/main.js.map
 # Obsidian writes this if the repo root is ever opened as a vault. It should not be.
 # The scratch test vault lives at ~/Documents/obsidian-open-publish-test
 .obsidian/
+
+# Copied from the root manifest.json by the build. Edit that one, not this.
+plugin/manifest.json

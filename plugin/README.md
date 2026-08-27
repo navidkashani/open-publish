@@ -34,6 +34,10 @@ npm run build      # produces main.js
 To load it in a vault, copy `manifest.json`, `main.js` and `styles.css` into
 `<vault>/.obsidian/plugins/open-publish/` and enable it in Community Plugins.
 
+`main.js` and `manifest.json` both appear here only after a build. The manifest
+is copied from the repository root, which is the one to edit; the copy in this
+directory is a build artefact.
+
 ## Source layout
 
 ```
