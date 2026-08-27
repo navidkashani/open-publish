@@ -405,3 +405,72 @@ test('a note renamed into the homepage slot redirects to the site root, not to /
     await rm(cwd, { recursive: true, force: true })
   }
 })
+
+test('the build follows current.json when it moves, content and site options together', async () => {
+  // This is the whole of a rollback, from the build's side: the plugin rewrites
+  // one ~60-byte key and the next build has to serve a different site. Nothing
+  // in the plugin's own suite can show that, because the thing that has to
+  // follow the pointer lives here.
+  await withBucket(
+    {
+      files: {
+        'Notes/Keep.md': { content: '# Keep', slug: 'keep' },
+        'Notes/Private.md': { content: '# Private', slug: 'private' },
+      },
+      site: { noIndex: true },
+    },
+    async ({ cwd, env, snapshot, objects }) => {
+      assert.equal((await runScript('fetch-content.mjs', cwd, env)).code, 0)
+      assert.ok((await listFiles(join(cwd, 'content'))).includes('private.md'))
+
+      // The version before the private note was published, and before the site
+      // was hidden from search engines. Its one object is already in the bucket:
+      // same bytes, same hash, which is why a rollback uploads nothing.
+      const older = {
+        ...snapshot,
+        id: '2026-08-14T09-12-00Z-aaaaaa',
+        files: { 'Notes/Keep.md': snapshot.files['Notes/Keep.md'] },
+        site: { ...snapshot.site, noIndex: false },
+      }
+      objects.set(`snapshots/${older.id}.json`, Buffer.from(JSON.stringify(older)))
+      objects.set('current.json', Buffer.from(JSON.stringify({ version: 1, snapshot: older.id, updatedAt: Date.now() })))
+
+      const rebuilt = await runScript('fetch-content.mjs', cwd, env)
+      assert.equal(rebuilt.code, 0, rebuilt.stderr)
+
+      const files = await listFiles(join(cwd, 'content'))
+      assert.ok(files.includes('keep.md'))
+      assert.equal(files.includes('private.md'), false, 'the page the rollback takes off has to leave the tree')
+
+      const state = JSON.parse(await readFile(join(cwd, '.op-build-state.json'), 'utf8'))
+      assert.equal(state.snapshot, older.id, 'and the marker names the version the site is now built from')
+
+      // The site options go back with the content, which is why the plugin's
+      // confirm step names them. Here that is robots.txt appearing and going.
+      await mkdir(join(cwd, 'public'), { recursive: true })
+      await writeFile(join(cwd, 'public/index.html'), '<html></html>')
+      assert.equal((await runScript('finalize.mjs', cwd, env)).code, 0)
+      await assert.rejects(
+        () => readFile(join(cwd, 'public/robots.txt'), 'utf8'),
+        'rolling back past "hide from search engines" really does un-hide the site',
+      )
+    },
+  )
+})
+
+test('a rollback to a version whose objects were collected fails the build loudly', async () => {
+  // The plugin refuses this before it writes the pointer. If something ever
+  // gets past that guard, the build must stop rather than deploy a site with
+  // holes in it.
+  await withBucket(
+    { files: { 'a.md': { content: 'a', slug: 'a' }, 'gone.md': { content: 'gone', slug: 'gone' } } },
+    async ({ cwd, env, snapshot, objects }) => {
+      const collected = snapshot.files['gone.md'].hash
+      objects.delete(`objects/${collected.slice(0, 2)}/${collected}`)
+
+      const result = await runScript('fetch-content.mjs', cwd, env)
+      assert.notEqual(result.code, 0, 'a half-built site is worse than a failed build')
+      assert.match(result.stderr, /gone\.md/, 'and it names the file, not just the hash')
+    },
+  )
+})
