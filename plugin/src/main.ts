@@ -131,12 +131,26 @@ export default class OpenPublishPlugin extends Plugin {
   }
 
   openSettings(): void {
-    // `setting` is on the app object but not in the public typings.
+    // There is no public API for this. `App` exposes workspace, vault,
+    // metadataCache, fileManager and a handful more, and nothing at all for
+    // settings, so `app.setting` is the only route and it is undocumented.
+    //
+    // Kept rather than dropped, because the alternative is removing a recovery
+    // path people reach from a failed publish, and an undocumented call that
+    // works today beats no way back. But its absence is now reported instead of
+    // swallowed: the window that sends people here has already closed by the
+    // time this runs, so a silent no-op would strand them mid-recovery with
+    // nothing on screen and nothing to try.
     const app = this.app as unknown as {
       setting?: { open(): void; openTabById(id: string): void }
     }
-    app.setting?.open()
-    app.setting?.openTabById(this.manifest.id)
+    try {
+      if (!app.setting) throw new Error('no settings API on this version')
+      app.setting.open()
+      app.setting.openTabById(this.manifest.id)
+    } catch {
+      new Notice('Could not open settings from here. Go to Settings, then Community plugins, then Open Publish.', 8000)
+    }
   }
 
   /**
