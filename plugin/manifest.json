@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "minAppVersion": "1.13.0",
   "description": "Publish a subset of your vault to your own object storage and your own static site host. Free, self-hosted, no SaaS in the middle.",
-  "author": "Open Publish",
-  "authorUrl": "https://github.com/open-publish/open-publish",
+  "author": "Navid Kashani",
+  "authorUrl": "https://github.com/navidkashani/open-publish",
   "isDesktopOnly": false
 }

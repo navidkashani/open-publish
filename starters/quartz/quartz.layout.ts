@@ -18,7 +18,7 @@ export const sharedPageComponents: SharedLayout = {
   afterBody: [],
   footer: Component.Footer({
     links: {
-      'Published with Open Publish': 'https://github.com/open-publish/open-publish',
+      'Published with Open Publish': 'https://github.com/navidkashani/open-publish',
     },
   }),
 }

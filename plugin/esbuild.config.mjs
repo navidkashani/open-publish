@@ -3,7 +3,7 @@ import process from 'node:process'
 import builtins from 'builtin-modules'
 
 const banner = `/*
-Open Publish - bundled by esbuild. Source: https://github.com/open-publish/open-publish
+Open Publish - bundled by esbuild. Source: https://github.com/navidkashani/open-publish
 */`
 
 const production = process.argv[2] === 'production'
