@@ -1,0 +1,84 @@
+# Builds a tagged version and attaches the three files Obsidian downloads.
+#
+# Obsidian installs a plugin by fetching main.js, manifest.json and styles.css
+# from the GitHub release whose tag matches the `version` in the manifest at the
+# HEAD of the default branch. Two things therefore have to be true at once, and
+# neither is checked by anything else:
+#
+#   1. The tag and the manifest version agree. If they drift, the directory
+#      points at a release that does not exist and the plugin cannot be
+#      installed. That failure appears only after publishing, to users.
+#   2. main.js is actually built from this tag. It is gitignored, so it exists
+#      nowhere in the repository and cannot be attached by hand without someone
+#      remembering to build first.
+#
+# So the tag is verified against the manifest before anything is published, and
+# the build runs here rather than on a laptop.
+#
+# Separate from check.yml deliberately: that workflow is `contents: read` and
+# should stay that way. Publishing needs write, and the narrower the job that
+# holds it, the better.
+name: release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: plugin/package-lock.json
+
+      - run: npm ci --prefix plugin
+
+      # The full suite, not just a build. A release is the first artefact that
+      # is genuinely hard to take back, so it does not get a weaker check than
+      # an ordinary push does.
+      - run: npm run check
+
+      - name: The tag must match the manifest version
+        run: |
+          tag="${GITHUB_REF_NAME#v}"
+          manifest=$(node -p "require('./manifest.json').version")
+          echo "tag:      $tag"
+          echo "manifest: $manifest"
+          if [ "$tag" != "$manifest" ]; then
+            echo
+            echo "Tag ${GITHUB_REF_NAME} does not match manifest version ${manifest}."
+            echo "Obsidian looks for the release tagged exactly v${manifest}, so this"
+            echo "release would be invisible to it. Fix one of the two and re-tag."
+            exit 1
+          fi
+
+      # styles.css is committed; main.js and the manifest copy are built. Named
+      # explicitly rather than globbed, so a missing one fails here instead of
+      # producing a release that is quietly incomplete.
+      - name: Check the assets exist
+        run: |
+          for f in plugin/main.js plugin/manifest.json plugin/styles.css; do
+            [ -f "$f" ] || { echo "missing build output: $f"; exit 1; }
+          done
+          ls -l plugin/main.js plugin/manifest.json plugin/styles.css
+
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes \
+            plugin/main.js \
+            plugin/manifest.json \
+            plugin/styles.css
