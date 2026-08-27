@@ -725,3 +725,57 @@ test('no such warning when this is the host that was published from', () => {
   })
   assert.equal(find(root, byClass('op-host-moved')), null)
 })
+
+// --- site history ---------------------------------------------------------
+
+test('Maintenance offers Site history, next to the other storage-wide jobs', () => {
+  const { root } = open()
+  const row = rowNamed(root, 'Site history')
+  assert.ok(row, 'this is where clean-up and the self-test live; it belongs beside them')
+  assert.match(descOf(row), /earlier version of your site live again/)
+  assert.equal(find(row, (node) => node.tagName === 'BUTTON').textContent, 'Browse')
+})
+
+test('a site left on an older version says so, and keeps saying it', () => {
+  const { root } = open({
+    lastSnapshotId: '2026-08-14T09-12-00Z-aaaaaa',
+    lastRollback: { to: '2026-08-14T09-12-00Z-aaaaaa', from: '2026-08-20T11-30-00Z-bbbbbb', at: 1 },
+  })
+  const panel = find(root, byClass('op-rolled-back'))
+  assert.ok(panel, 'a Notice fired at rollback time is gone by the moment this matters')
+  assert.match(panel.textContent, /showing an older version/)
+  assert.match(panel.textContent, /Publishing takes the site forward/)
+})
+
+test('the panel lives in Maintenance, not in Storage: this is publish history, not a bucket move', () => {
+  const { root } = open({ lastRollback: { to: '2026-08-14T09-12-00Z-aaaaaa', from: null, at: 1 } })
+  const rows = findAll(root, (node) => node.hasClass('setting-item'))
+  const heading = rows.findIndex(
+    (node) => node.hasClass('setting-item-heading') && node.textContent.startsWith('Maintenance'),
+  )
+  const history = rows.indexOf(rowNamed(root, 'Site history'))
+  assert.ok(heading >= 0 && history > heading)
+  assert.equal(find(root, byClass('op-storage-moved')), null, 'and it raises no storage warning')
+})
+
+test('no panel once a publish has taken the site forward again', () => {
+  const { root } = open({ lastSnapshotId: 'snap-2' })
+  assert.equal(find(root, byClass('op-rolled-back')), null)
+})
+
+test('the Last publish row stops naming a version once a rollback has moved it', () => {
+  // `lastSnapshotId` follows the rollback and `lastPublishedAt` does not, which
+  // is right for both fields and a lie when read as one sentence: it would date
+  // a publish that never happened. The panel above says what is live.
+  const stored = { lastSnapshotId: '2026-08-14T09-12-00Z-aaaaaa', lastPublishedAt: 1_700_000_000_000 }
+  const { root } = open(stored)
+  assert.match(descOf(rowNamed(root, 'Last publish')), /\(version 2026-08-14T09-12-00Z-aaaaaa\)/)
+
+  const { root: rolled } = open({
+    ...stored,
+    lastRollback: { to: '2026-08-14T09-12-00Z-aaaaaa', from: '2026-08-20T11-30-00Z-bbbbbb', at: 1 },
+  })
+  const desc = descOf(rowNamed(rolled, 'Last publish'))
+  assert.equal(desc, new Date(1_700_000_000_000).toLocaleString())
+  assert.doesNotMatch(desc, /version/)
+})

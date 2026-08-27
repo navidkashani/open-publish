@@ -1,10 +1,18 @@
 import { Notice, PluginSettingTab, Setting } from 'obsidian'
 import type { App } from 'obsidian'
 import type OpenPublishPlugin from '../main.ts'
-import { hasHostMoved, hasStorageMoved, storageMovedWarning } from '../settings.ts'
+import {
+  ROLLBACK_HEADLINE,
+  hasHostMoved,
+  hasStorageMoved,
+  isRolledBack,
+  rollbackWarning,
+  storageMovedWarning,
+} from '../settings.ts'
 import { providerById } from '../destinations/providers.ts'
 import { isAlwaysExcluded, parsePublishFrontmatter } from '../core/selection.ts'
 import { FolderModal } from './FolderModal.ts'
+import { RollbackModal } from './RollbackModal.ts'
 import { folderRulesSummary, summarizeRules } from './FolderRules.ts'
 import { PathSuggest, normalizeTypedPath } from './PathSuggest.ts'
 import { renderRuleRows } from './RuleList.ts'
@@ -399,12 +407,41 @@ export class OpenPublishSettingTab extends PluginSettingTab {
     new Setting(containerEl).setName('Maintenance').setHeading()
 
     const lastPublished = this.plugin.settings.lastPublishedAt
+    // The version is named only when it is still the one that publish produced.
+    // A rollback moves `lastSnapshotId` and leaves `lastPublishedAt` where it
+    // was, which is correct for both fields and a lie when read as one
+    // sentence: it would date a publish that never happened. The panel above
+    // says which version is live, so this drops back to the plain fact.
+    const rolledBack = isRolledBack(this.plugin.settings)
     new Setting(containerEl)
       .setName('Last publish')
       .setDesc(
         lastPublished
-          ? `${new Date(lastPublished).toLocaleString()} (version ${this.plugin.settings.lastSnapshotId ?? 'unknown'})`
+          ? rolledBack
+            ? new Date(lastPublished).toLocaleString()
+            : `${new Date(lastPublished).toLocaleString()} (version ${this.plugin.settings.lastSnapshotId ?? 'unknown'})`
           : 'Nothing has been published from this device yet.',
+      )
+
+    // The panel, and not in Storage where `hasStorageMoved`'s lives. That one is
+    // about where the bucket is; this one is about publish history, which is
+    // what this section is for. Above the row it is about, so the explanation
+    // arrives before the control.
+    if (isRolledBack(this.plugin.settings)) {
+      const box = containerEl.createDiv({ cls: 'op-notice-warning op-rolled-back' })
+      box.createEl('p', { text: ROLLBACK_HEADLINE })
+      box.createEl('p', { text: rollbackWarning(this.plugin.settings) ?? '' })
+    }
+
+    new Setting(containerEl)
+      .setName('Site history')
+      .setDesc('Make an earlier version of your site live again.')
+      .addButton((button) =>
+        button
+          .setButtonText('Browse')
+          // Repaint the whole tab afterwards: a rollback raises the panel above
+          // and a roll forward clears it, and neither is visible from here.
+          .onClick(() => new RollbackModal(this.app, this.plugin, () => this.display()).open()),
       )
 
     new Setting(containerEl)

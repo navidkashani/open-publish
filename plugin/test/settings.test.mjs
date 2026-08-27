@@ -9,6 +9,8 @@ import {
   hostTarget,
   isDestinationConfigured,
   isBuilderConfigured,
+  isRolledBack,
+  rollbackWarning,
   storageMovedWarning,
   storageTarget,
 } from '../src/settings.ts'
@@ -545,4 +547,66 @@ test('and the same hedge applies coming back off a gateway', () => {
   })
   settings.destination = { type: 's3', provider: 'r2', endpoint: R2_ENDPOINT, bucket: 'my-notes', region: 'auto', accessKeyId: 'k', secretRef: 'op-r2-secret', prefix: '', forcePathStyle: true }
   assert.match(storageMovedWarning(settings), /If it reaches the same bucket/)
+})
+
+// --- the rollback in force ------------------------------------------------
+
+test('a data.json written before rollback existed loads with none in force', () => {
+  const settings = migrateSettings({ lastSnapshotId: 'snap-1' })
+  assert.equal(settings.lastRollback, null)
+  assert.equal(isRolledBack(settings), false)
+  assert.equal(rollbackWarning(settings), null)
+})
+
+test('a stored rollback survives the round trip', () => {
+  const settings = migrateSettings({
+    lastRollback: { to: '2026-08-14T09-12-00Z-aaaaaa', from: '2026-08-20T11-30-00Z-bbbbbb', at: 1_700_000_000_000 },
+  })
+  assert.deepEqual(settings.lastRollback, {
+    to: '2026-08-14T09-12-00Z-aaaaaa',
+    from: '2026-08-20T11-30-00Z-bbbbbb',
+    at: 1_700_000_000_000,
+  })
+  assert.equal(isRolledBack(settings), true)
+})
+
+test('a half-shaped rollback is dropped rather than trusted', () => {
+  // Validated field by field like `site.analytics`, because this one decides
+  // whether a panel claims the site is behind the notes.
+  for (const stored of [{}, { from: 'x' }, { to: 42 }, { to: '' }, 'nonsense', []]) {
+    assert.equal(migrateSettings({ lastRollback: stored }).lastRollback, null, JSON.stringify(stored))
+  }
+  const partial = migrateSettings({ lastRollback: { to: 'snap-1' } })
+  assert.deepEqual(partial.lastRollback, { to: 'snap-1', from: null, at: 0 })
+})
+
+test('the warning names the version, read out of its own ID', () => {
+  const settings = migrateSettings({ lastRollback: { to: '2026-08-14T09-12-00Z-aaaaaa', from: null, at: 1 } })
+  const warning = rollbackWarning(settings)
+  assert.ok(warning.includes(new Date(Date.UTC(2026, 7, 14, 9, 12)).toLocaleString()))
+  assert.match(warning, /Publishing takes the site forward/)
+})
+
+test('an ID that carries no timestamp falls back to when the pointer moved', () => {
+  const settings = migrateSettings({ lastRollback: { to: 'snap-1', from: null, at: 1_700_000_000_000 } })
+  assert.ok(rollbackWarning(settings).includes(new Date(1_700_000_000_000).toLocaleString()))
+})
+
+test('publishing forward is what clears it', () => {
+  // A state, not an event: it stands until somebody publishes past it, which is
+  // the step every real rollback ends with.
+  const settings = published({ lastRollback: { to: 'snap-old', from: 'snap-new', at: 1 } })
+  assert.equal(isRolledBack(settings), true)
+
+  recordPublish(settings, outcome(), 1_700_000_000_000)
+  assert.equal(settings.lastRollback, null)
+  assert.equal(isRolledBack(settings), false)
+})
+
+test('a publish that committed nothing leaves the rollback standing', () => {
+  // Nothing changed, so the site is still showing the older version and the
+  // panel is still telling the truth.
+  const settings = published({ lastRollback: { to: 'snap-old', from: 'snap-new', at: 1 } })
+  recordPublish(settings, outcome({ committed: false }), 1_700_000_000_000)
+  assert.equal(isRolledBack(settings), true)
 })

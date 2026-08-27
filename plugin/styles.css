@@ -386,10 +386,37 @@
 /* A cost, not a note. It reads in the same colour as the warning panel. */
 .op-provider-caution-line { color: var(--text-warning); font-size: var(--font-ui-smaller); margin-top: 2px; }
 
+/*
+ * A version whose content has been cleaned up: listed, greyed, and not
+ * choosable. Hiding it would leave a history with a silent gap in it, which is
+ * a history somebody assumes is complete.
+ */
+.op-provider-row.is-unavailable { cursor: default; opacity: 0.6; }
+
 /* Touch has no hover, so selection must be legible without one. */
 @media (hover: hover) {
   .op-provider-row:hover { background: var(--background-modifier-hover); }
+  .op-provider-row.is-unavailable:hover { background: transparent; }
 }
+
+/* --- site history ------------------------------------------------------- */
+
+.op-version-truncated { margin-top: calc(var(--op-gap) * -0.5); margin-bottom: var(--op-gap); }
+.op-version-diff p { margin: 0 0 4px; }
+.op-version-options-title { margin-bottom: 4px; }
+.op-version-options {
+  border-left: 2px solid var(--background-modifier-border);
+  padding-left: 10px;
+  margin-bottom: var(--op-gap);
+}
+.op-version-option { color: var(--text-muted); font-size: var(--font-ui-small); }
+/*
+ * The one option change that can make the site *more* exposed than the person
+ * left it: going back past the day they ticked "hide from search engines".
+ */
+.op-version-option-warn { color: var(--text-warning); font-weight: var(--font-semibold); }
+.op-version-honesty p { margin: 0 0 6px; }
+.op-version-honesty p:last-child { margin-bottom: 0; }
 
 .op-wizard-links { display: flex; flex-wrap: wrap; gap: 14px; margin: 8px 0 4px; font-size: var(--font-ui-small); }
 

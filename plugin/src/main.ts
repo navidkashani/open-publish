@@ -1,12 +1,14 @@
 import { Notice, Plugin, TFile, normalizePath } from 'obsidian'
 import {
   DEFAULT_SETTINGS,
+  ROLLBACK_HEADLINE,
   storageMovedWarning,
   hasStorageMoved,
   isDestinationConfigured,
   isHookConfigured,
   migrateSettings,
   recordPublish,
+  rollbackWarning,
   secretRefOf,
 } from './settings.ts'
 import type { DestinationSettings, Settings } from './settings.ts'
@@ -27,8 +29,11 @@ import type { PublishSummary, SessionStatus } from './core/session.ts'
 import { PublishError, toPublishError } from './core/errors.ts'
 import { getPublishFlag, isSupportedFile, parsePublishFrontmatter } from './core/selection.ts'
 import { describeGcPlan, planGc, runGc } from './core/gc.ts'
+import { listSiteVersions, planRollback, runRollback } from './core/rollback.ts'
+import type { RollbackOptions, RollbackPlan, SiteVersionList } from './core/rollback.ts'
 import { runSelfTest } from './core/selftest.ts'
 import { PublishModal } from './ui/PublishModal.ts'
+import { RollbackModal } from './ui/RollbackModal.ts'
 import { OpenPublishSettingTab } from './ui/SettingsTab.ts'
 import { SetupWizard } from './ui/SetupWizard.ts'
 import { StatusBar } from './ui/StatusBar.ts'
@@ -112,6 +117,14 @@ export default class OpenPublishPlugin extends Plugin {
       id: 'clean-up',
       name: 'Clean up unused files in storage',
       callback: () => void this.runGarbageCollection(),
+    })
+    // Named for what somebody in trouble will type, which is "roll back",
+    // even though the window it opens goes forward as well and is called Site
+    // history for that reason.
+    this.addCommand({
+      id: 'rollback',
+      name: 'Roll the site back to an earlier version',
+      callback: () => this.openRollbackModal(),
     })
   }
 
@@ -364,6 +377,11 @@ export default class OpenPublishPlugin extends Plugin {
     // the scan has nothing to diff against and every HEAD misses. The review is
     // where that surprise lands, so it is where the reason belongs.
     if (hasStorageMoved(this.settings)) result.warnings.push(storageMovedWarning(this.settings))
+    // And, for the same reason one line up, why the site is showing something
+    // other than what this vault last published. Without it, a review screen
+    // full of changes after a rollback is a mystery.
+    const rolledBack = rollbackWarning(this.settings)
+    if (rolledBack) result.warnings.push(`${ROLLBACK_HEADLINE} ${rolledBack}`)
     return result
   }
 
@@ -523,6 +541,121 @@ export default class OpenPublishPlugin extends Plugin {
     }
   }
 
+  // --- site history -------------------------------------------------------
+
+  /**
+   * Open Site history, or say why it cannot be opened.
+   *
+   * The same two checks the publish window makes, for the same reasons: with no
+   * storage details there is nothing to list, and on a second device the
+   * settings all look filled in while the one credential that signs a request
+   * is not on this machine.
+   */
+  private openRollbackModal(): void {
+    if (!isDestinationConfigured(this.settings)) {
+      new Notice('Open Publish needs storage details first. Opening the setup guide.')
+      this.openSetup()
+      return
+    }
+    if (!this.hasStorageSecret()) {
+      new Notice(
+        'This device does not have the storage key for this vault yet, because Obsidian keeps keys on each ' +
+          'device separately. Opening settings so you can link it.',
+        10000,
+      )
+      this.openSettings()
+      return
+    }
+    new RollbackModal(this.app, this).open()
+  }
+
+  /** Every version of the site still in storage, newest first. */
+  async listSiteVersions(options: RollbackOptions = {}): Promise<SiteVersionList> {
+    this.refuseWhilePublishing()
+    return listSiteVersions(this.destination(), options)
+  }
+
+  /** What making that version live would change. Changes nothing itself. */
+  async planRollback(targetId: string, options: RollbackOptions = {}): Promise<RollbackPlan> {
+    this.refuseWhilePublishing()
+    return planRollback(this.destination(), targetId, options)
+  }
+
+  /**
+   * Move the pointer, then ask the host to rebuild.
+   *
+   * Two outcomes, kept apart on purpose and in the same way a publish keeps
+   * them apart: once `current.json` is written the rollback has happened, full
+   * stop, and nothing the host does or fails to do afterwards turns that into
+   * a failed rollback. The result says which of the two went how.
+   */
+  async rollBackTo(plan: RollbackPlan): Promise<RollbackResult> {
+    // The second of the two guards, and the one that matters: the plan was
+    // made before an object listing, which takes time, and a publish that
+    // started during it is committing a pointer of its own.
+    this.refuseWhilePublishing()
+
+    await runRollback(this.destination(), plan)
+
+    this.settings.lastSnapshotId = plan.target.id
+    // Recorded only while a newer version exists in storage. The list goes
+    // forward too, and telling somebody their site shows an older version
+    // right after they redid their way to the newest one would be exactly the
+    // lie that "Site history" is named to avoid. `behind` is the right test
+    // rather than "did this go backwards": rolling forward without reaching
+    // the top leaves the site behind, and the panel has to stay.
+    this.settings.lastRollback = plan.behind
+      ? { to: plan.target.id, from: plan.from, at: Date.now() }
+      : null
+
+    const build = await this.triggerRollbackBuild(plan.target.id)
+    try {
+      await this.saveSettings()
+    } catch {
+      // Local bookkeeping only. The site is pointed at that version either way.
+    }
+    return { snapshotId: plan.target.id, ...build }
+  }
+
+  /**
+   * The rebuild, deliberately past the throttle.
+   *
+   * `throttleState` exists to stop *automatic* publish-driven builds burning a
+   * monthly allowance. A rollback is manual, rare, and frequently urgent:
+   * being told to wait four minutes with a private note live would be
+   * indefensible. `autoTrigger` is ignored for the same reason it is ignored
+   * by "Trigger a site build without publishing": both are somebody asking.
+   */
+  private async triggerRollbackBuild(snapshotId: string): Promise<Omit<RollbackResult, 'snapshotId'>> {
+    const builder = this.builder()
+    if (!builder) return { build: 'not-configured' }
+    try {
+      await builder.trigger(snapshotId)
+      this.settings.lastBuildTriggeredAt = Date.now()
+      return { build: 'started' }
+    } catch (error) {
+      return {
+        build: 'failed',
+        buildError: toPublishError(error, 'The build could not be started.').toDisplayString(),
+      }
+    }
+  }
+
+  /**
+   * The first of the two in-flight-publish guards, taken twice.
+   *
+   * A rollback racing a publish decides the winner by whichever PUT lands
+   * last, which is a decision neither of them made. Refusing is the same
+   * answer `runGarbageCollection` gives, for the same reason.
+   */
+  private refuseWhilePublishing(): void {
+    if (this.publisher.isPublishing()) {
+      throw new PublishError('storage-conflict', 'A publish is running.', {
+        hint: 'Wait for it to finish, then choose a version.',
+      })
+    }
+  }
+
   async runGarbageCollection(): Promise<void> {
     if (this.publisher.isPublishing()) {
       new Notice('A publish is running. Cleaning up now could delete files that build is about to read.', 8000)
@@ -556,4 +689,18 @@ export default class OpenPublishPlugin extends Plugin {
       new Notice(toPublishError(error, 'Cleanup failed.').toDisplayString(), 10000)
     }
   }
+}
+
+/**
+ * What a rollback did, in the two halves it is honest to keep apart.
+ *
+ * The pointer moved: that is the rollback, and it succeeded or this value does
+ * not exist. `build` is the host catching up, and none of its outcomes is a
+ * reason to tell somebody their rollback failed.
+ */
+export interface RollbackResult {
+  /** The version `current.json` now names. */
+  snapshotId: string
+  build: 'started' | 'not-configured' | 'failed'
+  buildError?: string
 }

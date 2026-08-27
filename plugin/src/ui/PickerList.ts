@@ -21,12 +21,22 @@ export interface PickerRow {
   id: string
   name: string
   recommended?: boolean
+  /** Overrides the badge text. `recommended` is the shorthand for "Recommended". */
+  badge?: string
   /** One line: what this is, and what it costs. */
   summary: string
   /** The thing worth knowing before choosing, in the warning colour. */
   caution?: string
   /** A second muted line, where a row has one more thing to say. */
   extra?: string
+  /**
+   * Shown, but not choosable.
+   *
+   * Listed rather than hidden because "that version is not here" is an answer,
+   * and a history with silent gaps in it is one people assume is complete.
+   * `caution` carries the reason.
+   */
+  disabled?: boolean
 }
 
 export function renderPickerList(
@@ -42,15 +52,27 @@ export function renderPickerList(
       attr: { type: 'button', 'aria-pressed': String(entry.id === selected) },
     })
     row.toggleClass('is-selected', entry.id === selected)
+    row.toggleClass('is-unavailable', entry.disabled === true)
+    // Disabled in the DOM *and* checked in the handler: the attribute is what a
+    // keyboard and a screen reader read, and the check is what holds if some
+    // caller ever dispatches a click at it directly.
+    if (entry.disabled) {
+      row.setAttr('disabled', 'true')
+      row.setAttr('aria-disabled', 'true')
+    }
 
     const heading = row.createDiv({ cls: 'op-provider-heading' })
     heading.createSpan({ cls: 'op-provider-name', text: entry.name })
-    if (entry.recommended) heading.createSpan({ cls: 'op-provider-badge', text: 'Recommended' })
+    const badge = entry.badge ?? (entry.recommended ? 'Recommended' : null)
+    if (badge) heading.createSpan({ cls: 'op-provider-badge', text: badge })
 
     row.createDiv({ cls: 'op-provider-summary', text: entry.summary })
     if (entry.caution) row.createDiv({ cls: 'op-provider-caution-line', text: entry.caution })
     if (entry.extra) row.createDiv({ cls: 'op-provider-summary', text: entry.extra })
 
-    row.addEventListener('click', () => onPick(entry.id))
+    row.addEventListener('click', () => {
+      if (entry.disabled) return
+      onPick(entry.id)
+    })
   }
 }

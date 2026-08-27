@@ -15,6 +15,7 @@ registerHooks({
 export const { PublishModal } = await import('../src/ui/PublishModal.ts')
 export const { StatusBar } = await import('../src/ui/StatusBar.ts')
 export const { FolderModal } = await import('../src/ui/FolderModal.ts')
+export const { RollbackModal } = await import('../src/ui/RollbackModal.ts')
 export const { OpenPublishSettingTab } = await import('../src/ui/SettingsTab.ts')
 export const { SetupWizard } = await import('../src/ui/SetupWizard.ts')
 /**

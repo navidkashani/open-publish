@@ -1,9 +1,9 @@
 /**
  * The storage contract.
  *
- * Deliberately four verbs plus two GC-only ones. `list()` and `delete()` are
- * *not* on the publish path, so a future Git-backed destination (design note
- * 2.11) that cannot list efficiently can still implement this interface.
+ * Deliberately four verbs plus two maintenance ones. `list()` and `delete()`
+ * are *not* on the publish path, so a future Git-backed destination (design
+ * note 2.11) that cannot list efficiently can still implement this interface.
  */
 
 export interface PutOptions {
@@ -72,7 +72,15 @@ export interface Destination {
    * publisher degrades to a read-then-warn check.
    */
   getWithEtag?(key: string, options?: ReadOptions): Promise<{ body: ArrayBuffer; etag?: string } | null>
-  /** GC only. */
+  /**
+   * Maintenance only, never the publish path.
+   *
+   * Two callers, asking opposite questions of the same listing: garbage
+   * collection asks which objects nothing points at, and site history asks
+   * whether everything an old manifest points at is still there. One listing
+   * each rather than one HEAD per hash, which is what keeps both cheap enough
+   * to be worth doing at all.
+   */
   list(prefix: string): Promise<ListEntry[]>
   /** GC only. */
   delete(key: string): Promise<void>

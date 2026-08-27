@@ -227,6 +227,25 @@ export async function computeSnapshotId(
   return `${timestamp}-${digest}`
 }
 
+/**
+ * When a snapshot ID says it was made, or null when it does not say.
+ *
+ * The inverse of the timestamp half of `computeSnapshotId`, and here beside it
+ * for that reason: `2026-08-14T09-12-00Z-1a2b3c` is an ISO timestamp with its
+ * colons swapped for dashes so it is safe in a key, and swapping them back is
+ * the whole of it.
+ *
+ * Worth having because it dates a version without opening its manifest, which
+ * is what lets the settings panel name the version it is talking about with no
+ * network at all.
+ */
+export function snapshotTime(id: string): number | null {
+  const match = /^(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})Z/.exec(id)
+  if (!match) return null
+  const parsed = Date.parse(`${match[1]}T${match[2]}:${match[3]}:${match[4]}Z`)
+  return Number.isNaN(parsed) ? null : parsed
+}
+
 function sortKeysDeep(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(sortKeysDeep)
   if (value === null || typeof value !== 'object') return value

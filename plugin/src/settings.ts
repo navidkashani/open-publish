@@ -17,6 +17,7 @@ import { inferProvider, isProviderId, providerKind } from './destinations/provid
 import type { ProviderId } from './destinations/providers.ts'
 import { inferHost, isHostId } from './builders/hosts.ts'
 import type { HostId } from './builders/hosts.ts'
+import { snapshotTime } from './core/snapshot.ts'
 import type { SnapshotSite } from './core/snapshot.ts'
 
 export const SETTINGS_VERSION = 1
@@ -133,6 +134,20 @@ export interface Settings {
    * default. See `hasHostMoved`.
    */
   lastPublishedHostTarget: string | null
+  /**
+   * The rollback in force, or null.
+   *
+   * A state rather than an event, for the same reason `lastPublishedTarget` is:
+   * "your site is behind your notes" stays true until somebody publishes
+   * forward, and a Notice fired once at rollback time is gone by the moment it
+   * matters. `recordPublish` is what ends it, because publishing forward is
+   * what resolves it.
+   *
+   * `to` and `from` are snapshot IDs, and `at` is when the pointer moved. The
+   * version's *own* date is read back out of `to`, which carries it: see
+   * `snapshotTime`.
+   */
+  lastRollback: { to: string; from: string | null; at: number } | null
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -189,6 +204,7 @@ export const DEFAULT_SETTINGS: Settings = {
   lastBuildTriggeredAt: null,
   lastPublishedTarget: null,
   lastPublishedHostTarget: null,
+  lastRollback: null,
 }
 
 function cloneDefaults(): Settings {
@@ -245,8 +261,24 @@ export function migrateSettings(raw: unknown): Settings {
       : settings.lastSnapshotId
         ? hostTarget(settings.builder)
         : null
+  // Validated field by field rather than merged, the same way `site.analytics`
+  // is: this one decides whether a panel claims the site is behind the notes,
+  // and a half-shaped object from a hand-edited data.json would either crash
+  // the settings tab or fire a warning about a rollback that never happened.
+  settings.lastRollback = resolveRollback(stored.lastRollback)
   settings.version = SETTINGS_VERSION
   return settings
+}
+
+function resolveRollback(stored: unknown): Settings['lastRollback'] {
+  if (typeof stored !== 'object' || stored === null) return null
+  const raw = stored as Partial<NonNullable<Settings['lastRollback']>>
+  if (typeof raw.to !== 'string' || !raw.to) return null
+  return {
+    to: raw.to,
+    from: typeof raw.from === 'string' ? raw.from : null,
+    at: typeof raw.at === 'number' ? raw.at : 0,
+  }
 }
 
 /**
@@ -506,6 +538,12 @@ export function recordPublish(settings: Settings, outcome: PublishRecord, now: n
   if (!outcome.committed) return
   settings.lastSnapshotId = outcome.snapshotId
   settings.lastPublishedAt = now
+  // Publishing forward is what a rollback is waiting for, so this is where the
+  // "your site is showing an older version" panel ends. Gated on `committed`
+  // along with everything else here: a publish that found nothing to change
+  // left the site exactly as the rollback left it, and clearing the panel then
+  // would hide a state that is still true.
+  settings.lastRollback = null
   // Where it went, so that pointing the plugin somewhere else later can be
   // recognised as the migration it is rather than passing for a setting change.
   // See `hasStorageMoved`.
@@ -525,6 +563,36 @@ export interface PublishRecord {
   snapshotId: string
   committed: boolean
   buildTriggered: boolean
+}
+
+/**
+ * True when the site is serving a version this vault deliberately made live
+ * rather than the latest publish.
+ *
+ * One-shot, not a pin: this blocks nothing. It exists because every real
+ * rollback ends the same way (roll back, fix the note or the rule, publish
+ * forward), and the middle step is where somebody needs reminding that what
+ * they are looking at online is not what their vault holds.
+ */
+export function isRolledBack(settings: Settings): boolean {
+  return settings.lastRollback !== null
+}
+
+export const ROLLBACK_HEADLINE = 'Your site is showing an older version.'
+
+/** The panel's body, naming the version, or null when nothing is rolled back. */
+export function rollbackWarning(settings: Settings): string | null {
+  const rollback = settings.lastRollback
+  if (!rollback) return null
+  // The ID carries the version's own publish time, so the panel can name the
+  // version rather than the moment somebody clicked, which is the thing they
+  // would recognise. `at` is the fallback for an ID from some future scheme.
+  const when = snapshotTime(rollback.to) ?? rollback.at
+  const stamp = when ? new Date(when).toLocaleString() : rollback.to
+  return (
+    `You made the ${stamp} version live again. Your notes have moved on since then. ` +
+    'Publishing takes the site forward.'
+  )
 }
 
 export const HOST_MOVED_WARNING =
