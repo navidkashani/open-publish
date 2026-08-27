@@ -14,15 +14,9 @@ import type { Destination } from '../destinations/types.ts'
 import { contentTypeForPath } from '../destinations/content-types.ts'
 import type { Builder } from '../builders/types.ts'
 import { PublishError, toPublishError, verifyTimeoutError } from './errors.ts'
+import { writePointer } from './pointer.ts'
 import type { ScanResult } from './scanner.ts'
-import {
-  CURRENT_KEY,
-  computeSnapshotId,
-  objectKey,
-  parseCurrentPointer,
-  sameContent,
-  snapshotKey,
-} from './snapshot.ts'
+import { computeSnapshotId, objectKey, sameContent, snapshotKey } from './snapshot.ts'
 import type { Snapshot, SnapshotFile, SnapshotLink } from './snapshot.ts'
 
 export type PublishPhase =
@@ -359,64 +353,42 @@ export class Publisher {
   /**
    * The atomic commit.
    *
-   * `If-Match` on the ETag we read during the scan is a real compare-and-swap:
-   * if another device published in between, the PUT is rejected and we tell the
-   * user rather than silently clobbering their other machine's work. Providers
-   * without conditional writes degrade to a read-then-warn check: a lost
-   * update is possible there, but corruption still is not.
+   * The compare-and-swap itself lives in `core/pointer.ts`, because rollback
+   * writes the same key and two copies of that guard would drift. What stays
+   * here is what belongs to a publish rather than to the write: three attempts
+   * at it, and the events the progress view reads.
+   *
+   * The retry is handed *into* the swap so that it wraps the PUT alone, which
+   * is where the original had it. Wrapping the whole route instead re-runs the
+   * degraded route's read-then-warn check on attempt two, where a write that
+   * landed but lost its response reads back as somebody else's publish: the
+   * notes are committed, the publish is reported as a conflict, and no build
+   * is ever asked for. A precondition failure is a real answer rather than a
+   * transient fault, so it is never retried.
    */
   private async commitPointer(
     input: PublishInput,
     snapshot: Snapshot,
     onEvent: (event: PublishEvent) => void,
   ): Promise<void> {
-    const { destination, scan } = input
-    const pointer = JSON.stringify({ version: 1, snapshot: snapshot.id, updatedAt: Date.now() })
-    const body = new TextEncoder().encode(pointer).buffer as ArrayBuffer
-
-    // A compare-and-swap needs something to compare. Support for conditional
-    // writes is not enough on its own: without an ETag from the scan there is no
-    // token, and writing anyway would be an unconditional overwrite dressed up
-    // as a safe one: the exact silent lost update this whole path exists to
-    // prevent. No token means take the degraded route, same as a provider that
-    // cannot do it at all.
-    const hasCompareToken = scan.isFirstPublish || Boolean(scan.currentEtag)
-    if (destination.supportsConditionalWrites() && hasCompareToken) {
-      const options = scan.isFirstPublish
-        ? { ifNoneMatch: '*', contentType: 'application/json' }
-        : { ifMatch: scan.currentEtag as string, contentType: 'application/json' }
-
-      try {
-        await withRetry(() => destination.put(CURRENT_KEY, body, options), UPLOAD_RETRIES, input.signal, (error) =>
-          // A precondition failure is a real answer, not a transient fault: never retry it.
-          error instanceof PublishError && error.code === 'storage-conflict',
-        )
-        return
-      } catch (error) {
-        if (error instanceof PublishError && error.code === 'storage-conflict') throw error
-        if (destination.supportsConditionalWrites()) throw error
-        // The provider turned out not to support conditional writes. Fall
-        // through to the degraded path rather than failing the publish outright.
-        onEvent({
-          phase: 'committing',
-          message: 'This provider cannot do a safe swap. Checking for concurrent publishes instead.',
-        })
-      }
-    }
-
-    // Degraded path: read the pointer again, warn if it moved, then write.
-    // This read is the only thing standing between two devices and a lost
-    // update, so it must not come from a cache.
-    const latest = await destination.get(CURRENT_KEY, { fresh: true })
-    if (latest && !scan.isFirstPublish) {
-      const current = parseCurrentPointer(new TextDecoder().decode(latest))
-      if (scan.previous && current.snapshot !== scan.previous.id) {
-        throw new PublishError('storage-conflict', 'Another device published while this publish was running.', {
-          hint: 'Scan again so you can see their changes, then publish.',
-        })
-      }
-    }
-    await withRetry(() => destination.put(CURRENT_KEY, body, { contentType: 'application/json' }), UPLOAD_RETRIES, input.signal)
+    const { scan } = input
+    await writePointer(input.destination, snapshot.id, {
+      expectedEtag: scan.currentEtag,
+      isFirstPublish: scan.isFirstPublish,
+      expectedSnapshotId: scan.previous?.id ?? null,
+      conflict: {
+        message: 'Another device published while this publish was running.',
+        hint: 'Scan again so you can see their changes, then publish.',
+      },
+      onDegraded: (message) => onEvent({ phase: 'committing', message }),
+      retry: (operation) =>
+        withRetry(
+          operation,
+          UPLOAD_RETRIES,
+          input.signal,
+          (error) => error instanceof PublishError && error.code === 'storage-conflict',
+        ),
+    })
   }
 }
 

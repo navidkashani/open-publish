@@ -13,7 +13,15 @@
  */
 
 import type { Destination } from '../destinations/types.ts'
-import { CURRENT_KEY, objectKey, parseCurrentPointer, parseSnapshot, snapshotKey } from './snapshot.ts'
+import {
+  CURRENT_KEY,
+  listObjects,
+  listSnapshots,
+  objectKey,
+  parseCurrentPointer,
+  parseSnapshot,
+  snapshotKey,
+} from './snapshot.ts'
 import { formatBytes } from './limits.ts'
 
 export const KEEP_SNAPSHOTS = 5
@@ -61,21 +69,13 @@ export async function planGc(options: GcOptions): Promise<GcPlan> {
   const currentId = pointerBody ? parseCurrentPointer(new TextDecoder().decode(pointerBody)).snapshot : null
 
   onProgress?.('Listing snapshots…')
-  const snapshotEntries = await destination.list('snapshots/')
-  // Snapshot IDs start with a sortable timestamp, so lexical order is chronological.
-  const snapshotIds = snapshotEntries
-    .map((entry) => entry.key.replace(/^snapshots\//, '').replace(/\.json$/, ''))
-    .filter((id) => id.length > 0)
-    .sort()
-    .reverse()
+  const snapshotEntries = await listSnapshots(destination)
 
   const keep = new Set<string>()
   if (currentId) keep.add(currentId)
-  for (const id of snapshotIds.slice(0, KEEP_SNAPSHOTS)) keep.add(id)
+  for (const entry of snapshotEntries.slice(0, KEEP_SNAPSHOTS)) keep.add(entry.id)
   for (const entry of snapshotEntries) {
-    if (withinGracePeriod(entry.lastModified, now)) {
-      keep.add(entry.key.replace(/^snapshots\//, '').replace(/\.json$/, ''))
-    }
+    if (withinGracePeriod(entry.lastModified, now)) keep.add(entry.id)
   }
 
   onProgress?.(`Reading ${keep.size} retained snapshot(s)…`)
@@ -94,7 +94,7 @@ export async function planGc(options: GcOptions): Promise<GcPlan> {
   }
 
   onProgress?.('Listing objects…')
-  const objects = await destination.list('objects/')
+  const objects = await listObjects(destination)
 
   const deletableObjects: string[] = []
   let reclaimedBytes = 0
@@ -105,12 +105,7 @@ export async function planGc(options: GcOptions): Promise<GcPlan> {
     reclaimedBytes += entry.size
   }
 
-  const deletableSnapshots = snapshotEntries
-    .map((entry) => entry.key)
-    .filter((key) => {
-      const id = key.replace(/^snapshots\//, '').replace(/\.json$/, '')
-      return !keep.has(id)
-    })
+  const deletableSnapshots = snapshotEntries.filter((entry) => !keep.has(entry.id)).map((entry) => entry.key)
 
   return {
     deletableObjects,

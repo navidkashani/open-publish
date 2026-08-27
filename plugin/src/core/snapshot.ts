@@ -14,6 +14,7 @@
  */
 
 import { sha256Hex } from '../destinations/sigv4.ts'
+import type { Destination, ListEntry } from '../destinations/types.ts'
 
 export const SNAPSHOT_VERSION = 1
 export const CURRENT_KEY = 'current.json'
@@ -132,6 +133,49 @@ export function objectKey(hash: string): string {
 
 export function snapshotKey(id: string): string {
   return `snapshots/${id}.json`
+}
+
+export interface SnapshotEntry {
+  id: string
+  key: string
+  lastModified?: number
+}
+
+/**
+ * Every snapshot manifest in the bucket, newest first.
+ *
+ * Snapshot IDs begin with a sortable timestamp (`computeSnapshotId`), so
+ * lexical order is chronological and nothing has to be opened to sort them.
+ *
+ * Shared, because two callers ask opposite questions of the same list:
+ * garbage collection asks which snapshots are old enough to delete, and the
+ * site history asks which ones are still there to go back to. Two copies of
+ * "strip the prefix, strip the extension, sort" would eventually disagree
+ * about what counts as a snapshot, and the one that disagreed would either
+ * delete a version or hide one.
+ */
+export async function listSnapshots(destination: Pick<Destination, 'list'>): Promise<SnapshotEntry[]> {
+  const entries = await destination.list('snapshots/')
+  return entries
+    .map((entry) => ({
+      id: entry.key.replace(/^snapshots\//, '').replace(/\.json$/, ''),
+      key: entry.key,
+      lastModified: entry.lastModified,
+    }))
+    .filter((entry) => entry.id.length > 0)
+    .sort((a, b) => (a.id === b.id ? 0 : a.id < b.id ? 1 : -1))
+}
+
+/**
+ * Every content object in the bucket.
+ *
+ * One listing, never one HEAD per hash: a snapshot of a few hundred notes
+ * would otherwise be a few hundred round trips. Garbage collection asks which
+ * of these nothing points at; rollback asks whether everything a manifest
+ * points at is still here. Same request, opposite question.
+ */
+export async function listObjects(destination: Pick<Destination, 'list'>): Promise<ListEntry[]> {
+  return destination.list('objects/')
 }
 
 /**

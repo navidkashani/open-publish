@@ -325,3 +325,40 @@ test('a provider that hides its ETag falls back to read-then-warn, not to a sile
   )
   assert.equal(JSON.parse(destination.text(CURRENT_KEY)).snapshot, previousId, "device A's publish is intact")
 })
+
+test('a degraded-path write that lands but loses its response is retried, not called a conflict', async () => {
+  // The regression the pointer extraction introduced. With the retry wrapped
+  // around the whole swap rather than the PUT, attempt two re-read the pointer,
+  // saw its *own* snapshot there, and reported another device's publish: the
+  // notes committed, the publish failed, and no build ever asked for.
+  const destination = new FakeDestination({ conditionalWrites: false })
+  const previous = {
+    version: 1, id: 'snap-1', parent: null, createdAt: 0,
+    generator: { plugin: 'open-publish', version: '0.1.0' }, site, files: {}, links: {}, redirects: [],
+  }
+  destination.objects.set(CURRENT_KEY, { body: bytes('{"version":1,"snapshot":"snap-1"}'), etag: 'e1', lastModified: 0 })
+
+  let pointerPuts = 0
+  const original = destination.put.bind(destination)
+  destination.put = async (key, body, options) => {
+    const result = await original(key, body, options)
+    // The write applies, then the response is lost. An S3 500 does exactly this.
+    if (key === CURRENT_KEY && ++pointerPuts === 1) throw new Error('InternalError')
+    return result
+  }
+
+  const scan = makeScan({
+    files: { 'c.md': { hash: 'ee'.repeat(32), size: 1, mtime: 1, slug: 'c' } },
+    previous,
+    isFirstPublish: false,
+    currentEtag: undefined,
+  })
+
+  const outcome = await new Publisher().publish(
+    baseInput(destination, { scan, selectedPaths: new Set(['c.md']), readFile: async () => bytes('c') }),
+    () => {},
+  )
+  assert.equal(outcome.committed, true)
+  assert.equal(pointerPuts, 2, 'the second attempt writes rather than re-reading and taking fright')
+  assert.equal(JSON.parse(destination.text(CURRENT_KEY)).snapshot, outcome.snapshotId)
+})
