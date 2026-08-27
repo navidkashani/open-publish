@@ -1,0 +1,75 @@
+# The overlay lives in this repository; the assembled template lives in another
+# one, and until now nothing connected them. That gap is not cosmetic: setup
+# step 3 sends every new user straight at the template, so a stale template is a
+# broken product. It reached six commits and one build-breaking bug behind
+# without anything anywhere saying so.
+#
+# This is the thing that says so. On any push that touches the overlay, compare
+# the published template's copy of each shipped file against this one.
+#
+# The path filter lives here rather than in a step, because GitHub evaluates it
+# across every commit in the push. Deriving it from `HEAD^..HEAD` instead looks
+# equivalent and is not: a push of seven commits whose last one happens to touch
+# something else would skip the check and report success.
+name: template
+
+on:
+  push:
+    paths:
+      - 'starters/quartz/**'
+      # Changes to this check should run this check.
+      - '.github/workflows/template.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  drift:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+
+      # Only the tip tree is needed, and the template carries Quartz's full
+      # history, so depth 1 keeps this to a couple of seconds.
+      - name: Fetch the published template
+        run: |
+          git clone --quiet --depth 1 \
+            https://github.com/navidkashani/open-publish-quartz.git /tmp/published
+
+      # The file list is read out of assemble.mjs rather than repeated here. A
+      # second copy of the list is the same failure one level up: this check
+      # would go on passing while a file nobody added to either list stayed out
+      # of the template, which is precisely how wrangler.jsonc went missing.
+      - name: Compare it against the overlay
+        run: |
+          files=$(node -e "
+            import('./starters/quartz/assemble.mjs')
+              .then((m) => console.log(m.OVERLAY_FILES.join('\n')))
+          ")
+          echo "Comparing:"
+          echo "$files" | sed 's/^/  /'
+          echo
+
+          drift=0
+          while IFS= read -r file; do
+            [ -n "$file" ] || continue
+            if ! diff -rq "starters/quartz/$file" "/tmp/published/$file"; then
+              drift=1
+            fi
+          done <<< "$files"
+
+          if [ "$drift" -ne 0 ]; then
+            echo
+            echo "The published template no longer matches this overlay."
+            echo "Re-assemble and push it:"
+            echo
+            echo "  node starters/quartz/assemble.mjs /tmp/op-quartz --ref v4.5.1 \\"
+            echo "    --push https://github.com/navidkashani/open-publish-quartz.git"
+            exit 1
+          fi
+          echo "The published template matches the overlay."

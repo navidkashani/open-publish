@@ -150,7 +150,7 @@ straight at it, so a stale template is a broken product, not untidiness.
 
 ```bash
 node starters/quartz/assemble.mjs /tmp/op-quartz --ref v4.5.1 \
-  --push git@github.com:navidkashani/open-publish-quartz.git
+  --push https://github.com/navidkashani/open-publish-quartz.git
 ```
 
 The push is a force, by design: the template is regenerated from this overlay
@@ -165,8 +165,10 @@ Two checks stand behind that, because remembering is not a mechanism:
   shipped or deliberately withheld. `wrangler.jsonc` was neither, so it was
   never copied, and the template lacked the Workers Builds config that the
   overlay's own tests were asserting about.
-- The `template` job in CI re-checks the published template against the overlay
-  on any push touching this path, and fails when they differ.
+- The `template` workflow re-checks the published template against the overlay
+  on any push touching this path, and fails when they differ. Its path filter is
+  GitHub's own rather than a `HEAD^..HEAD` diff, so a push whose last commit
+  happens to touch something else cannot skip it.
 
 ### Ship a resolved link index
 

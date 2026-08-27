@@ -14,7 +14,8 @@
 
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { readdirSync, existsSync } from 'node:fs'
+import { existsSync } from 'node:fs'
+import { execFileSync } from 'node:child_process'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -22,10 +23,23 @@ import { OVERLAY_FILES, NOT_SHIPPED } from './assemble.mjs'
 
 const OVERLAY = dirname(fileURLToPath(import.meta.url))
 
+/**
+ * What git tracks here, one entry per top-level name.
+ *
+ * Deliberately not `readdirSync`: `npm run verify` caches a whole Quartz
+ * checkout at `.quartz/`, so reading the directory makes this test fail for
+ * anyone who runs verify before check. Ignored artefacts are not the overlay,
+ * and the thing being guarded is the set of files we author.
+ */
+function trackedTopLevel() {
+  const out = execFileSync('git', ['ls-files', '-z', '.'], { cwd: OVERLAY, encoding: 'utf8' })
+  const names = out.split('\0').filter(Boolean).map((path) => path.split('/')[0])
+  return [...new Set(names)].sort()
+}
+
 test('every file in the overlay is either shipped or explicitly held back', () => {
-  const present = readdirSync(OVERLAY)
   const declared = new Set([...OVERLAY_FILES, ...NOT_SHIPPED])
-  const undeclared = present.filter((name) => !declared.has(name))
+  const undeclared = trackedTopLevel().filter((name) => !declared.has(name))
   assert.deepEqual(
     undeclared,
     [],
