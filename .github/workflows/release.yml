@@ -43,11 +43,6 @@ jobs:
 
       - run: npm ci --prefix plugin
 
-      # The full suite, not just a build. A release is the first artefact that
-      # is genuinely hard to take back, so it does not get a weaker check than
-      # an ordinary push does.
-      - run: npm run check
-
       - name: The tag must match the manifest version
         run: |
           tag="${GITHUB_REF_NAME#v}"
@@ -61,6 +56,11 @@ jobs:
             echo "release would be invisible to it. Fix one of the two and re-tag."
             exit 1
           fi
+
+      # The full suite, not just a build. A release is the first artefact that
+      # is genuinely hard to take back, so it does not get a weaker check than
+      # an ordinary push does.
+      - run: npm run check
 
       # styles.css is committed; main.js and the manifest copy are built. Named
       # explicitly rather than globbed, so a missing one fails here instead of
