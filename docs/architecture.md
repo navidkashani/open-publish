@@ -137,6 +137,37 @@ updates anyway.
 `assemble.mjs` combines it with Quartz at a pinned tag, preserving Quartz's
 history and setting an `upstream` remote so upgrades are a normal `git merge`.
 
+#### Keeping the two repositories in step
+
+The overlay lives here; the assembled template lives at
+[navidkashani/open-publish-quartz](https://github.com/navidkashani/open-publish-quartz).
+That split is the one structural weakness in this design, and it has already
+been paid for once: the template ran six commits and one broken build behind the
+overlay, and nothing anywhere said so. Setup step 3 sends every new user
+straight at it, so a stale template is a broken product, not untidiness.
+
+**Whenever anything under `starters/quartz/` changes, re-assemble and push:**
+
+```bash
+node starters/quartz/assemble.mjs /tmp/op-quartz --ref v4.5.1 \
+  --push git@github.com:navidkashani/open-publish-quartz.git
+```
+
+The push is a force, by design: the template is regenerated from this overlay
+rather than edited, so its tip commit is replaced. That is safe for users, whose
+repositories are template copies with their own history and whose `upstream`
+points at Quartz. It is not safe for a commit made on the template and never
+brought back here, so the script prints the tip it is about to overwrite.
+
+Two checks stand behind that, because remembering is not a mechanism:
+
+- `assemble.test.mjs` requires every file in the overlay to be declared either
+  shipped or deliberately withheld. `wrangler.jsonc` was neither, so it was
+  never copied, and the template lacked the Workers Builds config that the
+  overlay's own tests were asserting about.
+- The `template` job in CI re-checks the published template against the overlay
+  on any push touching this path, and fails when they differ.
+
 ### Ship a resolved link index
 
 Raw Markdown alone is not enough. Obsidian resolves `[[Note]]` against the whole
@@ -299,8 +330,15 @@ Every core module avoids importing Obsidian values, so the real implementation
 | 0 | Walking skeleton, atomic round trip | done |
 | 1 | Scanner, hasher, selection, snapshots, S3 destination, webhook builder, publish UI | done |
 | 2 | Setup wizard, link index, redirects, "Add linked", throttling, error mapping, guards, GC, docs | done |
-| 3 | Worker gateway and Deploy-to-Cloudflare button; mobile testing (including the rule rows' long-press); rollback UI; site options parity | next |
-| 4 | Astro starter; optional Git destination | later |
+| 3 | Worker gateway and Deploy-to-Cloudflare button; mobile testing (including the rule rows' long-press); rollback UI; site options parity | in progress |
+| 4 | Astro starter; optional Git destination | started early |
+
+The gateway is done: `gateway/` is a Worker that holds the R2 binding, so the
+plugin carries a bearer token rather than a key pair. What is left in phase 3 is
+the Deploy-to-Cloudflare button, still gated on whether Cloudflare's setup page
+can bind a bucket that already exists, plus the rollback UI and a real device
+pass. Phase 4 has begun out of order too: `jotter`, the Astro starter, is in
+progress in its own repository.
 
 Both halves of the provider work landed early, out of phase 4: storage presets
 first, then hosting. The starter also ships a `wrangler.jsonc`, so Cloudflare

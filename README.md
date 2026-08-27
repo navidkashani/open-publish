@@ -40,10 +40,36 @@ published in Git.
 | `gateway/` | An optional Cloudflare Worker, so the plugin can reach R2 without holding a storage key. |
 | `docs/` | Setup, architecture, security, troubleshooting. |
 
+## Installing the plugin
+
+There is no release yet and it is not in the community directory, so for now the
+plugin is built from source. This is the only part of Open Publish that needs a
+terminal, and it is needed once:
+
+```bash
+git clone https://github.com/navidkashani/open-publish.git
+cd open-publish
+npm install --prefix plugin
+npm run build
+```
+
+That produces `plugin/main.js`. Copy it, along with `plugin/manifest.json` and
+`plugin/styles.css`, into your vault:
+
+```bash
+mkdir -p "<vault>/.obsidian/plugins/open-publish"
+cp plugin/main.js plugin/manifest.json plugin/styles.css \
+   "<vault>/.obsidian/plugins/open-publish/"
+```
+
+Then enable **Open Publish** under Settings → Community plugins. Node 22.18 or
+newer; nothing else to install.
+
 ## Getting started
 
-Follow **[docs/setup-cloudflare.md](docs/setup-cloudflare.md)**: about ten
-minutes, no terminal, nothing to install outside Obsidian.
+With the plugin enabled, follow
+**[docs/setup-cloudflare.md](docs/setup-cloudflare.md)**: about ten minutes and
+no terminal from here on.
 
 The setup guide opens on a storage picker. Cloudflare R2, Amazon S3, Backblaze
 B2, Wasabi and MinIO each fill in their own endpoint, region and addressing
@@ -141,20 +167,28 @@ commits, garbage-collection safety, link rewriting, the tick-to-outcome table in
 the publish window, and the full build pipeline run as real subprocesses against
 a stand-in bucket. `npm run check` is what CI runs, unchanged.
 
-To try it in a vault, copy `manifest.json`, `main.js` and `styles.css` into
-`<vault>/.obsidian/plugins/open-publish/`.
+To try a working copy in a vault, build it and copy the three files across as in
+[Installing the plugin](#installing-the-plugin).
 
 ## Status
 
 Phases 1 and 2 of the roadmap in `docs/architecture.md` are done: the plugin and
-the Quartz starter are complete and tested. Phase 3 is next: a Worker gateway
-and Deploy-to-Cloudflare button, rollback UI, and mobile.
+the Quartz starter are complete and tested. Phase 3 is underway. The Worker
+gateway has landed, so R2 can be reached with a bearer token instead of a
+storage key; what remains in that phase is the Deploy-to-Cloudflare button, the
+rollback UI, and mobile. Phase 4 has started early: `jotter`, the Astro starter,
+is in progress in its own repository.
 
 Mobile is the honest caveat. `manifest.json` does not mark the plugin
-desktop-only and the code avoids Node APIs, so it should work, but it has not
-been verified on a device, and the status bar it uses to report a publish
-running in the background does not exist there, leaving only notices.
+desktop-only, the code avoids Node APIs, and the two places that would notice a
+phone are already handled: the status bar is skipped and a publish reports
+itself in a notice instead, and the hover-only remove control on a rule row
+stays visible where there is no hover. None of that has been run on a device,
+so it is reasoned, not verified.
 
 ## Licence
 
-MIT.
+MIT. See [LICENSE](LICENSE).
+
+The Quartz starter template carries Quartz's own `LICENSE.txt`, also MIT, which
+stays as it is.

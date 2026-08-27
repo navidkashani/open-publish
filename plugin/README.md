@@ -27,7 +27,7 @@ No telemetry. No analytics. No server operated by this project.
 npm install
 npm run dev        # esbuild watch
 npm run typecheck
-npm test           # 272 tests, no network, no Obsidian
+npm test           # 490 tests, no network, no Obsidian
 npm run build      # produces main.js
 ```
 
