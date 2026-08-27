@@ -31,7 +31,7 @@ A publish uploads missing objects, writes a snapshot, then commits by replacing
 | Publish retried | Same hash, same key: idempotent |
 | File deleted | Absent from the next snapshot. No delete API call anywhere |
 | Two devices publish at once | Compare-and-swap rejects the loser; no corruption |
-| Rollback | Rewrite one ~60-byte file. Mechanically trivial, but there is no UI for it yet (roadmap phase 3) |
+| Rollback | Rewrite one ~60-byte file. Site history in settings lists what is in the bucket and makes any of it live |
 | Resume after a crash | `HEAD` each object, skip what exists |
 | Garbage collection | Separate, optional, never on the publish path |
 
@@ -336,11 +336,15 @@ Every core module avoids importing Obsidian values, so the real implementation
 | 4 | Astro starter; optional Git destination | started early |
 
 The gateway is done: `gateway/` is a Worker that holds the R2 binding, so the
-plugin carries a bearer token rather than a key pair. What is left in phase 3 is
-the Deploy-to-Cloudflare button, still gated on whether Cloudflare's setup page
-can bind a bucket that already exists, plus the rollback UI and a real device
-pass. Phase 4 has begun out of order too: `jotter`, the Astro starter, is in
-progress in its own repository.
+plugin carries a bearer token rather than a key pair. The rollback UI is done
+too, as Site history: it lists the manifests in the bucket and makes any one of
+them live with the same write that commits a publish, refusing a version whose
+objects clean-up has already collected and naming any site option, `noIndex`
+first, that going back would change. What is left in phase 3 is the
+Deploy-to-Cloudflare button, still gated on whether Cloudflare's setup page can
+bind a bucket that already exists, plus a real device pass. Phase 4 has begun
+out of order too: `jotter`, the Astro starter, is in progress in its own
+repository.
 
 Both halves of the provider work landed early, out of phase 4: storage presets
 first, then hosting. The starter also ships a `wrangler.jsonc`, so Cloudflare

@@ -118,7 +118,8 @@ what gives you:
 - **Deleting needs no delete.** A file simply is not in the next snapshot.
 - **Two devices cannot corrupt each other.** The commit is a compare-and-swap;
   the second one is rejected and told to re-scan.
-- **Rollback is one small write.** Point `current.json` at an older snapshot.
+- **Rollback is one small write.** Site history, in settings, points
+  `current.json` at an older snapshot. Nothing downloads and nothing re-uploads.
 
 See [docs/architecture.md](docs/architecture.md) for the details.
 
@@ -178,9 +179,10 @@ To try a working copy in a vault, build it and copy the three files across as in
 Phases 1 and 2 of the roadmap in `docs/architecture.md` are done: the plugin and
 the Quartz starter are complete and tested. Phase 3 is underway. The Worker
 gateway has landed, so R2 can be reached with a bearer token instead of a
-storage key; what remains in that phase is the Deploy-to-Cloudflare button, the
-rollback UI, and mobile. Phase 4 has started early: `jotter`, the Astro starter,
-is in progress in its own repository.
+storage key, and Site history has landed too, so any version still in your
+storage can be made live again; what remains in that phase is the
+Deploy-to-Cloudflare button and mobile. Phase 4 has started early: `jotter`, the
+Astro starter, is in progress in its own repository.
 
 Mobile is the honest caveat. `manifest.json` does not mark the plugin
 desktop-only, the code avoids Node APIs, and the two places that would notice a
