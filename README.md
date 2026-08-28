@@ -26,6 +26,11 @@ published in Git.
 - **Brings your attachments along.** An image embedded by a published note is
   published too, wherever it lives in your vault.
 - **Redirects renamed notes.** A rename changes a URL; old links keep working.
+- **Keeps the URLs you had on Obsidian Publish.** Its scheme is not ours:
+  `Company/About us.md` was served at `/Company/About+us`, and here it is
+  `/company/about-us`. One setting puts a redirect at every address Obsidian
+  used, so moving off it on your own domain keeps your inbound links and your
+  search ranking.
 - **Site options that are not theme-specific.** Navigation, search, graph,
   backlinks, outline, tags, theme toggle, homepage, analytics and a
   discourage-search-engines switch, described as intent, so a future starter
