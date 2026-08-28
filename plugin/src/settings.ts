@@ -17,6 +17,8 @@ import { inferProvider, isProviderId, providerKind } from './destinations/provid
 import type { ProviderId } from './destinations/providers.ts'
 import { inferHost, isHostId } from './builders/hosts.ts'
 import type { HostId } from './builders/hosts.ts'
+import { isUrlStyle } from './core/slug.ts'
+import type { UrlStyle } from './core/slug.ts'
 import { snapshotTime } from './core/snapshot.ts'
 import type { SnapshotSite } from './core/snapshot.ts'
 
@@ -111,6 +113,16 @@ export interface Settings {
   builder: WebhookBuilderSettings
   selection: SelectionSettings
   site: SnapshotSite
+  /**
+   * Whether the site also answers at the URLs Obsidian Publish gave it.
+   *
+   * Not a `SnapshotSite` option, even though it changes what the site serves.
+   * Those are intent any generator can honour; this one is a rule for turning a
+   * vault path into an address, which is the plugin's own job and nobody
+   * else's. What crosses into the snapshot is the result: a list of addresses
+   * per file, which a generator either serves or ignores.
+   */
+  urlStyle: UrlStyle
   lastSnapshotId: string | null
   lastPublishedAt: number | null
   /** Drives build throttling; separate from lastPublishedAt because a publish can skip the build. */
@@ -199,6 +211,8 @@ export const DEFAULT_SETTINGS: Settings = {
     showTags: true,
     analytics: { provider: 'none', id: '' },
   },
+  // Clean URLs, and nothing else, for everyone who is not migrating.
+  urlStyle: 'clean',
   lastSnapshotId: null,
   lastPublishedAt: null,
   lastBuildTriggeredAt: null,
@@ -240,6 +254,13 @@ export function migrateSettings(raw: unknown): Settings {
   }
 
   settings.builder.host = resolveHost(stored.builder)
+
+  // Checked against the two values rather than copied across, the same way
+  // `analytics.provider` is: an unrecognised style would reach the dropdown,
+  // which cannot render it, and the scanner, which would treat anything that is
+  // not the redirect style as plain clean URLs anyway. Falling back says that
+  // out loud instead of half-applying it.
+  settings.urlStyle = isUrlStyle(stored.urlStyle) ? stored.urlStyle : DEFAULT_SETTINGS.urlStyle
 
   settings.lastSnapshotId = typeof stored.lastSnapshotId === 'string' ? stored.lastSnapshotId : null
   settings.lastPublishedAt = typeof stored.lastPublishedAt === 'number' ? stored.lastPublishedAt : null

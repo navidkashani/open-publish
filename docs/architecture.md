@@ -53,7 +53,8 @@ there, corruption does not.
   "files": {
     "Notes/Zettelkasten.md": {
       "hash": "…", "size": 4211, "mtime": 1755900000000,
-      "slug": "notes/zettelkasten", "title": "Zettelkasten", "aliases": ["Zettel"]
+      "slug": "notes/zettelkasten", "title": "Zettelkasten", "aliases": ["Zettel"],
+      "legacyUrls": ["Notes/Zettelkasten"]   // only when the vault is migrating; see below
     }
   },
   "links": {
@@ -251,6 +252,33 @@ snapshot JSON, where it is just a string.
 Slugs still need care, which is what `core/slug.ts` and the collision check are
 for: `Note.md` and `note.md` coexist happily on macOS and Windows and collide
 silently on the Linux build machine, so that is blocked at scan time.
+
+### Old Obsidian Publish URLs
+
+Obsidian Publish serves `Company/About us.md` at `/Company/About+us`: each path
+segment form-urlencoded, case intact. Our slug for the same note is
+`/company/about-us`, so somebody moving across on their own domain loses every
+inbound link and every search ranking they had.
+
+**Site URLs** in settings offers to keep them. When it is on, `core/slug.ts`
+works out the old address of every file whose slug moved and the scanner records
+it as `legacyUrls` on that file. The value is the old URL *percent-decoded*,
+because it is a path on disk before it is a URL, and a static host decodes a
+request path before looking for a file.
+
+The snapshot states where a file used to live; what to do about it is the
+generator's business, which is why this is not a `site` option. The Quartz
+starter writes each one into the working copy's frontmatter as `permalink`, the
+one key Quartz turns into a redirect page at exactly the path given, which means
+notes and not attachments: an attachment that changed address keeps only its new
+one on this starter. `aliases`
+would not do: Quartz slugifies those, turning `&` into `-and-`, which breaks the
+very URLs this is for. A generator that ignores the field serves the slug alone
+and nothing breaks.
+
+This only helps a vault that kept the domain Obsidian Publish served. A move off
+`publish.obsidian.md/username` is a move to an address the old links never
+pointed at, and nothing self-hosted can catch those.
 
 ## Publishing state machine
 

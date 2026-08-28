@@ -24,7 +24,20 @@ const WORK = join(tmpdir(), `op-verify-${process.pid}`)
 const sha256 = (b) => createHash('sha256').update(b).digest('hex')
 
 const files = {
-  'Notes/Home.md': { content: '---\ntitle: Home\n---\n\n# Welcome\n\nStart at [[Zettelkasten]].\n', slug: 'index' },
+  // The homepage also carries an old URL, because its slug is `index` and that
+  // is the one old address which must land on `/` rather than on `/index`.
+  'Notes/Home.md': {
+    content: '---\ntitle: Home\n---\n\n# Welcome\n\nStart at [[Zettelkasten]].\n',
+    slug: 'index',
+    legacyUrls: ['Notes/Home'],
+  },
+  // The migration case, with the two things Quartz mangles if an old URL is
+  // shipped as an alias: a capital and an `&`.
+  'Wisdom & Approaches/Critical Thinking.md': {
+    content: '# Critical Thinking\n\nA note that used to live somewhere else.\n',
+    slug: 'wisdom-approaches/critical-thinking',
+    legacyUrls: ['Wisdom+&+Approaches/Critical+Thinking'],
+  },
   'Notes/Zettelkasten.md': {
     content: '# Zettelkasten\n\nInvented by [[Luhmann]].\nA second line after a single newline.\n\nSee also [[Private Log]] and [[Nothing]].\n\n![[diagram.png]]\n\n```\n[[Luhmann]] in code stays literal\n```\n',
     slug: 'notes/zettelkasten',
@@ -44,10 +57,10 @@ const links = {
 
 const objects = new Map()
 const snapFiles = {}
-for (const [path, { content, slug }] of Object.entries(files)) {
+for (const [path, { content, slug, legacyUrls }] of Object.entries(files)) {
   const buf = Buffer.from(content)
   const h = sha256(buf)
-  snapFiles[path] = { hash: h, size: buf.length, mtime: 1, slug }
+  snapFiles[path] = { hash: h, size: buf.length, mtime: 1, slug, ...(legacyUrls ? { legacyUrls } : {}) }
   objects.set(`objects/${h.slice(0, 2)}/${h}`, buf)
 }
 const snapshot = {
@@ -132,6 +145,23 @@ check('_headers has no-store', (await readFile(join(WORK, 'public/_headers'), 'u
 check('_redirects written', (await readFile(join(WORK, 'public/_redirects'), 'utf8')).includes('/notes/old-name /notes/zettelkasten 301'))
 const home = await readFile(join(WORK, 'public/index.html'), 'utf8')
 check('site title from snapshot', home.includes('Verification Site'))
+
+// --- the old URLs a migrator arrives on still land on the page -------------
+// This is the whole of the Obsidian Publish migration, and only a real build
+// can show it: the file has to exist at the old path character for character,
+// capitals and `&` intact. Shipped as an alias instead of a permalink, Quartz
+// would have written `/Wisdom+-and-+Approaches/…` and every old link would 404.
+const oldUrl = await readFile(join(WORK, 'public/Wisdom+&+Approaches/Critical+Thinking.html'), 'utf8').catch(
+  () => '',
+)
+check('a page is served at the URL Obsidian Publish used', oldUrl.length > 0)
+check('and it points at the note in its new home', /wisdom-approaches\/critical-thinking/.test(oldUrl))
+check('search engines are told which one is canonical', /rel="canonical"/.test(oldUrl))
+// The homepage is the one note whose old URL cannot simply point at its slug:
+// its slug is `index`, and `/index` is a path the generator never emitted. From
+// `/Notes/Home` the site root is `../`, and that is what it has to say.
+const oldHome = await readFile(join(WORK, 'public/Notes/Home.html'), 'utf8').catch(() => '')
+check('the old homepage URL goes to the site root, not to /index', /content="0; url=\.\.\/"/.test(oldHome))
 
 // --- the site options actually take effect in the rendered HTML ---
 check('showNavigation:false removes the page explorer', !/class="[^"]*explorer/.test(home))

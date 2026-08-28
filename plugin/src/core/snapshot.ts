@@ -44,6 +44,18 @@ export interface SnapshotFile {
   slug: string
   title?: string
   aliases?: string[]
+  /**
+   * URLs this file used to be served at, which the site should keep answering.
+   * Written only when the user asks for it, so an older starter that has never
+   * heard of the field simply ignores it and serves the slug alone.
+   *
+   * Deliberately not merged into `aliases`. Those are the author's own
+   * alternate names for a note and are also what link resolution matches
+   * against, so a legacy path in there would become a link target: write
+   * `[[Company/About+us]]` and it would resolve. These are addresses the site
+   * once had, and nothing more.
+   */
+  legacyUrls?: string[]
 }
 
 export type AnalyticsProvider = 'none' | 'google' | 'plausible' | 'umami'
@@ -180,8 +192,13 @@ export async function listObjects(destination: Pick<Destination, 'list'>): Promi
 
 /**
  * Everything about a snapshot that decides whether the site needs rebuilding:
- * which paths exist, what content each holds, where each one lives, and the
- * site block. Deliberately not the timestamp. See `sameContent`.
+ * which paths exist, what content each holds, where each one lives, every other
+ * address each one answers at, and the site block. Deliberately not the
+ * timestamp. See `sameContent`.
+ *
+ * Legacy URLs are in here for the same reason slugs are: turning them on adds a
+ * page to the site at every old address, and a publish that decided nothing had
+ * changed would leave the setting switched on and the site unchanged.
  *
  * Keys are sorted all the way down so two snapshots written by different plugin
  * versions still compare equal when they describe the same site.
@@ -191,7 +208,7 @@ export function snapshotContentKey(files: Record<string, SnapshotFile>, site: Sn
     site: sortKeysDeep(site),
     files: Object.keys(files)
       .sort()
-      .map((path) => [path, files[path].hash, files[path].slug]),
+      .map((path) => [path, files[path].hash, files[path].slug, files[path].legacyUrls ?? null]),
   })
 }
 
@@ -244,6 +261,13 @@ export function snapshotTime(id: string): number | null {
   if (!match) return null
   const parsed = Date.parse(`${match[1]}T${match[2]}:${match[3]}:${match[4]}Z`)
   return Number.isNaN(parsed) ? null : parsed
+}
+
+/** Same old addresses, in the same order? Both sides are usually absent. */
+function sameUrls(before: SnapshotFile, after: SnapshotFile): boolean {
+  const a = before.legacyUrls ?? []
+  const b = after.legacyUrls ?? []
+  return a.length === b.length && a.every((url, i) => url === b[i])
 }
 
 function sortKeysDeep(value: unknown): unknown {
@@ -407,7 +431,15 @@ export interface SnapshotDiff {
   removed: string[]
 }
 
-/** Classify every path in the new file set against the previous snapshot. */
+/**
+ * Classify every path in the new file set against the previous snapshot.
+ *
+ * A file counts as changed when its bytes, its address, or the old addresses it
+ * answers at have moved. That last one is what a publish after switching URL
+ * style consists of: identical bytes, identical slugs, a redirect page each.
+ * Without it the review screen would show nothing to publish and grey out the
+ * button over a change the user had just asked for.
+ */
 export function diffFiles(
   previous: Snapshot | null,
   nextFiles: Record<string, SnapshotFile>,
@@ -418,8 +450,9 @@ export function diffFiles(
   for (const [path, file] of Object.entries(nextFiles)) {
     const before = previousFiles[path]
     if (!before) diff.added.push(path)
-    else if (before.hash !== file.hash || before.slug !== file.slug) diff.changed.push(path)
-    else diff.unchanged.push(path)
+    else if (before.hash !== file.hash || before.slug !== file.slug || !sameUrls(before, file)) {
+      diff.changed.push(path)
+    } else diff.unchanged.push(path)
   }
   for (const path of Object.keys(previousFiles)) {
     if (!nextFiles[path]) diff.removed.push(path)

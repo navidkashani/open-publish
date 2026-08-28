@@ -42,10 +42,10 @@ function makeBucket({ files, links = {}, redirects = [], corrupt = null, site = 
   const objects = new Map()
   const snapshotFiles = {}
 
-  for (const [path, { content, slug }] of Object.entries(files)) {
+  for (const [path, { content, slug, legacyUrls }] of Object.entries(files)) {
     const buffer = Buffer.from(content)
     const hash = sha256(buffer)
-    snapshotFiles[path] = { hash, size: buffer.length, mtime: 1, slug }
+    snapshotFiles[path] = { hash, size: buffer.length, mtime: 1, slug, ...(legacyUrls ? { legacyUrls } : {}) }
     objects.set(`objects/${hash.slice(0, 2)}/${hash}`, corrupt === path ? Buffer.from('tampered') : buffer)
   }
 
@@ -471,6 +471,58 @@ test('a rollback to a version whose objects were collected fails the build loudl
       const result = await runScript('fetch-content.mjs', cwd, env)
       assert.notEqual(result.code, 0, 'a half-built site is worse than a failed build')
       assert.match(result.stderr, /gone\.md/, 'and it names the file, not just the hash')
+    },
+  )
+})
+
+test('a note that moved off Obsidian Publish carries its old URL into the content tree', async () => {
+  // The half of the old-URL story this suite can prove on its own: the old
+  // address reaches the working copy as `permalink`, unmangled, `&` and Persian
+  // included. What Quartz then does with it is a real build's business, and
+  // `npm run verify` is where that is checked.
+  await withBucket(
+    {
+      files: {
+        'Wisdom & Approaches/Critical Thinking.md': {
+          content: '# Critical Thinking\n',
+          slug: 'wisdom-approaches/critical-thinking',
+          legacyUrls: ['Wisdom+&+Approaches/Critical+Thinking'],
+        },
+        'یادداشت‌ها/تفکر نقاد.md': {
+          content: '# تفکر نقاد\n',
+          slug: 'یادداشت-ها/تفکر-نقاد',
+          legacyUrls: ['یادداشت‌ها/تفکر+نقاد'],
+        },
+        'notes/plain.md': { content: '# Plain\n', slug: 'notes/plain' },
+      },
+    },
+    async ({ cwd, env }) => {
+      const result = await runScript('fetch-content.mjs', cwd, env)
+      assert.equal(result.code, 0, result.stderr)
+
+      const moved = await readFile(join(cwd, 'content/wisdom-approaches/critical-thinking.md'), 'utf8')
+      assert.match(moved, /^permalink: "Wisdom\+&\+Approaches\/Critical\+Thinking"$/m)
+
+      const persian = await readFile(join(cwd, 'content/یادداشت-ها/تفکر-نقاد.md'), 'utf8')
+      assert.match(persian, /^permalink: "یادداشت‌ها\/تفکر\+نقاد"$/m)
+
+      const plain = await readFile(join(cwd, 'content/notes/plain.md'), 'utf8')
+      assert.doesNotMatch(plain, /permalink/, 'a note already at its old address needs no second page')
+    },
+  )
+})
+
+test('an old URL that would escape the content directory stops the build', async () => {
+  // The slug is checked for this already. An old URL is a path the *generator*
+  // writes to, which is further from this script rather than nearer, so it gets
+  // the same check and the same clear failure.
+  await withBucket(
+    { files: { 'a.md': { content: 'a', slug: 'a', legacyUrls: ['../../etc/passwd'] } } },
+    async ({ cwd, env }) => {
+      const result = await runScript('fetch-content.mjs', cwd, env)
+      assert.equal(result.code, 1)
+      assert.match(result.stderr, /escapes the content directory/)
+      assert.match(result.stderr, /a\.md/, 'and it names the file')
     },
   )
 })

@@ -11,6 +11,7 @@ import {
 } from '../settings.ts'
 import { providerById } from '../destinations/providers.ts'
 import { isAlwaysExcluded, parsePublishFrontmatter } from '../core/selection.ts'
+import { isUrlStyle } from '../core/slug.ts'
 import { FolderModal } from './FolderModal.ts'
 import { RollbackModal } from './RollbackModal.ts'
 import { folderRulesSummary, summarizeRules } from './FolderRules.ts'
@@ -284,6 +285,40 @@ export class OpenPublishSettingTab extends PluginSettingTab {
     return `This note sets publish: ${pinned} in its frontmatter, which wins. This choice has no effect.`
   }
 
+  /**
+   * Whether old Obsidian Publish URLs keep working.
+   *
+   * The description carries the one condition that decides whether this is
+   * worth anything, because the setting cannot check it: the redirects are
+   * pages on *this* site, so they only meet a visitor who arrives at the domain
+   * this site is served on. Somebody whose notes lived on
+   * `publish.obsidian.md/username` is moving to an address they did not have
+   * before, and nothing they host can catch a link to one they never owned.
+   */
+  private renderUrlStyle(containerEl: HTMLElement): void {
+    const settings = this.plugin.settings
+
+    new Setting(containerEl)
+      .setName('Site URLs')
+      .setDesc(
+        'Pages always live at clean, lowercase addresses. If you are moving from Obsidian Publish and keeping ' +
+          'the domain it was served on, the second option also puts a redirect at every URL Obsidian used, so ' +
+          'existing links and search results still arrive. It cannot help with links to publish.obsidian.md.',
+      )
+      .addDropdown((dropdown) =>
+        dropdown
+          .addOptions({
+            clean: 'Clean',
+            'clean-with-redirects': 'Clean, keep my old links working',
+          })
+          .setValue(settings.urlStyle)
+          .onChange(async (value) => {
+            settings.urlStyle = isUrlStyle(value) ? value : 'clean'
+            await this.plugin.saveSettings()
+          }),
+      )
+  }
+
   private renderSite(containerEl: HTMLElement): void {
     const site = this.plugin.settings.site
 
@@ -300,6 +335,7 @@ export class OpenPublishSettingTab extends PluginSettingTab {
       )
 
     this.renderHomepage(containerEl)
+    this.renderUrlStyle(containerEl)
 
     new Setting(containerEl)
       .setName('Discourage search engines')

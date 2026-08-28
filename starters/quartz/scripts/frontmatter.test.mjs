@@ -51,3 +51,30 @@ test('a --- separator in the body is not mistaken for frontmatter', () => {
   const out = applyNoteMetadata('Body\n\n---\n\nMore\n', { title: 'T' })
   assert.ok(out.startsWith('---\ntitle: "T"\n---\n\nBody'))
 })
+
+test('an old URL becomes a permalink, which Quartz alone honours character for character', () => {
+  // Not another alias: Quartz slugifies those, and `&` would come out as
+  // `-and-`, which is the one shape this whole feature exists to avoid.
+  const out = applyNoteMetadata('---\npublish: true\n---\n\nBody\n', {
+    title: 'Critical Thinking',
+    legacyUrls: ['Wisdom+&+Approaches/Critical+Thinking'],
+  })
+  assert.match(out, /permalink: "Wisdom\+&\+Approaches\/Critical\+Thinking"/)
+  assert.doesNotMatch(out, /aliases/, 'an old address is not an alternate name for the note')
+})
+
+test('a note with no frontmatter at all still gets its old URL', () => {
+  const out = applyNoteMetadata('# Hello\n', { title: 'Hello', legacyUrls: ['Company/About+us'] })
+  assert.equal(out, '---\ntitle: "Hello"\npermalink: "Company/About+us"\n---\n\n# Hello\n')
+})
+
+test("an author's own permalink wins, exactly as their title does", () => {
+  const text = '---\npermalink: mine/own-path\n---\n\nBody\n'
+  const out = applyNoteMetadata(text, { legacyUrls: ['Company/About+us'] })
+  assert.equal(out, text)
+})
+
+test('a file with no old URL gets no permalink', () => {
+  const out = applyNoteMetadata('Body\n', { title: 'T', legacyUrls: [] })
+  assert.doesNotMatch(out, /permalink/)
+})

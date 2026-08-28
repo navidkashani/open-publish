@@ -92,6 +92,64 @@ export function slugForPath(path: string, options: SlugOptions = {}): string {
   return out.join('/')
 }
 
+/**
+ * How much of the old Obsidian Publish URL scheme a site keeps.
+ *
+ * `clean` is what this plugin has always done and what a new site wants:
+ * lowercase, dash-separated, ASCII-safe. `clean-with-redirects` is the same
+ * site plus a bouncing page at every URL Obsidian Publish used to serve, which
+ * is only worth anything to somebody who kept the domain those URLs were on.
+ */
+export type UrlStyle = 'clean' | 'clean-with-redirects'
+
+export function isUrlStyle(value: unknown): value is UrlStyle {
+  return value === 'clean' || value === 'clean-with-redirects'
+}
+
+/**
+ * Where Obsidian Publish served this file, as a path rather than as a URL.
+ *
+ * Obsidian form-urlencodes each path segment, so `Company/About us.md` was
+ * served at `/Company/About+us`, and `Wisdom & Approaches/Critical Thinking.md`
+ * at `/Wisdom+%26+Approaches/Critical+Thinking`. Both confirmed against live
+ * sites.
+ *
+ * What comes back from here is that URL percent-*decoded*:
+ * `Wisdom+&+Approaches/Critical+Thinking`. Decoded, because this is a path on
+ * disk before it is anything else. A static host percent-decodes a request path
+ * and then looks for a file at the result, so a file whose name really contains
+ * `%26` answers `/…%2526…` and nothing else. The site already leans on that
+ * decoding: `slugForPath` keeps CJK and Persian letters as they are, and those
+ * pages are served today.
+ *
+ * Which leaves one substitution: a space becomes `+`. Everything else is the
+ * vault path, character for character, with `.md` dropped exactly as
+ * `slugForPath` drops it and an attachment keeping the extension a browser
+ * needs to pick a content type.
+ */
+export function obsidianPublishUrl(path: string): string {
+  return path
+    .replace(/\.md$/i, '')
+    .split('/')
+    .map((segment) => segment.replace(/ /g, '+'))
+    .join('/')
+}
+
+/**
+ * The old URLs a file still has to answer at, or undefined when it has none.
+ *
+ * A file whose old URL is already its slug needs nothing: the page is at that
+ * address anyway. Everything else does, including a difference of case alone,
+ * because the build machine is Linux and `/Notes/Plain` is not `/notes/plain`
+ * there. On a case-insensitive machine those two are one file and the real page
+ * wins, which is the harmless direction.
+ */
+export function legacyUrlsFor(path: string, slug: string, style: UrlStyle): string[] | undefined {
+  if (style !== 'clean-with-redirects') return undefined
+  const url = obsidianPublishUrl(path)
+  return url === slug ? undefined : [url]
+}
+
 function extensionOf(name: string): string {
   const dot = name.lastIndexOf('.')
   return dot > 0 ? name.slice(dot) : ''

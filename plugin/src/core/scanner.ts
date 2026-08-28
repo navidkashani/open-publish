@@ -29,7 +29,8 @@ import {
 } from './limits.ts'
 import { getPublishFlag, isAlwaysExcluded, isSupportedFile } from './selection.ts'
 import type { SelectionRules } from './selection.ts'
-import { findSlugCollisions, slugForPath } from './slug.ts'
+import { findSlugCollisions, legacyUrlsFor, slugForPath } from './slug.ts'
+import type { UrlStyle } from './slug.ts'
 import {
   CURRENT_KEY,
   computeSnapshotId,
@@ -48,6 +49,12 @@ export interface ScanOptions {
   rules: SelectionRules
   site: SnapshotSite
   autoIncludeEmbeds: boolean
+  /**
+   * Not part of `site`, deliberately. The generator is told which addresses a
+   * file answers at, never which scheme produced them, so this stops here and
+   * only its result travels.
+   */
+  urlStyle: UrlStyle
   pluginVersion: string
   onProgress?: (message: string, current?: number, total?: number) => void
   signal?: AbortSignal
@@ -200,6 +207,11 @@ export async function scanVault(options: ScanOptions): Promise<ScanResult> {
       slug: slugByPath.get(path) as string,
     }
     if (path.toLowerCase().endsWith('.md')) Object.assign(entry, noteMetadata(resolver, path))
+    // Where this file used to be served, for a vault moving off Obsidian
+    // Publish. A statement about the file rather than an instruction: what a
+    // generator can do with an old address is the generator's business.
+    const legacyUrls = legacyUrlsFor(path, entry.slug, options.urlStyle)
+    if (legacyUrls) entry.legacyUrls = legacyUrls
     files[path] = entry
     totalBytes += file.stat.size
   }

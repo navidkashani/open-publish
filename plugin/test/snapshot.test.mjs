@@ -72,6 +72,16 @@ test('a slug change counts as changed even when the bytes are identical', () => 
   assert.deepEqual(diff.changed, ['a.md'])
 })
 
+test('turning on old URLs is a change to every file it touches', () => {
+  // Same bytes, same slug, a redirect page each. Without this the review screen
+  // greys out its own button over the change the user just asked for.
+  const previous = snapshot({ 'Company/About us.md': file('h1', 'company/about-us') })
+  const next = { 'Company/About us.md': file('h1', 'company/about-us', { legacyUrls: ['Company/About+us'] }) }
+  assert.deepEqual(diffFiles(previous, next).changed, ['Company/About us.md'])
+  assert.equal(sameContent(previous, snapshot(next)), false, 'so the publish is not skipped as a no-op')
+  assert.equal(sameContent(snapshot(next), snapshot(next)), true, 'and the publish after it is')
+})
+
 test('a rename is detected by matching content hash and emits a redirect', () => {
   const previous = snapshot({ 'Notes/Old Name.md': file('h1', 'notes/old-name') })
   const { renames, redirects } = detectRenames(previous, { 'Notes/Zettelkasten.md': file('h1', 'notes/zettelkasten') })

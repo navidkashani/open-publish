@@ -779,3 +779,16 @@ test('the Last publish row stops naming a version once a rollback has moved it',
   assert.equal(desc, new Date(1_700_000_000_000).toLocaleString())
   assert.doesNotMatch(desc, /version/)
 })
+
+test('the Site URLs choice is offered under Site options and saved when picked', () => {
+  const { root, plugin } = open()
+  const row = rowNamed(root, 'Site URLs')
+  assert.ok(row, 'the row is drawn')
+  assert.match(descOf(row), /publish\.obsidian\.md/, 'the one condition it cannot check for you is stated')
+
+  const dropdown = inputIn(row)
+  assert.equal(dropdown.value, 'clean')
+  dropdown.value = 'clean-with-redirects'
+  dispatch(dropdown, 'input')
+  assert.equal(plugin.settings.urlStyle, 'clean-with-redirects')
+})

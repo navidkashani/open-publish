@@ -22,6 +22,9 @@ const STATE_FILE = '.op-build-state.json'
 const DOWNLOAD_CONCURRENCY = 8
 const MAX_ASSET_BYTES = 25 * 1024 * 1024
 
+/** A path from the snapshot that would be written outside `content/`. */
+const escapesContentDir = (path) => path.startsWith('/') || path.split('/').includes('..')
+
 function fail(message) {
   console.error(`\n[open-publish] Build stopped.\n\n${message}\n`)
   process.exit(1)
@@ -95,8 +98,16 @@ Update the starter repository from the template.`)
     // emit a traversal, but this script is the thing holding the pen, so it
     // checks rather than assumes: a clear build failure beats writing outside
     // the content directory.
-    if (file.slug.startsWith('/') || file.slug.split('/').includes('..')) {
+    if (escapesContentDir(file.slug)) {
       fail(`The snapshot entry for "${path}" has a slug that escapes the content directory: ${file.slug}`)
+    }
+    // Old URLs become paths the generator writes to, one step further away from
+    // this script than the slug is, so they get the identical check.
+    const legacyUrls = (file.legacyUrls ?? []).filter((url) => typeof url === 'string' && url.length > 0)
+    for (const url of legacyUrls) {
+      if (escapesContentDir(url)) {
+        fail(`The snapshot entry for "${path}" has an old URL that escapes the content directory: ${url}`)
+      }
     }
 
     const isMarkdown = path.toLowerCase().endsWith('.md')
@@ -109,7 +120,11 @@ Update the starter repository from the template.`)
       })
       // Files are written at their slug, so without the snapshot's resolved
       // title the generator would name every page after its URL.
-      await writeFile(target, applyNoteMetadata(rewritten, { title: file.title, aliases: file.aliases }), 'utf8')
+      await writeFile(
+        target,
+        applyNoteMetadata(rewritten, { title: file.title, aliases: file.aliases, legacyUrls }),
+        'utf8',
+      )
     } else {
       await writeFile(target, body)
     }

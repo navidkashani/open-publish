@@ -368,6 +368,7 @@ export default class OpenPublishPlugin extends Plugin {
       rules: this.settings.selection,
       site: this.settings.site,
       autoIncludeEmbeds: this.settings.selection.autoIncludeEmbeds,
+      urlStyle: this.settings.urlStyle,
       pluginVersion: this.manifest.version,
       onProgress: options.onProgress,
       signal: options.signal,

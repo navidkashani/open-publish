@@ -151,6 +151,15 @@ snapshots: that is, if the note was renamed *and* the content is unchanged. A
 rename plus an edit in the same publish looks like a delete and an add. Publish
 the rename first, then the edit.
 
+**Every URL from my Obsidian Publish site 404s.**
+Obsidian Publish serves `Company/About us.md` at `/Company/About+us`; this plugin
+serves it at `/company/about-us`. Set **Site URLs** to "Clean, keep my old links
+working" in settings and publish once: every old address gets a page that
+forwards to the new one, marked canonical so search engines follow. It only
+helps if your site is on the same domain Obsidian Publish served. Links to
+`publish.obsidian.md/username/…` point at Obsidian's servers, and nothing you
+host can redirect those.
+
 **The build fails with "downloaded corrupted".**
 An object in storage does not match the hash recorded for it. The build refuses
 to deploy it rather than serve corrupt content. Publish again from Obsidian to

@@ -1,6 +1,15 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { slugForPath, slugifySegment, findSlugCollisions } from '../src/core/slug.ts'
+import {
+  slugForPath,
+  slugifySegment,
+  findSlugCollisions,
+  legacyUrlsFor,
+  obsidianPublishUrl,
+} from '../src/core/slug.ts'
+
+/** What a static host does to a request path before it looks for a file. */
+const decodePath = (url) => url.split('/').map(decodeURIComponent).join('/')
 
 test('markdown loses its extension, assets keep theirs', () => {
   assert.equal(slugForPath('Notes/Zettelkasten.md'), 'notes/zettelkasten')
@@ -51,4 +60,52 @@ test('case-only differences are reported as collisions', () => {
 
 test('separators collapse instead of producing empty segments', () => {
   assert.equal(slugForPath('A  --  B/C___D.md'), 'a-b/c-d')
+})
+
+test('the old Obsidian Publish URL, as the path a host decodes it to', () => {
+  // Both of these are confirmed against live sites: Obsidian's own help vault
+  // serves Company/About us.md at /Company/About+us, and navidk.com serves
+  // Wisdom & Approaches/Critical Thinking.md at
+  // /Wisdom+%26+Approaches/Critical+Thinking. Asserting through decodePath is
+  // the point rather than a convenience: the file has to sit where the host
+  // looks after decoding, which is one substitution away from the vault path.
+  assert.equal(obsidianPublishUrl('Company/About us.md'), decodePath('Company/About+us'))
+  assert.equal(
+    obsidianPublishUrl('Wisdom & Approaches/Critical Thinking.md'),
+    decodePath('Wisdom+%26+Approaches/Critical+Thinking'),
+  )
+})
+
+test('every other character survives, at any depth', () => {
+  assert.equal(obsidianPublishUrl('یادداشت‌ها/تفکر نقاد.md'), 'یادداشت‌ها/تفکر+نقاد')
+  assert.equal(obsidianPublishUrl('A/B/C/Deep Note.md'), 'A/B/C/Deep+Note')
+  assert.equal(obsidianPublishUrl("Notes/Don't Panic.md"), "Notes/Don't+Panic")
+  assert.equal(obsidianPublishUrl('Notes/🎉.md'), 'Notes/🎉')
+})
+
+test('an attachment keeps the extension a browser needs, a note loses .md', () => {
+  assert.equal(obsidianPublishUrl('Attachments/Dia gram.PNG'), 'Attachments/Dia+gram.PNG')
+  assert.equal(obsidianPublishUrl('Notes/Plain.md'), 'Notes/Plain')
+})
+
+test('old URLs are only recorded when they are asked for and would differ', () => {
+  const differs = 'Company/About us.md'
+  assert.deepEqual(legacyUrlsFor(differs, 'company/about-us', 'clean-with-redirects'), ['Company/About+us'])
+  assert.equal(legacyUrlsFor(differs, 'company/about-us', 'clean'), undefined, 'off by default')
+  assert.equal(
+    legacyUrlsFor('notes/plain.md', 'notes/plain', 'clean-with-redirects'),
+    undefined,
+    'a note already at its old address needs no second page',
+  )
+  assert.deepEqual(
+    legacyUrlsFor('Notes/Plain.md', 'notes/plain', 'clean-with-redirects'),
+    ['Notes/Plain'],
+    'case alone still differs on the Linux machine that builds the site',
+  )
+})
+
+test('the note that becomes the homepage keeps its own old address', () => {
+  // The scanner gives it the slug `index`; Obsidian served it at /Home, and
+  // that URL has to end up at the site root rather than at /index.
+  assert.deepEqual(legacyUrlsFor('Home.md', 'index', 'clean-with-redirects'), ['Home'])
 })

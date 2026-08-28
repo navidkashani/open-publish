@@ -610,3 +610,11 @@ test('a publish that committed nothing leaves the rollback standing', () => {
   recordPublish(settings, outcome({ committed: false }), 1_700_000_000_000)
   assert.equal(isRolledBack(settings), true)
 })
+
+test('the URL style defaults to clean, round-trips, and refuses anything else', () => {
+  assert.equal(migrateSettings({}).urlStyle, 'clean', 'nobody gets redirect pages they did not ask for')
+  assert.equal(migrateSettings({ urlStyle: 'clean-with-redirects' }).urlStyle, 'clean-with-redirects')
+  for (const junk of ['obsidian', '', null, 42, { style: 'clean' }]) {
+    assert.equal(migrateSettings({ urlStyle: junk }).urlStyle, 'clean', `${JSON.stringify(junk)} fell back`)
+  }
+})
