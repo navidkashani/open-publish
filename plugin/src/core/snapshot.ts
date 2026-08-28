@@ -360,6 +360,18 @@ export function detectRenames(
     renames.push({ from, to: path })
   }
 
+  // A file that stayed exactly where it is but changed slug has moved its URL
+  // just as surely as a renamed one, and the loop above cannot see it: that one
+  // only considers paths which disappeared. Editing `permalink` is the everyday
+  // way to land here, and without this the old URL 404s with nothing pointing
+  // at the new one. It is also what makes changing the whole slug scheme a
+  // reversible decision rather than a one-way door.
+  for (const [path, file] of Object.entries(nextFiles)) {
+    const before = previous.files[path]
+    if (!before?.slug || before.slug === file.slug) continue
+    slugMoves.set(before.slug, file.slug)
+  }
+
   // Carry forward old redirects, re-pointing any whose target just moved.
   const merged: SnapshotRedirect[] = []
   const seen = new Set<string>()

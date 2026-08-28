@@ -79,6 +79,44 @@ test('a rename is detected by matching content hash and emits a redirect', () =>
   assert.deepEqual(redirects, [{ from: 'notes/old-name', to: 'notes/zettelkasten' }])
 })
 
+test('a note that stays put but changes slug still redirects its old URL', () => {
+  // The everyday way to hit this is editing `permalink`, which moves the URL and
+  // changes the bytes, so the rename detector cannot see it: that one only looks
+  // at paths which disappeared. Without a redirect the old URL 404s silently.
+  const previous = snapshot({ 'Notes/Thing.md': file('h1', 'notes/thing') })
+  const { renames, redirects } = detectRenames(previous, { 'Notes/Thing.md': file('h2', 'my-thing') })
+
+  assert.deepEqual(redirects, [{ from: 'notes/thing', to: 'my-thing' }])
+  assert.deepEqual(renames, [], 'nothing was renamed: the file never moved')
+})
+
+test('the same holds when the bytes are identical, which is what a slug-scheme change is', () => {
+  // This is what makes changing the whole URL scheme reversible rather than a
+  // one-way door: every page carries a redirect from where it used to live.
+  const previous = snapshot({ 'a.md': file('h1', 'old/a'), 'b.md': file('h2', 'old/b') })
+  const { redirects } = detectRenames(previous, { 'a.md': file('h1', 'new-a'), 'b.md': file('h2', 'new-b') })
+
+  assert.deepEqual(redirects.sort((x, y) => x.from.localeCompare(y.from)), [
+    { from: 'old/a', to: 'new-a' },
+    { from: 'old/b', to: 'new-b' },
+  ])
+})
+
+test('a slug that did not move emits nothing', () => {
+  const previous = snapshot({ 'a.md': file('h1', 'a') })
+  assert.deepEqual(detectRenames(previous, { 'a.md': file('h2', 'a') }).redirects, [])
+})
+
+test('a slug changed twice collapses to one hop, same as a rename does', () => {
+  const previous = snapshot({ 'a.md': file('h1', 'second') }, { redirects: [{ from: 'first', to: 'second' }] })
+  const { redirects } = detectRenames(previous, { 'a.md': file('h2', 'third') })
+
+  assert.deepEqual(redirects.sort((x, y) => x.from.localeCompare(y.from)), [
+    { from: 'first', to: 'third' },
+    { from: 'second', to: 'third' },
+  ])
+})
+
 test('a move that keeps the filename is preferred over an unrelated same-hash file', () => {
   const previous = snapshot({
     'A/note.md': file('h1', 'a/note'),
