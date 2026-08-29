@@ -31,7 +31,15 @@ export interface RuleRow {
   meta: string
   /** Shown under the path, in the warning colour. */
   warning?: string | null
-  onRemove: () => void
+  /**
+   * Optional, and its absence is the whole of "read-only".
+   *
+   * The Obsidian Publish import preview lists rules nobody can edit there, on
+   * purpose: it is a preview of a decision, and a second rule editor beside the
+   * one in Manage folders would only drift from it. Without a handler there is
+   * no remove button and no long-press menu, so there is nothing to press.
+   */
+  onRemove?: () => void
 }
 
 export function renderRuleRows(container: HTMLElement, rows: RuleRow[], emptyText: string): Disposer {
@@ -54,15 +62,19 @@ export function renderRuleRows(container: HTMLElement, rows: RuleRow[], emptyTex
     }
 
     setting.controlEl.createSpan({ cls: 'op-rule-meta', text: row.meta })
-    setting.addExtraButton((button) => {
-      button.extraSettingsEl.addClass('op-rule-remove')
-      button.setIcon('x').setTooltip(`Remove ${row.path}`).onClick(row.onRemove)
-    })
 
-    // There is no hover on a phone, so the gesture is the other way in. It opens
-    // a menu rather than removing outright: a hold that silently deletes a rule
-    // is a worse surprise than one extra tap.
-    if (Platform.isMobile) disposers.push(attachRemoveMenu(setting.settingEl, row))
+    const onRemove = row.onRemove
+    if (onRemove) {
+      setting.addExtraButton((button) => {
+        button.extraSettingsEl.addClass('op-rule-remove')
+        button.setIcon('x').setTooltip(`Remove ${row.path}`).onClick(onRemove)
+      })
+
+      // There is no hover on a phone, so the gesture is the other way in. It opens
+      // a menu rather than removing outright: a hold that silently deletes a rule
+      // is a worse surprise than one extra tap.
+      if (Platform.isMobile) disposers.push(attachRemoveMenu(setting.settingEl, onRemove))
+    }
   }
 
   return () => {
@@ -70,11 +82,11 @@ export function renderRuleRows(container: HTMLElement, rows: RuleRow[], emptyTex
   }
 }
 
-function attachRemoveMenu(el: HTMLElement, row: RuleRow): Disposer {
+function attachRemoveMenu(el: HTMLElement, onRemove: () => void): Disposer {
   return attachLongPress(el, {
     onLongPress: (point) => {
       const menu = new Menu()
-      menu.addItem((item) => item.setTitle('Remove').setIcon('x').onClick(row.onRemove))
+      menu.addItem((item) => item.setTitle('Remove').setIcon('x').onClick(onRemove))
       menu.showAtPosition({ x: point.x, y: point.y })
     },
   })

@@ -78,6 +78,20 @@ export function parsePublishFrontmatter(value: unknown): PublishFlag {
   return null
 }
 
+/**
+ * Strip the decoration people type around a folder name.
+ *
+ * Lives here rather than in the dialog that reads typed input, because
+ * `matchesFolderRule` below is the function it has to agree with, and because
+ * `core/publishconfig.ts` needs it while reading a foreign file. Deliberately
+ * *not* `normalizePath`: this module stays free of the Obsidian import so it
+ * can run under `node --test`. Callers that take typed input run
+ * `normalizePath` over the result first. See `PathSuggest`'s consumers.
+ */
+export function normalizeFolderRule(value: string): string {
+  return value.trim().replace(/^\/+|\/+$/g, '')
+}
+
 /** True when `path` is inside (or equal to) the folder rule `prefix`. */
 export function matchesFolderRule(path: string, prefix: string): boolean {
   const rule = prefix.replace(/^\/+|\/+$/g, '')

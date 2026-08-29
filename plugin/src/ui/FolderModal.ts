@@ -21,6 +21,7 @@ import { addRule, folderRulesSentence, removeRule, summarizeRules } from './Fold
 import type { RuleSummary } from './FolderRules.ts'
 import { renderFolderList } from './RuleList.ts'
 import type { Disposer } from './RuleList.ts'
+import { renderPublishImportRow } from './PublishImportModal.ts'
 
 export class FolderModal extends Modal {
   private disposers: Disposer[] = []
@@ -72,6 +73,11 @@ export class FolderModal extends Modal {
     const summary = this.summarize()
 
     contentEl.createEl('p', { cls: 'op-rule-intro', text: folderRulesSentence(summary) })
+
+    // Above both lists, and only for a vault that has a `publish.json`: this is
+    // the screen somebody arriving from Obsidian Publish would otherwise retype
+    // eight folder names into.
+    renderPublishImportRow({ app: this.app, container: contentEl, plugin: this.plugin, onDone: () => this.render() })
 
     // A folder in one list must not be offered by the other's picker: it would
     // end up in both, where the exclude would silently win.

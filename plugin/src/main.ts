@@ -56,10 +56,13 @@ export default class OpenPublishPlugin extends Plugin {
   private statusBar: StatusBar | null = null
   /** Whether the publish window is showing. Decides who announces the result. */
   private windowOpen = false
+  /** Whether this vault has a `publish.json`. Read once at load; see `detectObsidianPublish`. */
+  private obsidianPublishConfig = false
 
   override async onload(): Promise<void> {
     await this.loadSettings()
     await this.loadHashCache()
+    await this.detectObsidianPublish()
     this.hasher = new Hasher(this.app, this.hashCache)
 
     this.addSettingTab(new OpenPublishSettingTab(this.app, this))
@@ -164,6 +167,69 @@ export default class OpenPublishPlugin extends Plugin {
       app.setting.openTabById(this.manifest.id)
     } catch {
       new Notice('Could not open settings from here. Go to Settings, then Community plugins, then Open Publish.', 8000)
+    }
+  }
+
+  // --- Obsidian Publish's leftovers ---------------------------------------
+
+  /**
+   * `<config dir>/publish.json`, the only local state Obsidian Publish keeps.
+   *
+   * Hardcoding `.obsidian` here would be a bug, and it bites exactly the wrong
+   * people: anyone who moved their config directory is disproportionately a
+   * long-time user, which is disproportionately the population who paid for
+   * Publish for years. `Vault.configDir` is public typed API, so there is no
+   * cast and no excuse.
+   *
+   * This reads the config directory and never writes to it. `isAlwaysExcluded`
+   * guarantees nothing under a dot-folder can ever be published, so both the
+   * read-only promise and the never-publish-credentials guarantee hold
+   * unchanged.
+   */
+  private publishConfigPath(): string {
+    return normalizePath(`${this.app.vault.configDir}/publish.json`)
+  }
+
+  /**
+   * Cached at load, so the two places that offer the import stay synchronous.
+   *
+   * `FolderModal.render` and the wizard's step 6 both draw in one pass and are
+   * driven that way by the tests; neither should have to learn to render a
+   * pending state for one boolean. The text is re-read when the button is
+   * pressed, because the file outlives an Obsidian session and somebody who
+   * edits their Publish folders and imports again must not get a stale plan.
+   */
+  private async detectObsidianPublish(): Promise<void> {
+    try {
+      this.obsidianPublishConfig = await this.app.vault.adapter.exists(this.publishConfigPath())
+    } catch {
+      // Absence and unreadability are the same offer here: none.
+      this.obsidianPublishConfig = false
+    }
+  }
+
+  hasObsidianPublishConfig(): boolean {
+    return this.obsidianPublishConfig
+  }
+
+  /**
+   * The file's text, or null.
+   *
+   * A failed read and an absent file collapse into one answer deliberately:
+   * the advice either way is the same, so distinguishing them would only
+   * produce a second sentence nobody can act on differently. Obsidian Sync
+   * carries core plugin settings by default and Publish is a core plugin, so
+   * the file usually travels between devices, but iCloud and Git setups
+   * frequently exclude the config directory outright. Absence is an ordinary
+   * state, never an error.
+   */
+  async readObsidianPublishConfig(): Promise<string | null> {
+    try {
+      const path = this.publishConfigPath()
+      if (!(await this.app.vault.adapter.exists(path))) return null
+      return await this.app.vault.adapter.read(path)
+    } catch {
+      return null
     }
   }
 

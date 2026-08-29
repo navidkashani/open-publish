@@ -15,6 +15,7 @@ import { hostById } from '../builders/hosts.ts'
 import { addRule, removeRule, summarizeRules } from './FolderRules.ts'
 import { renderFolderList } from './RuleList.ts'
 import type { Disposer } from './RuleList.ts'
+import { renderPublishImportRow } from './PublishImportModal.ts'
 import { BuildFields, renderHostList, selectHost } from './BuildFields.ts'
 import { StorageFields, renderProviderList, selectProvider } from './StorageFields.ts'
 
@@ -390,6 +391,17 @@ export class SetupWizard extends Modal {
       text:
         'Nothing is published until you say so. Add folders to publish, or put "publish: true" in a note\'s frontmatter. ' +
         'Frontmatter always wins over folder rules.',
+    })
+
+    // The only onboarding moment that asks what to publish, so it is the one
+    // place a migrating user would otherwise retype their Publish folder list
+    // by hand. `renderStep` disposes the rows first, so re-rendering from here
+    // is safe.
+    renderPublishImportRow({
+      app: this.app,
+      container,
+      plugin: this.plugin,
+      onDone: () => this.renderStep(),
     })
 
     // The same list component settings uses, so the counts are here too: seeing

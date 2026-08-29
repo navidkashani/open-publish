@@ -293,6 +293,99 @@ This only helps a vault that kept the domain Obsidian Publish served. A move off
 `publish.obsidian.md/username` is a move to an address the old links never
 pointed at, and nothing self-hosted can catch those.
 
+### Importing an Obsidian Publish configuration
+
+The same migration, one step earlier. Obsidian Publish records a site's folder
+filters in `<config dir>/publish.json`, and for a vault that uses no `publish:`
+frontmatter that file is the *entire* definition of what is public. Retyping it
+into "Manage folders..." is the one operation in this plugin where a single typo
+publishes private notes: measured on a real vault, 335 markdown files, 93 inside
+the 8 configured folders, and no note carrying `publish:` frontmatter at all, so
+a mistyped rule exposes 242 private notes.
+
+The file, read off a live vault:
+
+```json
+{
+  "siteId": "e06fc8eb0e577dd6b3e0c6295c8602ad",
+  "host": "publish-01.obsidian.md",
+  "included": ["Wisdom & Approaches", "About", "Privacy", "WP Statistics",
+               "Recommended", "Notes", "Team Productivity", "Personal Productivity"],
+  "excluded": []
+}
+```
+
+Literal folder paths, no globs and no wildcards, corroborated by Obsidian's own
+`obsidian-headless` CLI, whose `ob publish-config --includes/--excludes`
+documents them as "folders to include/exclude". Because `matchesFolderRule` is
+prefix based they import unchanged, and because `getPublishFlag` resolves
+excludes before includes exactly as Publish does, an imported rule behaves the
+same on both products. In Obsidian's UI these live behind the funnel icon in the
+Publish changes dialog, named **Manage publish filters**, which is the phrase the
+import uses so people recognise what is being brought across.
+
+`included` becomes `selection.includes` and `excluded` becomes
+`selection.excludes`. That is the whole of it: **no field is added to
+`Settings`**, no `SETTINGS_VERSION` bump, no new branch in `migrateSettings`, and
+nothing to migrate back down. A stored "imported from Publish" flag would go
+stale the moment somebody changed their Publish folders, and `plan.unchanged`
+already produces a good "nothing to do" state without one.
+
+**Includes are replaced; excludes are merged.** Publish's include list is the
+user's answer to "what is public", so it replaces ours wholesale, and that is the
+only destructive half: it is bounded, listed rule by rule in the preview, and
+named in the warnings. Excludes are only ever added to, because replacing them
+with Publish's usually-empty list would delete a guard somebody added by hand and
+enlarge the published set through the back door, which is precisely the failure
+this feature exists to prevent. A *union* of includes was rejected for the mirror
+image of that reason: it can only ever publish more, and the default in a feature
+whose failure mode is "242 private notes go public" cannot be the one that
+publishes more. Anybody wanting the union adds folders in Manage folders, which
+already has pickers and live counts.
+
+The preview counts its headline with `getPublishFlag` over the real frontmatter,
+as `scanner.ts` does, rather than with `summarizeRules` alone. The per-rule counts
+still come from `summarizeRules`, whose header explains why it ignores
+frontmatter, and a line says so whenever the two disagree. This screen renders
+once and carries the single most privacy-critical number in the plugin, so it can
+afford the walk.
+
+The import also offers, pre-ticked, to turn on the legacy URLs described above,
+but only when `urlStyle` is still at its default and the file really is a Publish
+site's. The asymmetry decides the default: wrongly on costs a handful of redirect
+pages nobody visits, and wrongly off costs every inbound link and search ranking,
+permanently, discovered weeks later. It is asked rather than inferred because
+`publish.json` proves they used Publish and says nothing about whether they kept
+the domain, and asked rather than set silently because it changes what the site
+serves.
+
+Everything else about a Publish site is out of reach, not merely out of scope.
+Obsidian's help is explicit that "configuration settings are stored on Obsidian's
+servers": site name, homepage, theme, navigation, graph, backlinks, outline,
+search, line length, stacked pages, custom domain, analytics and every per-file
+selection are not in the vault at all. `publish.css` and `publish.js` do sit in
+the vault root, but they are Publish-specific theming and neither extension is in
+`SUPPORTED_EXTENSIONS`, so they do not carry over either.
+
+Deliberately not imported, so the decisions do not get relitigated:
+
+| Not imported | Why |
+|---|---|
+| `siteId` | Addresses a site on servers this plugin cannot reach, and it is an account-scoped identifier in a file that syncs between devices |
+| `host` | `publish-01.obsidian.md` is Obsidian's internal shard. In `builder.siteUrl` it would poll a domain the user does not own for the whole verification window, report "still waiting" forever, and send a request to Obsidian's infrastructure after every publish |
+| `core-plugins.json` | Records which panes the *author* has open in their editor, not what *visitors* get. Its defaults disagree in the dangerous direction: `DEFAULT_SETTINGS.site` has all five on and Obsidian ships `outline` and `tag-pane` off, so a typical import would switch site features off on a site nobody has seen yet. Publish keeps its own server-side toggles for these anyway |
+| `appearance.json` | A theme for the *app*, not the site. "Forced light/dark default" is already in the excluded-options table above for the same reason |
+| `app.json` `rightToLeft` | `site.dir` is derived from `site.locale` and rewritten on every load, so the write would not survive a restart, and a write that does not stick is worse than no write |
+| `templates.json`, `daily-notes.json` | The genuine near-miss. Publish's own `excluded` list is the user's real answer to "what should not be public", and an exclude the plugin invented appears in Manage folders as a rule nobody typed, holding notes back with no explanation attached |
+
+Also rejected: auto-importing on load or first run (the one operation that decides
+what becomes public must not happen because the plugin noticed a file), watching
+`publish.json` for changes (it would make a foreign app's config a live input to
+what is public), a startup `Notice` announcing the find (a toast for a one-shot
+decision gets dismissed reflexively, and dismissing it destroys the discovery),
+and offering to edit or delete `publish.json` (the plugin never writes to the
+vault, and least of all there).
+
 ## Publishing state machine
 
 ```

@@ -15,7 +15,17 @@
  * are what this dialog edits, so the rules are what it counts.
  */
 
-import { isAlwaysExcluded, isSupportedFile, matchesFolderRule } from '../core/selection.ts'
+import { isAlwaysExcluded, isSupportedFile, matchesFolderRule, normalizeFolderRule } from '../core/selection.ts'
+
+/**
+ * Re-exported, not defined here.
+ *
+ * It moved down beside `matchesFolderRule`, the function it has to agree with,
+ * so that `core/publishconfig.ts` can normalise a foreign file's folder list
+ * without a `core/` module importing from `ui/`. Every existing caller still
+ * reads it from here.
+ */
+export { normalizeFolderRule }
 
 export interface RuleStat {
   rule: string
@@ -43,17 +53,6 @@ export interface SummarizeInput {
   excludes: readonly string[]
   /** Vault lookup, so a renamed folder can be reported rather than silently matching nothing. */
   folderExists: (path: string) => boolean
-}
-
-/**
- * Strip the decoration people type around a folder name.
- *
- * Deliberately *not* `normalizePath`: this module stays free of the Obsidian
- * import so it can run under `node --test`. Callers that take typed input run
- * `normalizePath` over the result first. See `PathSuggest`'s consumers.
- */
-export function normalizeFolderRule(value: string): string {
-  return value.trim().replace(/^\/+|\/+$/g, '')
 }
 
 /** Append a rule unless it is empty or already listed. Returns a new array. */
@@ -100,7 +99,8 @@ export function noteCountLabel(count: number): string {
   return `${count} ${count === 1 ? 'note' : 'notes'}`
 }
 
-function folderCountLabel(count: number): string {
+/** Shared with the Publish import, which counts the same things in the same words. */
+export function folderCountLabel(count: number): string {
   return `${count} ${count === 1 ? 'folder' : 'folders'}`
 }
 

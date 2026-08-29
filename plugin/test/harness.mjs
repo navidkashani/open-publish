@@ -15,6 +15,7 @@ registerHooks({
 export const { PublishModal } = await import('../src/ui/PublishModal.ts')
 export const { StatusBar } = await import('../src/ui/StatusBar.ts')
 export const { FolderModal } = await import('../src/ui/FolderModal.ts')
+export const { PublishImportModal, renderPublishImportRow } = await import('../src/ui/PublishImportModal.ts')
 export const { RollbackModal } = await import('../src/ui/RollbackModal.ts')
 export const { OpenPublishSettingTab } = await import('../src/ui/SettingsTab.ts')
 export const { SetupWizard } = await import('../src/ui/SetupWizard.ts')
@@ -33,7 +34,20 @@ export { PublishSession }
  * A vault, as much of one as the settings surface asks for: a list of file
  * paths, a list of folder paths, and whatever frontmatter matters.
  */
-export function fakeApp({ folders = [], files = [], frontmatter = {}, secrets = {} } = {}) {
+export function fakeApp({
+  folders = [],
+  files = [],
+  frontmatter = {},
+  secrets = {},
+  configDir = '.obsidian',
+  /**
+   * Files under the config directory, which the vault API does not list and the
+   * adapter does. A separate map from `files` on purpose: folding them together
+   * would confuse them with what `getFiles()` returns, and nothing under the
+   * config directory is ever publishable.
+   */
+  configFiles = {},
+} = {}) {
   const folderSet = new Set(folders)
   const fileSet = new Set(files)
   return {
@@ -51,6 +65,18 @@ export function fakeApp({ folders = [], files = [], frontmatter = {}, secrets = 
       listSecrets: () => Object.keys(secrets),
     },
     vault: {
+      /** Overridable, because following a moved config directory is the point of using it. */
+      configDir,
+      adapter: {
+        exists: async (path) => Object.hasOwn(configFiles, path),
+        read: async (path) => {
+          if (!Object.hasOwn(configFiles, path)) throw new Error(`ENOENT: ${path}`)
+          return configFiles[path]
+        },
+        write: async (path, data) => {
+          configFiles[path] = data
+        },
+      },
       getFiles: () => files.map((path) => new TFile(path)),
       getMarkdownFiles: () => files.filter((path) => path.endsWith('.md')).map((path) => new TFile(path)),
       getAllFolders: (includeRoot = false) =>
@@ -64,14 +90,25 @@ export function fakeApp({ folders = [], files = [], frontmatter = {}, secrets = 
   }
 }
 
-/** A plugin whose only job here is to hold settings and count saves. */
-export function fakeSettingsPlugin(selection = {}, site = {}) {
+/**
+ * A plugin whose only job here is to hold settings and count saves.
+ *
+ * `publishConfig` is the text of `<config dir>/publish.json`, or null for a
+ * vault that never used Obsidian Publish. It stands in for the pair of methods
+ * `main.ts` exposes: one cached boolean, and a fresh read per press.
+ */
+export function fakeSettingsPlugin(selection = {}, site = {}, extra = {}) {
+  const { publishConfig = null, urlStyle = 'clean', lastPublishedAt = null } = extra
   const plugin = {
     saves: 0,
     settings: {
       selection: { includes: [], excludes: [], explicit: {}, autoIncludeEmbeds: true, ...selection },
       site: { title: 'Notes', homepage: '', ...site },
+      urlStyle,
+      lastPublishedAt,
     },
+    hasObsidianPublishConfig: () => publishConfig !== null,
+    readObsidianPublishConfig: async () => publishConfig,
     async saveSettings() {
       plugin.saves++
     },
@@ -102,6 +139,9 @@ export function fakePlugin(overrides = {}) {
     },
     openSettings: () => calls.settings++,
     openSetup: () => calls.setup++,
+    // The publish window opens Manage folders, which offers the Publish import.
+    hasObsidianPublishConfig: () => overrides.publishConfig != null,
+    readObsidianPublishConfig: async () => overrides.publishConfig ?? null,
     triggerBuildOnly: async () => calls.updates++,
     saveSettings: async () => {},
     setPublishWindowOpen: (open) => calls.windowOpen.push(open),
@@ -116,12 +156,14 @@ export function fakePlugin(overrides = {}) {
  * the same shape a `data.json` has and get whatever the shipping migration
  * would have produced, defaults included.
  */
-export function fakeStoragePlugin({ stored = {}, testResult = { ok: true } } = {}) {
+export function fakeStoragePlugin({ stored = {}, testResult = { ok: true }, publishConfig = null } = {}) {
   const calls = { saves: 0, tests: 0, selfTests: 0, cleanups: 0, cacheClears: 0, builderChecks: 0 }
   const plugin = {
     calls,
     settings: migrateSettings(stored),
     manifest: { version: '0.1.0' },
+    hasObsidianPublishConfig: () => publishConfig !== null,
+    readObsidianPublishConfig: async () => publishConfig,
     async saveSettings() {
       calls.saves++
     },

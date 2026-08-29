@@ -31,6 +31,11 @@ published in Git.
   `/company/about-us`. One setting puts a redirect at every address Obsidian
   used, so moving off it on your own domain keeps your inbound links and your
   search ranking.
+- **Imports your Obsidian Publish setup.** If this vault published with Obsidian
+  Publish, the folders it published are already written down in
+  `.obsidian/publish.json`. Open Publish reads that file, shows you exactly which
+  folders it would publish and how many notes that is, and writes nothing until
+  you agree.
 - **Site options that are not theme-specific.** Navigation, search, graph,
   backlinks, outline, tags, theme toggle, homepage, analytics and a
   discourage-search-engines switch, described as intent, so a future starter

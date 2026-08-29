@@ -16,9 +16,9 @@ import { PROVIDERS } from '../src/destinations/providers.ts'
 
 const R2_ENDPOINT = 'https://0123456789abcdef0123456789abcdef.r2.cloudflarestorage.com'
 
-function open(stored = {}) {
+function open(stored = {}, extra = {}) {
   const app = fakeApp({ files: ['Notes/Home.md'], folders: ['Notes'] })
-  const plugin = fakeStoragePlugin({ stored })
+  const plugin = fakeStoragePlugin({ stored, ...extra })
   const wizard = new SetupWizard(app, plugin)
   wizard.open()
   return { wizard, plugin }
@@ -424,4 +424,27 @@ test('the setup guide is still six steps, so "step 4" keeps meaning the same thi
   goTo(wizard, 3)
   assert.match(wizard.contentEl.textContent, /Step 4 of 6/)
   assert.ok(envBlock(wizard).includes('OP_ENDPOINT'), 'and step 4 is still the one with the variables')
+})
+
+test('step 6 offers the Publish import, which is where the folder names would be retyped', () => {
+  const publishConfig = JSON.stringify({
+    siteId: 'e06fc8eb0e577dd6b3e0c6295c8602ad',
+    host: 'publish-01.obsidian.md',
+    included: ['Notes'],
+    excluded: [],
+  })
+  const { wizard } = open({}, { publishConfig })
+  goTo(wizard, 5)
+
+  assert.match(wizard.contentEl.textContent, /Step 6 of 6/)
+  assert.match(wizard.contentEl.textContent, /Import from Obsidian Publish/)
+})
+
+test('and a vault that never used it sees nothing extra on step 6', () => {
+  const { wizard } = open()
+  goTo(wizard, 5)
+
+  assert.match(wizard.contentEl.textContent, /Step 6 of 6/)
+  assert.doesNotMatch(wizard.contentEl.textContent, /Import from Obsidian Publish/)
+  assert.match(wizard.contentEl.textContent, /Folders to publish/, 'the step itself is unchanged')
 })

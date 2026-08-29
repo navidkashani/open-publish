@@ -28,7 +28,7 @@ const clock = {
 globalThis.window ??= { open() {}, setTimeout: clock.setTimeout, clearTimeout: clock.clearTimeout }
 
 const { byClass, click, dispatch, find, findAll } = await import('./dom.mjs')
-const { FolderModal, Platform, fakeApp, fakeSettingsPlugin, menus, suggesters } = await import('./harness.mjs')
+const { FolderModal, Platform, fakeApp, fakeSettingsPlugin, menus, modals, suggesters } = await import('./harness.mjs')
 
 const VAULT = {
   folders: ['Notes', 'Notes/Drafts', 'Ideas', 'Archive', 'Archive/2024', '.obsidian'],
@@ -42,13 +42,21 @@ const VAULT = {
   ],
 }
 
-function open(selection = {}, onDone = () => {}) {
+function open(selection = {}, onDone = () => {}, extra = {}) {
   const app = fakeApp(VAULT)
-  const plugin = fakeSettingsPlugin(selection)
+  const plugin = fakeSettingsPlugin(selection, {}, extra)
   const modal = new FolderModal(app, plugin, onDone)
   modal.open()
   return { app, plugin, modal }
 }
+
+/** What Obsidian Publish leaves in the config directory of a vault it published. */
+const PUBLISH_FILE = JSON.stringify({
+  siteId: 'e06fc8eb0e577dd6b3e0c6295c8602ad',
+  host: 'publish-01.obsidian.md',
+  included: ['Notes', 'Ideas'],
+  excluded: [],
+})
 
 /** Every rule row on screen: its path, its count, and its warning if it has one. */
 function rows(modal) {
@@ -241,4 +249,28 @@ test('on desktop no gesture is attached at all: hover already reveals the contro
   dispatch(row, 'pointerdown', { pointerType: 'touch', clientX: 0, clientY: 0 })
   clock.run()
   assert.equal(menus.length, 0)
+})
+
+test('a vault that never used Obsidian Publish is offered nothing', () => {
+  // The whole discoverability rule: the row exists only when the file does.
+  const { modal } = open({ includes: ['Notes'] })
+  assert.doesNotMatch(modal.contentEl.textContent, /Import from Obsidian Publish/)
+})
+
+test('a vault with a Publish configuration is offered the import above both lists', () => {
+  const { modal } = open({}, () => {}, { publishConfig: PUBLISH_FILE })
+  assert.match(modal.contentEl.textContent, /Import from Obsidian Publish/)
+  assert.match(modal.contentEl.textContent, /Manage publish filters/, 'named as Obsidian names it')
+})
+
+test('Review import opens the preview, built from the file as it is right now', async () => {
+  modals.length = 0
+  const { modal } = open({}, () => {}, { publishConfig: PUBLISH_FILE })
+  click(find(modal.contentEl, (node) => node.tagName === 'BUTTON' && node.textContent === 'Review import'))
+  // The file is re-read on the press, so the preview arrives a tick later.
+  await new Promise((resolve) => setImmediate(resolve))
+
+  const preview = modals.at(-1)
+  assert.notEqual(preview, modal, 'the preview is its own window')
+  assert.match(preview.contentEl.textContent, /configuration lists 2 folders/)
 })

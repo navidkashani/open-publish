@@ -131,6 +131,28 @@ The other cause is a deploy hook created for a branch other than the one the
 live site is built from. The build runs and deploys to a preview address while
 the plugin polls production, so the two never meet.
 
+**I used Obsidian Publish and the import does not appear.**
+The row appears only when `<config dir>/publish.json` exists, which is the file
+Obsidian Publish writes when a site has folder filters set. Three ordinary
+reasons it is not there. The vault synced without its configuration directory:
+Obsidian Sync carries core plugin settings by default, but iCloud and Git setups
+frequently exclude the whole directory. The Publish setup never got as far as
+choosing folders, so nothing was written. Or the site selects notes one at a
+time, which Obsidian stores on its own servers rather than in your vault.
+
+If you moved your configuration directory, the plugin follows it: the path comes
+from the vault, never from a hardcoded `.obsidian`. Nothing is lost either way.
+Add the folders in **Manage folders...**, where the count beside each one tells
+you immediately whether you picked the right ones.
+
+**The import lists folders that no longer exist.**
+They were renamed or deleted after Obsidian Publish last saved its filters. The
+preview marks each one, and importing them is harmless: a rule that names nothing
+publishes nothing. Remove them in **Manage folders...** whenever you like.
+
+Note that folder names are case sensitive here, as they are in Obsidian Publish,
+so `notes` and `Notes` are different folders and the wrong one reads 0 notes.
+
 ## Site problems
 
 **Images are missing.**
