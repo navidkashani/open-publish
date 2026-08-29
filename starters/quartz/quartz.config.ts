@@ -1,4 +1,6 @@
 import { QuartzConfig } from './quartz/cfg'
+import { TRANSLATIONS } from './quartz/i18n'
+import type { ValidLocale } from './quartz/i18n'
 import * as Plugin from './quartz/plugins'
 import { site } from './op-site'
 import { resolveBaseUrl } from './scripts/lib/site-url.mjs'
@@ -32,7 +34,15 @@ const config: QuartzConfig = {
     enableSPA: true,
     enablePopovers: true,
     analytics: analyticsConfig(),
-    locale: 'en-US',
+    // Checked against Quartz's own translation table rather than trusted. An
+    // unknown tag makes `TRANSLATIONS[locale]` undefined at runtime, and every
+    // piece of chrome text on the site becomes `undefined`, so a language
+    // Quartz has no strings for has to fall back to one it does.
+    locale: (site.locale in TRANSLATIONS ? site.locale : 'en-US') as ValidLocale,
+    // Written by the plugin, derived there from the language. Narrowed rather
+    // than cast because `op-site.ts` is generated from JSON, so its `dir` is
+    // typed as a plain string.
+    dir: site.dir === 'rtl' ? 'rtl' : 'ltr',
     // Must be undefined rather than '' when unknown. See scripts/lib/site-url.mjs.
     baseUrl: resolveBaseUrl(),
     ignorePatterns: ['private', 'templates', '.obsidian'],

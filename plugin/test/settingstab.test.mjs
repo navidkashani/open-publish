@@ -73,6 +73,24 @@ test('the analytics provider dropdown is rendered above the field it governs', (
   assert.ok(id < provider, 'the insertAdjacentElement move puts the ID row first in the DOM')
 })
 
+test('picking a right-to-left language sets the direction with it, in one step', () => {
+  // The other of the two places `dir` is ever written. If this one drifted, a
+  // Persian vault would publish `lang="fa-IR" dir="ltr"` until the next load.
+  const { plugin, root } = open()
+  const language = rowNamed(root, 'Language')
+  assert.equal(inputIn(language).value, 'en-US')
+
+  const select = inputIn(language)
+  select.value = 'fa-IR'
+  dispatch(select, 'input')
+  assert.equal(plugin.settings.site.locale, 'fa-IR')
+  assert.equal(plugin.settings.site.dir, 'rtl')
+
+  select.value = 'de-DE'
+  dispatch(select, 'input')
+  assert.equal(plugin.settings.site.dir, 'ltr', 'and back again, rather than sticking')
+})
+
 // --- the storage picker -------------------------------------------------
 
 test('a fresh vault starts on the recommended provider and asks for one value', () => {

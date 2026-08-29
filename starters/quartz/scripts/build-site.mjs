@@ -17,6 +17,8 @@ import { access, cp, mkdir, readdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import process from 'node:process'
 
+import { patchDirection } from './lib/rtl-patch.mjs'
+
 const QUARTZ_REPO = process.env.OP_QUARTZ_REPO ?? 'https://github.com/jackyzha0/quartz.git'
 const QUARTZ_REF = process.env.OP_QUARTZ_REF ?? 'v4.5.1'
 const WORK_DIR = '.quartz'
@@ -70,6 +72,19 @@ async function main() {
     await mkdir(join(WORK_DIR, 'scripts'), { recursive: true })
     await cp(join('scripts', 'lib'), join(WORK_DIR, 'scripts', 'lib'), { recursive: true, force: true })
   }
+
+  // And `styles/`, for a third time the same reason: `quartz/styles/base.scss`
+  // reaches out of the checkout for our right-to-left sheet, so the sheet has
+  // to be inside the checkout for that path to mean anything.
+  if (await exists('styles')) {
+    await cp('styles', join(WORK_DIR, 'styles'), { recursive: true, force: true })
+  }
+
+  // In the forked shape above, assembly already did this. Here Quartz is a
+  // plain clone, so the three edits that give it a direction concept at all
+  // have to happen before the build. Running it against a checkout cached
+  // from a previous build is a no-op.
+  await patchDirection(WORK_DIR)
 
   await run('npx', ['quartz', 'build', '--output', '../public'], { cwd: WORK_DIR })
 

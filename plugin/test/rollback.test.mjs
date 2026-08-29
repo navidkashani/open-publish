@@ -240,6 +240,27 @@ test('the other site options are listed, so a changed title is never a mystery',
   assert.equal(changes[2].before, 'plausible (a.test)')
 })
 
+test('a language change is one row, named in words, and never a direction row too', () => {
+  // `dir` is derived from the language, so listing it as well would be telling
+  // somebody the same thing twice, in a vocabulary they never used.
+  const changes = diffSiteOptions({ ...site, locale: 'fa-IR', dir: 'rtl' }, { ...site, locale: 'en-US', dir: 'ltr' })
+  assert.deepEqual(
+    changes.map((change) => change.option),
+    ['Language'],
+  )
+  assert.equal(changes[0].before, 'Persian (Iran)')
+  assert.equal(changes[0].after, 'English (United States)')
+})
+
+test('rolling back past the day the language option existed reports no change', () => {
+  // The older snapshot carries no language at all, and the site it built was in
+  // the default one. Nothing changed, so nothing may be listed.
+  const older = { ...site }
+  delete older.locale
+  delete older.dir
+  assert.deepEqual(diffSiteOptions(older, { ...site, locale: 'en-US' }), [])
+})
+
 test('identical site blocks produce no option noise at all', async () => {
   const plan = await planRollback(twoVersions(), OLD)
   assert.deepEqual(plan.optionChanges, [])

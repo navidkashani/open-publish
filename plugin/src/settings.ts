@@ -18,6 +18,7 @@ import type { ProviderId } from './destinations/providers.ts'
 import { inferHost, isHostId } from './builders/hosts.ts'
 import type { HostId } from './builders/hosts.ts'
 import { isUrlStyle } from './core/slug.ts'
+import { DEFAULT_LOCALE, directionFor, isLocale } from './core/locales.ts'
 import type { UrlStyle } from './core/slug.ts'
 import { snapshotTime } from './core/snapshot.ts'
 import type { SnapshotSite } from './core/snapshot.ts'
@@ -198,6 +199,8 @@ export const DEFAULT_SETTINGS: Settings = {
   site: {
     title: 'My Notes',
     homepage: '',
+    locale: DEFAULT_LOCALE,
+    dir: 'ltr',
     noIndex: false,
     showThemeToggle: true,
     // Off by default: people write notes with single newlines and expect to see
@@ -251,6 +254,15 @@ export function migrateSettings(raw: unknown): Settings {
       provider: analytics?.provider ?? 'none',
       id: typeof analytics?.id === 'string' ? analytics.id : '',
     }
+    // Checked against the table rather than copied across, for the same reason
+    // `urlStyle` is below: an unrecognised tag would reach the dropdown, which
+    // cannot render it, and then a published snapshot, where jotter's schema
+    // rejects it at *build* time: a broken site rather than a wrong one.
+    settings.site.locale = isLocale(stored.site.locale) ? stored.site.locale : DEFAULT_SETTINGS.site.locale
+    // Re-derived on every load rather than trusted, so a hand-edited or stale
+    // data.json cannot hold a direction that disagrees with its language. This
+    // and the settings dropdown are the only two places `dir` is ever written.
+    settings.site.dir = directionFor(settings.site.locale)
   }
 
   settings.builder.host = resolveHost(stored.builder)

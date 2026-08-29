@@ -12,6 +12,8 @@ import {
 import { providerById } from '../destinations/providers.ts'
 import { isAlwaysExcluded, parsePublishFrontmatter } from '../core/selection.ts'
 import { isUrlStyle } from '../core/slug.ts'
+import { LOCALES, directionFor, isLocale } from '../core/locales.ts'
+import type { SiteToggleKey } from '../core/snapshot.ts'
 import { FolderModal } from './FolderModal.ts'
 import { RollbackModal } from './RollbackModal.ts'
 import { folderRulesSummary, summarizeRules } from './FolderRules.ts'
@@ -23,6 +25,29 @@ import { SetupWizard } from './SetupWizard.ts'
 import { StorageFields } from './StorageFields.ts'
 
 const HOMEPAGE_DESC = 'The note visitors land on, e.g. "Notes/Home.md". It has to be a published note.'
+
+/**
+ * The toggles rendered by the loop under "Appearance".
+ *
+ * The light/dark control and strict line breaks are rendered on their own just
+ * above it, because each needs a sentence of explanation the others do not.
+ */
+type AppearanceKey = Exclude<SiteToggleKey, 'showThemeToggle' | 'strictLineBreaks'>
+
+/**
+ * A record keyed by the option names themselves, and `satisfies` rather than an
+ * annotation, so a site option added without a control here fails to compile.
+ * The list this replaced was a bare union of string literals, unconnected to
+ * `SnapshotSite`: a new option could be published with nothing to set it.
+ */
+const APPEARANCE = {
+  showNavigation: { label: 'Navigation', desc: 'A list of published pages alongside the content.' },
+  showSearch: { label: 'Search', desc: 'Search across page titles, headings and content.' },
+  showGraph: { label: 'Graph view', desc: 'A small local graph on each page.' },
+  showOutline: { label: 'Table of contents', desc: 'The outline of headings on each page.' },
+  showBacklinks: { label: 'Backlinks', desc: 'Which published pages link to this one.' },
+  showTags: { label: 'Tags', desc: "Show a page's tags, and give each tag its own page." },
+} satisfies Record<AppearanceKey, { label: string; desc: string }>
 
 export class OpenPublishSettingTab extends PluginSettingTab {
   private readonly plugin: OpenPublishPlugin
@@ -334,6 +359,28 @@ export class OpenPublishSettingTab extends PluginSettingTab {
         }),
       )
 
+    new Setting(containerEl)
+      .setName('Language')
+      .setDesc(
+        'The language your notes are written in. It sets the language of the site chrome: the ' +
+          'search box, the backlinks heading, the dates. It also tells browsers and search engines ' +
+          'what they are reading. Arabic and Persian also lay the site out right to left.',
+      )
+      .addDropdown((dropdown) =>
+        dropdown
+          .addOptions(Object.fromEntries(LOCALES.map((locale) => [locale.tag, locale.label])))
+          .setValue(site.locale)
+          .onChange(async (value) => {
+            if (!isLocale(value)) return
+            site.locale = value
+            // Written together, always, so settings can never hold a direction
+            // that disagrees with its language. `migrateSettings` re-derives it
+            // on load for the same reason.
+            site.dir = directionFor(value)
+            await this.plugin.saveSettings()
+          }),
+      )
+
     this.renderHomepage(containerEl)
     this.renderUrlStyle(containerEl)
 
@@ -378,18 +425,12 @@ export class OpenPublishSettingTab extends PluginSettingTab {
         }),
       )
 
-    const toggles: Array<['showNavigation' | 'showSearch' | 'showGraph' | 'showOutline' | 'showBacklinks' | 'showTags', string, string]> = [
-      ['showNavigation', 'Navigation', 'A list of published pages alongside the content.'],
-      ['showSearch', 'Search', 'Search across page titles, headings and content.'],
-      ['showGraph', 'Graph view', 'A small local graph on each page.'],
-      ['showOutline', 'Table of contents', 'The outline of headings on each page.'],
-      ['showBacklinks', 'Backlinks', 'Which published pages link to this one.'],
-      ['showTags', 'Tags', 'Show a page\'s tags, and give each tag its own page.'],
-    ]
-    for (const [key, label, description] of toggles) {
+    for (const [key, { label, desc }] of Object.entries(APPEARANCE) as Array<
+      [AppearanceKey, { label: string; desc: string }]
+    >) {
       new Setting(containerEl)
         .setName(label)
-        .setDesc(description)
+        .setDesc(desc)
         .addToggle((toggle) =>
           toggle.setValue(site[key]).onChange(async (value) => {
             site[key] = value

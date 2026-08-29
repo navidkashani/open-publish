@@ -69,6 +69,12 @@ const snapshot = {
   site: {
     title: 'Verification Site',
     homepage: 'Notes/Home.md',
+    // Persian, so the one thing a build can prove about a language option gets
+    // proved: that the tag reaches `<html>` and that the direction derived from
+    // it reaches the layout. Every other check below is on markup and class
+    // names, so none of them care what language the chrome is in.
+    locale: 'fa-IR',
+    dir: 'rtl',
     noIndex: true,
     showThemeToggle: false,
     strictLineBreaks: false,
@@ -95,7 +101,7 @@ await new Promise((r) => server.listen(0, '127.0.0.1', r))
 const port = server.address().port
 
 await mkdir(WORK, { recursive: true })
-for (const f of ['scripts', 'quartz.config.ts', 'quartz.layout.ts', 'op-site.ts', 'package.json']) {
+for (const f of ['scripts', 'quartz.config.ts', 'quartz.layout.ts', 'op-site.ts', 'package.json', 'styles']) {
   await cp(join(STARTER, f), join(WORK, f), { recursive: true })
 }
 // Reuse a Quartz checkout if one is already here, so repeat runs are fast.
@@ -179,6 +185,22 @@ check('analytics uses the right provider script', /googletagmanager|gtag/.test(b
 check('strictLineBreaks:false renders a single newline as a break', /<br\s*\/?>/.test(html))
 check('noIndex:true writes robots.txt', (await readFile(join(WORK, 'public/robots.txt'), 'utf8')).includes('Disallow: /'))
 check('noIndex:true adds the header rule', (await readFile(join(WORK, 'public/_headers'), 'utf8')).includes('X-Robots-Tag'))
+
+// --- the language reaches the page, and the direction reaches the layout ----
+// The reason `dir` is in the snapshot at all. Quartz has no direction concept
+// of its own, so all three of these come from patches applied to its files, and
+// a patch that silently stopped matching would show up here and nowhere else.
+// `lang` is the primary subtag: Quartz renders `fa` from `fa-IR`, which is what
+// upstream does with every locale and is still a correct BCP-47 tag.
+check('the language reaches <html lang>', /<html lang="fa"/.test(html))
+check('and the derived direction reaches it too', /<html [^>]*dir="rtl"/.test(html))
+check('an English build would not be flipped', !/<html [^>]*dir="ltr"/.test(html))
+const styles = await Promise.all(
+  out.filter((f) => f.endsWith('.css')).map((f) => readFile(join(WORK, 'public', f), 'utf8')),
+)
+const css = styles.join('\n')
+check('the right-to-left sheet is in the bundle', css.includes('[dir=rtl]') || css.includes("[dir='rtl']"))
+check('and it mirrors the explorer indent guides', /\[dir=.?rtl.?\][^{]*folder-outer[^{]*\{[^}]*border-right/.test(css))
 
 // Keep the Quartz checkout for next time; drop everything else.
 await cp(join(WORK, '.quartz'), join(STARTER, '.quartz'), { recursive: true, force: true }).catch(() => {})

@@ -87,9 +87,9 @@ could honour it. That second clause is load-bearing: it is why there is no
 capability-negotiation protocol between plugin and starter. There is nothing to
 negotiate when every option is universal.
 
-Currently twelve: `title`, `homepage`, `noIndex`, `showThemeToggle`,
-`strictLineBreaks`, `showNavigation`, `showSearch`, `showGraph`, `showOutline`,
-`showBacklinks`, `showTags`, `analytics`.
+Currently fourteen: `title`, `homepage`, `locale`, `dir`, `noIndex`,
+`showThemeToggle`, `strictLineBreaks`, `showNavigation`, `showSearch`,
+`showGraph`, `showOutline`, `showBacklinks`, `showTags`, `analytics`.
 
 Deliberately excluded, so the decisions do not get relitigated:
 
@@ -106,6 +106,19 @@ Deliberately excluded, so the decisions do not get relitigated:
 `homepage` is resolved in the **plugin**, not the starter: the chosen note gets
 the slug `index`, so links to it and redirects from its old name resolve to `/`
 for free and no generator needs to know the concept exists.
+
+`dir` is the one option that is not a statement of fact about the vault. It is a
+presentation directive, and it is derivable from `locale`, which makes it an
+override rather than a peer option. It is stored anyway, and there is no control
+for it: it is written from `locale` in the settings panel and derived again on
+every load. Left to the starters, each would re-derive direction on its own, and
+Quartz, having no direction concept at all, would not derive it, so the bug this
+option exists to fix would survive in the starter it was found in. The escape
+clause below has a matching limit. "A generator that cannot express an option
+ignores it" was written for *absent features*: ignore `showGraph` and you get no
+graph. Ignoring `dir` does not produce a missing feature, it produces a site laid
+out backwards for its reader. So `dir` is admissible only because the Quartz
+starter was taught to honour it, in `scripts/lib/rtl-patch.mjs`.
 
 Two rules keep the contract safe as it grows:
 

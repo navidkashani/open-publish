@@ -324,6 +324,26 @@ test('an older snapshot missing new options gets defaults, not silent switch-off
       assert.match(opSite, /"showNavigation": true/)
       assert.match(opSite, /"showThemeToggle": true/)
       assert.match(opSite, /"provider": "none"/)
+      // Language and direction arrived after this starter shipped, and this is
+      // why no snapshot version bump was needed for them: a manifest that
+      // predates them is not broken by them, it just gets the same English,
+      // left-to-right site it has always built.
+      assert.match(opSite, /"locale": "en-US"/)
+      assert.match(opSite, /"dir": "ltr"/)
+    },
+  )
+})
+
+test('a snapshot that names a right-to-left language carries both keys through', async () => {
+  await withBucket(
+    { files: { 'a.md': { content: 'a', slug: 'a' } }, site: { locale: 'fa-IR', dir: 'rtl' } },
+    async ({ cwd, env }) => {
+      const result = await runScript('fetch-content.mjs', cwd, env)
+      assert.equal(result.code, 0, result.stderr)
+      const opSite = await readFile(join(cwd, 'op-site.ts'), 'utf8')
+      assert.match(opSite, /"locale": "fa-IR"/)
+      assert.match(opSite, /"dir": "rtl"/)
+      assert.doesNotMatch(result.stdout, /ignoring site option/, 'both are options this starter knows')
     },
   )
 })

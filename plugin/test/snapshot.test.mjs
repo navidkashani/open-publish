@@ -12,9 +12,9 @@ import {
   MAX_REDIRECTS,
 } from '../src/core/snapshot.ts'
 
-const site = { title: 'N', homepage: '', noIndex: false, showThemeToggle: true, strictLineBreaks: false,
-  showNavigation: true, showSearch: true, showGraph: true, showOutline: true, showBacklinks: true, showTags: true,
-  analytics: { provider: 'none', id: '' } }
+const site = { title: 'N', homepage: '', locale: 'en-US', dir: 'ltr', noIndex: false, showThemeToggle: true,
+  strictLineBreaks: false, showNavigation: true, showSearch: true, showGraph: true, showOutline: true,
+  showBacklinks: true, showTags: true, analytics: { provider: 'none', id: '' } }
 const file = (hash, slug, extra = {}) => ({ hash, size: 1, mtime: 0, slug, ...extra })
 
 const snapshot = (files, overrides = {}) => ({
@@ -181,6 +181,10 @@ test('every site option affects the snapshot id, so flipping one triggers a rebu
   const variants = {
     title: { ...site, title: 'Other' },
     homepage: { ...site, homepage: 'Notes/Home.md' },
+    // The pair that makes a Persian vault a different site from an English one:
+    // a wrong `lang` is not cosmetic, so neither may be free to skip a rebuild.
+    locale: { ...site, locale: 'fa-IR' },
+    dir: { ...site, dir: 'rtl' },
     noIndex: { ...site, noIndex: true },
     showThemeToggle: { ...site, showThemeToggle: false },
     strictLineBreaks: { ...site, strictLineBreaks: true },

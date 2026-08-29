@@ -187,6 +187,8 @@ async function ensureIndex(snapshot, written) {
 const DEFAULT_SITE = {
   title: 'My Notes',
   homepage: '',
+  locale: 'en-US',
+  dir: 'ltr',
   noIndex: false,
   showThemeToggle: true,
   strictLineBreaks: false,

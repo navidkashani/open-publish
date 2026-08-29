@@ -9,6 +9,8 @@
 export const site = {
   title: 'My Notes',
   homepage: '',
+  locale: 'en-US',
+  dir: 'ltr',
   noIndex: false,
   showThemeToggle: true,
   strictLineBreaks: false,

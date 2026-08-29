@@ -611,6 +611,26 @@ test('a publish that committed nothing leaves the rollback standing', () => {
   assert.equal(isRolledBack(settings), true)
 })
 
+test('the language defaults to en-US, round-trips, and refuses anything else', () => {
+  assert.equal(migrateSettings({}).site.locale, 'en-US')
+  assert.equal(migrateSettings({ site: { locale: 'fa-IR' } }).site.locale, 'fa-IR')
+  for (const junk of ['klingon', 'fa', '', null, 42, { locale: 'fa-IR' }]) {
+    const settings = migrateSettings({ site: { locale: junk } })
+    assert.equal(settings.site.locale, 'en-US', `${JSON.stringify(junk)} fell back`)
+    assert.equal(settings.site.dir, 'ltr', 'and took the direction of the language it fell back to')
+  }
+})
+
+test('direction is re-derived on every load, so a stale data.json cannot disagree with itself', () => {
+  // The whole reason `dir` has no control of its own. Hand-edit it, sync a
+  // half-written file between devices, downgrade and upgrade again: the
+  // language is the only thing that decides, and it decides again here.
+  assert.equal(migrateSettings({ site: { locale: 'fa-IR', dir: 'ltr' } }).site.dir, 'rtl')
+  assert.equal(migrateSettings({ site: { locale: 'en-US', dir: 'rtl' } }).site.dir, 'ltr')
+  assert.equal(migrateSettings({ site: { locale: 'ar-SA', dir: 'sideways' } }).site.dir, 'rtl')
+  assert.equal(migrateSettings({ site: { dir: 'sideways' } }).site.dir, 'ltr', 'no language at all')
+})
+
 test('the URL style defaults to clean, round-trips, and refuses anything else', () => {
   assert.equal(migrateSettings({}).urlStyle, 'clean', 'nobody gets redirect pages they did not ask for')
   assert.equal(migrateSettings({ urlStyle: 'clean-with-redirects' }).urlStyle, 'clean-with-redirects')

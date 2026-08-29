@@ -85,6 +85,8 @@ export const bytes = (text) => new TextEncoder().encode(text).buffer
 export const site = {
   title: 'Notes',
   homepage: '',
+  locale: 'en-US',
+  dir: 'ltr',
   noIndex: false,
   showThemeToggle: true,
   strictLineBreaks: false,

@@ -95,6 +95,19 @@ export interface SnapshotSite {
    * generator needs a special case.
    */
   homepage: string
+  /** BCP-47 tag for `<html lang>`, e.g. `en-US`, `fa-IR`. */
+  locale: string
+  /**
+   * Reading direction of the site chrome. Derived from `locale`, never set
+   * directly. It is here rather than left to each starter so that a generator
+   * with no direction concept of its own still receives the answer instead of
+   * quietly defaulting to `ltr`.
+   *
+   * Deliberately two-valued. jotter's `auto` is a *note* frontmatter value
+   * meaning "the default per-block behaviour", and per-block detection resolves
+   * *to* this value, so a site-level `auto` would be circular.
+   */
+  dir: 'ltr' | 'rtl'
   /** Ask search engines to stay away. Not access control. See docs/security.md. */
   noIndex: boolean
   showThemeToggle: boolean
@@ -112,6 +125,25 @@ export interface SnapshotSite {
   showTags: boolean
   analytics: SnapshotAnalytics
 }
+
+/**
+ * The boolean site options, read off the interface rather than listed again.
+ *
+ * Two records are keyed by these (`TOGGLES` in `rollback.ts`, the appearance
+ * list in `SettingsTab.ts`), and both exist so that adding a boolean option and
+ * forgetting one of them fails to compile instead of shipping an option that is
+ * silently missing from the rollback diff or from the settings panel.
+ */
+export type SiteBooleanKey = {
+  [K in keyof SnapshotSite]: SnapshotSite[K] extends boolean ? K : never
+}[keyof SnapshotSite]
+
+/**
+ * Every boolean option except `noIndex`, which both the settings panel and the
+ * rollback diff render on their own: it is the one that is about exposure
+ * rather than appearance, and the only one that can carry a warning.
+ */
+export type SiteToggleKey = Exclude<SiteBooleanKey, 'noIndex'>
 
 export interface SnapshotRedirect {
   from: string

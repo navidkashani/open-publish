@@ -1,0 +1,196 @@
+// The breakpoint below is Quartz's own, read from its variables rather than
+// copied, so an upstream change to it moves this file too.
+@use "../quartz/styles/variables.scss" as *;
+
+// Right-to-left corrections for Quartz, applied when the published snapshot
+// says the site reads that way.
+//
+// `<html dir="rtl">` already does most of the work on its own: CSS grid areas,
+// flex rows, logical properties and default text alignment all follow the
+// writing direction. What it cannot touch is a *physical* property written into
+// a stylesheet, and Quartz has about thirty of them: the explorer's indent
+// guides, the blockquote rule, the table of contents indent, the mobile drawer.
+// Those are what this file mirrors, and nothing else.
+//
+// It is an override sheet rather than a conversion of Quartz's own properties
+// to logical ones, which is the cheaper choice and the one with the smaller
+// merge surface: every rule here is prefixed with `:root[dir='rtl']`, so it
+// adds specificity to a selector copied from upstream and wins regardless of
+// source order. The cost is that it fights that specificity, and will need
+// revisiting if upstream restructures its CSS.
+//
+// This file is ours. It is copied in by the overlay and referenced by a single
+// `@use` added to `quartz/styles/base.scss`, so nothing here can conflict with
+// a Quartz upgrade.
+//
+// Deliberately not mirrored: the `margin-left: auto` / `margin-right: auto`
+// centering pairs and the `left: 50%` transform-centering rules. They are
+// already symmetric, and converting them is churn that risks breakage.
+
+:root[dir='rtl'] {
+  // --- prose ---------------------------------------------------------------
+
+  // The quote rule and its gap sit on the side the text starts from.
+  blockquote {
+    border-left: none;
+    border-right: 3px solid var(--secondary);
+    padding-left: 0;
+    padding-right: 1rem;
+  }
+
+  // Task lists drop the marker indent. `padding-left: 0` upstream is aimed at
+  // the browser's `padding-inline-start`, which is on the other side here.
+  article li:has(> input[type='checkbox']) {
+    padding-right: 0;
+  }
+
+  // Header cells align with their column, which has moved.
+  th {
+    text-align: right;
+  }
+
+  .transclude ul {
+    padding-left: 0;
+    padding-right: 1rem;
+  }
+
+  // Code is not prose. Left to inherit, a snippet would be right-aligned and
+  // its lines reordered around brackets and slashes by the bidi algorithm,
+  // which is wrong in every language. This also settles the line-number gutter
+  // and the highlight bar, so neither needs mirroring below.
+  pre,
+  code,
+  pre > code,
+  .mermaid {
+    direction: ltr;
+    text-align: left;
+  }
+
+  // Fills from the right, in the direction the reader is travelling.
+  .navigation-progress {
+    left: auto;
+    right: 0;
+  }
+
+  // --- the explorer --------------------------------------------------------
+
+  // The indent guide: the vertical line each nested folder hangs off.
+  .explorer-content .folder-outer > ul {
+    margin-left: 0;
+    margin-right: 6px;
+    padding-left: 0;
+    padding-right: 0.8rem;
+    border-left: none;
+    border-right: 1px solid var(--lightgray);
+  }
+
+  .explorer .fold {
+    margin-left: 0;
+    margin-right: 0.5rem;
+  }
+
+  // The two collapse arrows point the way the tree opens, so both turn the
+  // other way. Without this they point into the content rather than at it.
+  .explorer.collapsed .fold,
+  li:has(> .folder-outer:not(.open)) > .folder-container > svg {
+    transform: rotateZ(90deg);
+  }
+
+  .folder-icon {
+    margin-right: 0;
+    margin-left: 5px;
+  }
+
+  button.mobile-explorer,
+  button.desktop-explorer,
+  .folder-container div > button {
+    text-align: right;
+  }
+
+  // --- the table of contents ----------------------------------------------
+
+  button.toc-header {
+    text-align: right;
+  }
+
+  button.toc-header .fold {
+    margin-left: 0;
+    margin-right: 0.5rem;
+  }
+
+  button.toc-header.collapsed .fold {
+    transform: rotateZ(90deg);
+  }
+
+  // The heading-depth indent, which is the whole shape of a contents list.
+  @for $i from 0 through 6 {
+    ul.toc-content.overflow .depth-#{$i} {
+      padding-left: 0;
+      padding-right: calc(1rem * #{$i});
+    }
+  }
+
+  // The collapsible variant, shipped but not in the default layout.
+  details.toc {
+    & summary > * {
+      padding-left: 0;
+      padding-right: 0.25rem;
+    }
+
+    @for $i from 1 through 6 {
+      & .depth-#{$i} {
+        padding-left: 0;
+        padding-right: calc(1rem * #{$i});
+      }
+    }
+  }
+
+  // --- the rest of the chrome ---------------------------------------------
+
+  .breadcrumb-element p {
+    margin-left: 0;
+    margin-right: 0.5rem;
+  }
+
+  // The comma separating page metadata trails the item it belongs to.
+  .content-meta[show-comma='true'] > *:not(:last-child) {
+    margin-right: 0;
+    margin-left: 8px;
+  }
+
+  ul.section-ul {
+    padding-left: 0;
+    padding-right: 0;
+  }
+
+  li.section-li > .section .meta {
+    margin: 0 0 0 1em;
+  }
+}
+
+// --- the mobile explorer drawer -------------------------------------------
+//
+// Separate because it is the one piece that is not a mirrored measurement: the
+// drawer slides in from off-screen, and off-screen is on the other side. Every
+// sign below is flipped from upstream's, and `left: 0` becomes `right: 0`.
+@media all and ($mobile) {
+  :root[dir='rtl'] {
+    .page > #quartz-body.lock-scroll > :not(.sidebar.left:has(.explorer)) {
+      transform: translateX(-100dvw);
+    }
+
+    .explorer.collapsed > .explorer-content,
+    .explorer .explorer-content {
+      transform: translateX(100vw);
+    }
+
+    .explorer:not(.collapsed) > .explorer-content {
+      transform: translateX(0);
+    }
+
+    .explorer .explorer-content {
+      left: auto;
+      right: 0;
+    }
+  }
+}

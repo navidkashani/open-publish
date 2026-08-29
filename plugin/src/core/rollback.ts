@@ -46,7 +46,8 @@ import {
   parseSnapshot,
   snapshotKey,
 } from './snapshot.ts'
-import type { Snapshot, SnapshotDiff, SnapshotSite } from './snapshot.ts'
+import type { Snapshot, SnapshotDiff, SnapshotSite, SiteBooleanKey, SiteToggleKey } from './snapshot.ts'
+import { DEFAULT_LOCALE, localeLabel } from './locales.ts'
 
 /**
  * How far back the picker goes.
@@ -389,17 +390,30 @@ export function diffSiteOptions(before: SnapshotSite, after: SnapshotSite): Opti
   }
 
   if (before.title !== after.title) {
-    changes.push({ option: 'Site title', before: quoted(before.title), after: quoted(after.title) })
+    changes.push({ option: SPECIAL.title, before: quoted(before.title), after: quoted(after.title) })
   }
   if (before.homepage !== after.homepage) {
     changes.push({
-      option: 'Homepage',
+      option: SPECIAL.homepage,
       before: before.homepage ? quoted(before.homepage) : 'a generated index',
       after: after.homepage ? quoted(after.homepage) : 'a generated index',
     })
   }
 
-  for (const [key, label] of TOGGLES) {
+  // Defaulted on both sides rather than compared raw: a snapshot published
+  // before this option existed carries no language at all, and going back to
+  // one must not announce a change from the default to the default.
+  const beforeLocale = before.locale ?? DEFAULT_LOCALE
+  const afterLocale = after.locale ?? DEFAULT_LOCALE
+  if (beforeLocale !== afterLocale) {
+    changes.push({
+      option: SPECIAL.locale,
+      before: localeLabel(beforeLocale),
+      after: localeLabel(afterLocale),
+    })
+  }
+
+  for (const [key, label] of Object.entries(TOGGLES) as Array<[SiteToggleKey, string]>) {
     if (before[key] !== after[key]) {
       changes.push({ option: label, before: before[key] ? 'on' : 'off', after: after[key] ? 'on' : 'off' })
     }
@@ -413,7 +427,7 @@ export function diffSiteOptions(before: SnapshotSite, after: SnapshotSite): Opti
     before.analytics?.id !== after.analytics?.id
   ) {
     changes.push({
-      option: 'Analytics',
+      option: SPECIAL.analytics,
       before: describeAnalytics(before),
       after: describeAnalytics(after),
     })
@@ -422,23 +436,44 @@ export function diffSiteOptions(before: SnapshotSite, after: SnapshotSite): Opti
   return changes
 }
 
-type ToggleKey = Exclude<
-  {
-    [K in keyof SnapshotSite]: SnapshotSite[K] extends boolean ? K : never
-  }[keyof SnapshotSite],
-  'noIndex'
->
+/**
+ * The plain on/off options, and what to call each one.
+ *
+ * A record rather than an array, and `satisfies` rather than an annotation, so
+ * that omitting a key fails to compile and adding one that is not a site option
+ * does too. The array this replaced was merely *typed* as complete: a new
+ * boolean option compiled fine and silently never appeared in a rollback diff.
+ * Key order is insertion order, so the rendered order is still this order.
+ */
+const TOGGLES = {
+  showThemeToggle: 'Theme toggle',
+  strictLineBreaks: 'Strict line breaks',
+  showNavigation: 'Navigation',
+  showSearch: 'Search',
+  showGraph: 'Graph view',
+  showOutline: 'Table of contents',
+  showBacklinks: 'Backlinks',
+  showTags: 'Tags',
+} satisfies Record<SiteToggleKey, string>
 
-const TOGGLES: ReadonlyArray<readonly [ToggleKey, string]> = [
-  ['showThemeToggle', 'Theme toggle'],
-  ['strictLineBreaks', 'Strict line breaks'],
-  ['showNavigation', 'Navigation'],
-  ['showSearch', 'Search'],
-  ['showGraph', 'Graph view'],
-  ['showOutline', 'Table of contents'],
-  ['showBacklinks', 'Backlinks'],
-  ['showTags', 'Tags'],
-]
+/**
+ * Every option the loop above cannot handle, and what this file does with it.
+ * `null` means deliberately not diffed.
+ *
+ * The other half of the same guarantee: `TOGGLES` catches a new *boolean*
+ * option, this catches a new option of any other shape. Between them and the
+ * `'noIndex'` named in `SiteToggleKey`, every key of `SnapshotSite` is
+ * accounted for by the compiler rather than by whoever reads this next.
+ */
+const SPECIAL = {
+  title: 'Site title',
+  homepage: 'Homepage',
+  locale: 'Language',
+  // Derived from the language, so a change to it already shows as a Language
+  // row. Listing it twice would be telling somebody the same thing twice.
+  dir: null,
+  analytics: 'Analytics',
+} satisfies Record<Exclude<keyof SnapshotSite, SiteBooleanKey>, string | null>
 
 function describeAnalytics(site: SnapshotSite): string {
   const analytics = site.analytics

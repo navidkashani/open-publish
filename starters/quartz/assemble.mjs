@@ -28,6 +28,8 @@ import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import process from 'node:process'
 
+import { patchDirection } from './scripts/lib/rtl-patch.mjs'
+
 const OVERLAY = dirname(fileURLToPath(import.meta.url))
 const UPSTREAM = 'https://github.com/jackyzha0/quartz.git'
 
@@ -50,6 +52,9 @@ export const OVERLAY_FILES = [
   'quartz.config.ts',
   'quartz.layout.ts',
   'op-site.ts',
+  // The directory, not the file inside it: assemble.test.mjs declares the
+  // overlay one top-level name at a time, and `styles/` is where ours lives.
+  'styles',
   'wrangler.jsonc',
   'README.md',
 ]
@@ -102,6 +107,10 @@ async function main() {
 
   await mergePackageJson()
   await mergeGitignore()
+  // The three edits to Quartz's own files that make a right-to-left site
+  // possible. Shared with the build scripts rather than done here, because
+  // this file does not ship and a build that clones Quartz needs it too.
+  await patchDirection(target)
 
   run('git', ['add', '-A'])
   run('git', [
