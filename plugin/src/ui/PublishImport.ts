@@ -22,6 +22,34 @@ import type { SelectionRules } from '../core/selection.ts'
 import { folderCountLabel, noteCountLabel } from './FolderRules.ts'
 import type { RuleSummary } from './FolderRules.ts'
 
+/**
+ * Notes and attachments, counted apart.
+ *
+ * Kept apart for one reason, and it is a migration reason: somebody moving
+ * across compares this screen's number against the one Obsidian Publish shows
+ * them, and Publish counts notes and files separately. A single total is the
+ * honest number and still the wrong answer to the question being asked. The
+ * per-rule rows below stay on `summarizeRules`, which counts every publishable
+ * file as a "note", so the two levels differ in wording while agreeing in
+ * arithmetic.
+ */
+export interface PublishedCount {
+  notes: number
+  attachments: number
+}
+
+/** "93 notes and 2 attachments", said the way `upToDateStats` says it. */
+export function publishedCountLabel(count: PublishedCount): string {
+  const parts: string[] = []
+  if (count.notes > 0) parts.push(noteCountLabel(count.notes))
+  if (count.attachments > 0) {
+    parts.push(`${count.attachments} ${count.attachments === 1 ? 'attachment' : 'attachments'}`)
+  }
+  return parts.length > 0 ? parts.join(' and ') : 'nothing'
+}
+
+const totalOf = (count: PublishedCount): number => count.notes + count.attachments
+
 export interface RuleChange {
   rule: string
   list: 'includes' | 'excludes'
@@ -95,7 +123,7 @@ export function effectLabel(effect: RuleChange['effect']): string {
  * they are what a publish would actually produce rather than what the folder
  * rules select on their own.
  */
-export function importSentence(plan: ImportPlan, before: number, after: number): string {
+export function importSentence(plan: ImportPlan, before: PublishedCount, after: PublishedCount): string {
   if (!plan.hasFilters) {
     return (
       'This vault has an Obsidian Publish site but records no folder filters, so there is nothing to import. ' +
@@ -110,14 +138,16 @@ export function importSentence(plan: ImportPlan, before: number, after: number):
   }
   const lists = `Your Obsidian Publish configuration lists ${folderCountLabel(plan.includes.length)}.`
   if (plan.unchanged) return `${lists} They are the folders this vault already publishes, so there is nothing to change.`
-  if (before === after) return `${lists} Importing them publishes ${noteCountLabel(after)}, as many as now.`
-  return `${lists} Importing them publishes ${noteCountLabel(after)} instead of ${before}.`
+  if (totalOf(before) === totalOf(after)) {
+    return `${lists} Importing them publishes ${publishedCountLabel(after)}, as much as now.`
+  }
+  return `${lists} Importing them publishes ${publishedCountLabel(after)} instead of ${publishedCountLabel(before)}.`
 }
 
 /** The outcome, not the action, the same habit as the wizard's counted Copy button. */
-export function importButtonLabel(plan: ImportPlan, after: number): string {
+export function importButtonLabel(plan: ImportPlan, after: PublishedCount): string {
   if (plan.empty || plan.unchanged) return 'Import'
-  return `Import ${folderCountLabel(plan.includes.length)} (${noteCountLabel(after)})`
+  return `Import ${folderCountLabel(plan.includes.length)} (${publishedCountLabel(after)})`
 }
 
 /**
@@ -137,10 +167,10 @@ export function importBlockedReason(plan: ImportPlan): string | null {
  * that also set excludes would apply them invisibly there. The count goes in
  * the sentence for that reason.
  */
-export function importedNotice(plan: ImportPlan, after: number): string {
+export function importedNotice(plan: ImportPlan, after: PublishedCount): string {
   const excludesAdded = plan.changes.filter((change) => change.list === 'excludes' && change.effect === 'added').length
   const published = `Imported ${folderCountLabel(plan.includes.length)} from Obsidian Publish. ${capitalize(
-    noteCountLabel(after),
+    publishedCountLabel(after),
   )} will publish.`
   if (excludesAdded === 0) return published
   return `${published} ${capitalize(folderCountLabel(excludesAdded))} ${excludesAdded === 1 ? 'was' : 'were'} added to your excluded list.`

@@ -27,7 +27,7 @@ import type { App } from 'obsidian'
 import type OpenPublishPlugin from '../main.ts'
 import { looksLikeObsidianPublish, parsePublishConfig } from '../core/publishconfig.ts'
 import type { DroppedEntry, PublishConfig } from '../core/publishconfig.ts'
-import { getPublishFlag } from '../core/selection.ts'
+import { extensionOf, getPublishFlag } from '../core/selection.ts'
 import type { SelectionRules } from '../core/selection.ts'
 import { DEAD_RULE_WARNING, noteCountLabel, summarizeRules } from './FolderRules.ts'
 import type { RuleSummary } from './FolderRules.ts'
@@ -45,7 +45,7 @@ import {
   importedNotice,
   planPublishImport,
 } from './PublishImport.ts'
-import type { ImportPlan } from './PublishImport.ts'
+import type { ImportPlan, PublishedCount } from './PublishImport.ts'
 
 export interface PublishImportSource {
   config: PublishConfig
@@ -111,7 +111,7 @@ export class PublishImportModal extends Modal {
       new Setting(contentEl).setName('Excluded').setHeading()
       renderRuleRows(contentEl, this.rowsFor('excludes', plan, before, after), 'Nothing is being held back.')
 
-      if (after.published !== publishedAfter) {
+      if (after.published !== publishedAfter.notes + publishedAfter.attachments) {
         contentEl.createEl('p', {
           cls: 'op-muted',
           text:
@@ -214,17 +214,19 @@ export class PublishImportModal extends Modal {
    * The `explicit` map and the frontmatter both stay in play, because both
    * outrank folder rules and neither is touched by an import.
    */
-  private countPublished(rules: SelectionRules): number {
-    let count = 0
+  private countPublished(rules: SelectionRules): PublishedCount {
+    const count: PublishedCount = { notes: 0, attachments: 0 }
     for (const file of this.app.vault.getFiles()) {
       const frontmatter = this.app.metadataCache.getCache(file.path)?.frontmatter
-      if (getPublishFlag(file.path, frontmatter?.['publish'], rules) === true) count++
+      if (getPublishFlag(file.path, frontmatter?.['publish'], rules) !== true) continue
+      if (extensionOf(file.path) === 'md') count.notes++
+      else count.attachments++
     }
     return count
   }
 
   /** Two arrays and, if it was offered and left ticked, one URL setting. Nothing else. */
-  private commit(plan: ImportPlan, publishedAfter: number): void {
+  private commit(plan: ImportPlan, publishedAfter: PublishedCount): void {
     const selection = this.plugin.settings.selection
     selection.includes = [...plan.includes]
     selection.excludes = [...plan.excludes]

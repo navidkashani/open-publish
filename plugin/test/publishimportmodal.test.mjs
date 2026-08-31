@@ -33,8 +33,8 @@ const VAULT = {
 const publishFile = (fields) =>
   JSON.stringify({ siteId: 'e06fc8eb0e577dd6b3e0c6295c8602ad', host: 'publish-01.obsidian.md', ...fields })
 
-function open(raw, { selection = {}, frontmatter = {}, urlStyle = 'clean', lastPublishedAt = null } = {}) {
-  const app = fakeApp({ ...VAULT, frontmatter })
+function open(raw, { selection = {}, frontmatter = {}, urlStyle = 'clean', lastPublishedAt = null, extraFiles = [] } = {}) {
+  const app = fakeApp({ ...VAULT, files: [...VAULT.files, ...extraFiles], frontmatter })
   const plugin = fakeSettingsPlugin(selection, {}, { urlStyle, lastPublishedAt, publishConfig: raw })
   const parsed = parsePublishConfig(raw)
   assert.equal(parsed.ok, true, 'the fixture has to be readable, or the test is about the wrong thing')
@@ -92,7 +92,7 @@ test('the headline counts what a publish would produce, frontmatter and all', ()
   // over any folder rule. The row beside it still reads 3, because that is what
   // the rule selects, so the divergence is explained rather than left to look
   // like an arithmetic bug.
-  assert.match(modal.contentEl.textContent, /Importing them publishes 2 notes instead of 0\./)
+  assert.match(modal.contentEl.textContent, /Importing them publishes 2 notes instead of nothing\./)
   assert.equal(rows(modal)[0].meta, '3 notes · added')
   assert.match(modal.contentEl.textContent, /Some notes set publish: in their frontmatter/)
 })
@@ -100,8 +100,21 @@ test('the headline counts what a publish would produce, frontmatter and all', ()
 test('the rows and the headline agree when no note overrides them', () => {
   // Dropping a rule that names nothing changes no number at all.
   const { modal } = open(publishFile({ included: ['Notes'] }), { selection: { includes: ['Notes', 'Old name'] } })
-  assert.match(modal.contentEl.textContent, /Importing them publishes 3 notes, as many as now\./)
+  assert.match(modal.contentEl.textContent, /Importing them publishes 3 notes, as much as now\./)
   assert.doesNotMatch(modal.contentEl.textContent, /frontmatter, which wins/)
+})
+
+test('an attachment in a published folder is counted as an attachment, not as a note', () => {
+  // The shape of a real migrating vault: a PDF sitting in an attachments
+  // folder inside a published one. Saying "4 notes" here would not match the
+  // number Obsidian Publish shows the same person.
+  const { modal } = open(publishFile({ included: ['Notes'] }), {
+    extraFiles: ['Notes/attachments/Guide.pdf'],
+  })
+
+  assert.match(modal.contentEl.textContent, /publishes 3 notes and 1 attachment instead of nothing\./)
+  assert.equal(importButton(modal).textContent, 'Import 1 folder (3 notes and 1 attachment)')
+  assert.doesNotMatch(modal.contentEl.textContent, /frontmatter, which wins/, 'the totals still agree')
 })
 
 test('Import writes both lists, saves once, and says what it did', () => {

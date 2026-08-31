@@ -13,6 +13,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
   importButtonLabel,
+  publishedCountLabel,
   importSentence,
   importWarnings,
   importedNotice,
@@ -162,36 +163,52 @@ test('the plan never mutates its inputs', () => {
 test('the sentence leads with the number that matters', () => {
   const plan = planPublishImport(publishConfig({ included: ['Notes', 'Ideas'] }), rules({ includes: ['Ideas'] }))
   assert.equal(
-    importSentence(plan, 12, 93),
-    'Your Obsidian Publish configuration lists 2 folders. Importing them publishes 93 notes instead of 12.',
+    importSentence(plan, { notes: 12, attachments: 0 }, { notes: 93, attachments: 0 }),
+    'Your Obsidian Publish configuration lists 2 folders. Importing them publishes 93 notes instead of 12 notes.',
   )
 })
 
+test('notes and attachments are counted apart, because Publish counts them apart', () => {
+  // Somebody migrating compares this against the number Obsidian Publish shows
+  // them. "95 notes" is the honest total and still the wrong answer.
+  const plan = planPublishImport(publishConfig({ included: ['Notes', 'Ideas'] }), rules())
+  assert.match(
+    importSentence(plan, { notes: 0, attachments: 0 }, { notes: 93, attachments: 2 }),
+    /publishes 93 notes and 2 attachments instead of nothing\./,
+  )
+  assert.equal(publishedCountLabel({ notes: 1, attachments: 1 }), '1 note and 1 attachment')
+  assert.equal(publishedCountLabel({ notes: 0, attachments: 2 }), '2 attachments')
+  assert.equal(publishedCountLabel({ notes: 0, attachments: 0 }), 'nothing')
+})
+
 test('each empty-handed case gets its own sentence, because they send you to different places', () => {
+  const none = { notes: 0, attachments: 0 }
   const noFilters = planPublishImport(publishConfig({ hasFilters: false }), rules())
-  assert.match(importSentence(noFilters, 0, 0), /records no folder filters/)
+  assert.match(importSentence(noFilters, none, none), /records no folder filters/)
 
   const perNote = planPublishImport(publishConfig({ included: [] }), rules())
-  assert.match(importSentence(perNote, 0, 0), /selects notes individually/)
-  assert.match(importSentence(perNote, 0, 0), /stored on Obsidian's servers/)
+  assert.match(importSentence(perNote, none, none), /selects notes individually/)
+  assert.match(importSentence(perNote, none, none), /stored on Obsidian's servers/)
 
+  const three = { notes: 3, attachments: 0 }
   const unchanged = planPublishImport(publishConfig({ included: ['Notes'] }), rules({ includes: ['Notes'] }))
-  assert.match(importSentence(unchanged, 3, 3), /nothing to change/)
+  assert.match(importSentence(unchanged, three, three), /nothing to change/)
 })
 
 test('the button is labelled with the outcome, not the action', () => {
   const plan = planPublishImport(publishConfig({ included: ['Notes', 'Ideas'] }), rules())
-  assert.equal(importButtonLabel(plan, 93), 'Import 2 folders (93 notes)')
-  assert.equal(importButtonLabel(planPublishImport(publishConfig(), rules()), 0), 'Import')
+  assert.equal(importButtonLabel(plan, { notes: 93, attachments: 2 }), 'Import 2 folders (93 notes and 2 attachments)')
+  assert.equal(importButtonLabel(planPublishImport(publishConfig(), rules()), { notes: 0, attachments: 0 }), 'Import')
 })
 
 test('the confirmation counts the excludes, which step 6 cannot show', () => {
   const plan = planPublishImport(publishConfig({ included: ['Notes'], excluded: ['Notes/Drafts'] }), rules())
-  assert.match(importedNotice(plan, 2), /Imported 1 folder from Obsidian Publish\. 2 notes will publish\./)
-  assert.match(importedNotice(plan, 2), /1 folder was added to your excluded list/)
+  const two = { notes: 2, attachments: 0 }
+  assert.match(importedNotice(plan, two), /Imported 1 folder from Obsidian Publish\. 2 notes will publish\./)
+  assert.match(importedNotice(plan, two), /1 folder was added to your excluded list/)
 
   const noExcludes = planPublishImport(publishConfig({ included: ['Notes'] }), rules())
-  assert.doesNotMatch(importedNotice(noExcludes, 2), /excluded list/)
+  assert.doesNotMatch(importedNotice(noExcludes, two), /excluded list/)
 })
 
 // --- warnings --------------------------------------------------------------
