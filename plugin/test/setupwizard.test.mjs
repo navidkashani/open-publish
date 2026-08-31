@@ -448,3 +448,52 @@ test('and a vault that never used it sees nothing extra on step 6', () => {
   assert.doesNotMatch(wizard.contentEl.textContent, /Import from Obsidian Publish/)
   assert.match(wizard.contentEl.textContent, /Folders to publish/, 'the step itself is unchanged')
 })
+
+test('step 3 offers both starters, and picking one swaps the template it sends you to', () => {
+  const { wizard, plugin } = open()
+  goTo(wizard, 2)
+
+  assert.match(wizard.contentEl.textContent, /Step 3 of 6/)
+  const rows = findAll(wizard.contentEl, byClass('op-provider-row'))
+  assert.equal(rows.length, 2, 'both starters are offered')
+  assert.match(wizard.contentEl.textContent, /Open Publish Quartz/)
+  assert.match(wizard.contentEl.textContent, /jotter/)
+
+  const jotter = rows.find((row) => find(row, byClass('op-provider-name'))?.textContent === 'jotter')
+  click(jotter)
+
+  assert.equal(plugin.settings.builder.starter, 'jotter')
+  assert.ok(plugin.calls.saves > 0, 'the choice survives closing the guide')
+  const link = find(wizard.contentEl, (node) => node.tagName === 'A' && /jotter/.test(node.textContent))
+  assert.equal(link.getAttr('href'), 'https://github.com/navidkashani/jotter')
+})
+
+test('step 4 names the output directory of the starter chosen on step 3', () => {
+  // The quiet failure this prevents: a Pages project told to publish `public`
+  // for an Astro starter deploys an empty directory and reports success.
+  const onQuartz = open()
+  goTo(onQuartz.wizard, 3)
+  assert.match(onQuartz.wizard.contentEl.textContent, /Output directory: public\./)
+
+  const onJotter = open({ builder: { starter: 'jotter' } })
+  goTo(onJotter.wizard, 3)
+  assert.match(onJotter.wizard.contentEl.textContent, /Output directory: dist\./)
+  assert.doesNotMatch(onJotter.wizard.contentEl.textContent, /Output directory: public\./)
+})
+
+test('the environment variables do not depend on the starter, because both read the same ones', () => {
+  const onQuartz = open()
+  goTo(onQuartz.wizard, 3)
+  const onJotter = open({ builder: { starter: 'jotter' } })
+  goTo(onJotter.wizard, 3)
+
+  assert.deepEqual(envBlock(onJotter.wizard), envBlock(onQuartz.wizard))
+})
+
+test('a starter with no wrangler.jsonc says so on the host that needs one', () => {
+  const wizard = open({ builder: { host: 'cloudflare-workers', starter: 'jotter' } }).wizard
+  goTo(wizard, 3)
+
+  assert.match(wizard.contentEl.textContent, /ships no wrangler\.jsonc/)
+  assert.match(wizard.contentEl.textContent, /Cloudflare Pages instead/)
+})

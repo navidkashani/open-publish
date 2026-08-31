@@ -12,6 +12,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { HOSTS, docsHook, hostById, inferHost, isHostId, rejectedHookHint } from '../src/builders/hosts.ts'
+import { STARTERS } from '../src/builders/starters.ts'
 
 /**
  * A real hook URL shape per host, so inference is tested on what people paste.
@@ -34,7 +35,12 @@ test('every host has the copy each surface needs', () => {
     assert.ok(host.name, `${host.id}: no name`)
     assert.ok(host.summary.endsWith('.'), `${host.id}: summary is not a sentence`)
     assert.ok(host.allowance.endsWith('.'), `${host.id}: allowance line is not a sentence`)
-    assert.ok(host.setup.length >= 3, `${host.id}: hosting steps are too thin to follow`)
+    for (const starter of STARTERS) {
+      assert.ok(
+        host.setup(starter.build).length >= 3,
+        `${host.id} on ${starter.id}: hosting steps are too thin to follow`,
+      )
+    }
     assert.ok(host.hookSetup.length >= 2, `${host.id}: deploy hook steps are too thin to follow`)
     assert.ok(host.rejectedHint.length > 0, `${host.id}: no hint for a rejected build request`)
     assert.match(host.siteUrlExample, /^https:\/\//, `${host.id}: the site address example is not an address`)
@@ -137,11 +143,51 @@ test('a host that reports no address of its own says so, and asks for one', () =
 test('every host that asks for OP_SITE_URL says so in its setup steps too', () => {
   for (const host of HOSTS) {
     if (host.siteUrlVariable !== null) continue
-    assert.ok(
-      host.setup.some((line) => line.includes('OP_SITE_URL')),
-      `${host.id}: the steps and the environment block disagree about OP_SITE_URL`,
-    )
+    for (const starter of STARTERS) {
+      assert.ok(
+        host.setup(starter.build).some((line) => line.includes('OP_SITE_URL')),
+        `${host.id} on ${starter.id}: the steps and the environment block disagree about OP_SITE_URL`,
+      )
+    }
   }
+})
+
+test('every host names the output directory of the starter actually chosen', () => {
+  // The failure this prevents is the quiet one: a host told to publish `public`
+  // for an Astro starter deploys an empty directory and reports success.
+  for (const starter of STARTERS) {
+    for (const host of HOSTS) {
+      const steps = host.setup(starter.build).join(' ')
+      const wrong = STARTERS.filter((other) => other.build.outputDir !== starter.build.outputDir)
+      for (const other of wrong) {
+        assert.equal(
+          steps.includes(` ${other.build.outputDir}.`),
+          false,
+          `${host.id} on ${starter.id}: names ${other.id}'s output directory`,
+        )
+      }
+      // Either the steps name it, or a config file in the repository declares
+      // it. Cloudflare Workers with a starter that ships `wrangler.jsonc` is the
+      // second case, and naming the directory there would be noise.
+      const named = steps.includes(starter.build.outputDir)
+      const declaredByConfig = starter.build.hasWranglerConfig && steps.includes('wrangler.jsonc')
+      assert.ok(
+        named || declaredByConfig,
+        `${host.id} on ${starter.id}: neither the steps nor a config file say where the built site lands`,
+      )
+    }
+  }
+})
+
+test('a starter with no wrangler.jsonc is told so on the host that needs one', () => {
+  const workers = hostById('cloudflare-workers')
+  const withConfig = STARTERS.find((starter) => starter.build.hasWranglerConfig)
+  const without = STARTERS.find((starter) => !starter.build.hasWranglerConfig)
+
+  assert.match(workers.setup(withConfig.build).join(' '), /comes from wrangler\.jsonc/)
+  const bare = workers.setup(without.build).join(' ')
+  assert.match(bare, /ships no wrangler\.jsonc/)
+  assert.match(bare, /Cloudflare Pages instead/, 'and the way out is named, not left to be worked out')
 })
 
 test('only the hosts that can run out inside a month get a standing panel', () => {

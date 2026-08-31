@@ -12,15 +12,14 @@ import type OpenPublishPlugin from '../main.ts'
 import { hasHostMoved, hasStorageMoved, storageMovedWarning } from '../settings.ts'
 import { providerById } from '../destinations/providers.ts'
 import { hostById } from '../builders/hosts.ts'
+import { starterById } from '../builders/starters.ts'
+import { renderStarterList } from './BuildFields.ts'
 import { addRule, removeRule, summarizeRules } from './FolderRules.ts'
 import { renderFolderList } from './RuleList.ts'
 import type { Disposer } from './RuleList.ts'
 import { renderPublishImportRow } from './PublishImportModal.ts'
 import { BuildFields, renderHostList, selectHost } from './BuildFields.ts'
 import { StorageFields, renderProviderList, selectProvider } from './StorageFields.ts'
-
-/** The site template step 3 sends people to. Public, and "Use this template"-ready. */
-const TEMPLATE_REPO_URL = 'https://github.com/navidkashani/open-publish-quartz'
 
 /**
  * Small counts read as words in this interface, not as digits. Anything past
@@ -189,21 +188,53 @@ export class SetupWizard extends Modal {
     container.appendChild(result)
   }
 
+  /**
+   * The starter picker, and instructions that swap with it. The same mechanism
+   * as steps 1 and 4, down to the component.
+   *
+   * The choice is stored for one reason beyond remembering it: the next step
+   * has to tell the host where the build leaves the site, and the two starters
+   * disagree. Nothing else about a publish changes.
+   */
   private renderRepoStep(container: HTMLElement): void {
     container.createEl('p', {
       text: 'The site generator lives in a Git repository. Your notes never go into it. Only the theme and build scripts do.',
     })
+
+    const builder = this.plugin.settings.builder
+    renderStarterList(container, builder.starter, (id) => {
+      builder.starter = id
+      this.renderStep()
+      void this.plugin.saveSettings()
+    })
+
+    const starter = starterById(builder.starter)
     this.instructions(container, [
-      'Open the Open Publish Quartz template on GitHub.',
+      `Open the ${starter.name} template on GitHub.`,
       'Choose "Use this template" → "Create a new repository".',
       'Give it any name. There is nothing to clone and nothing to install locally.',
     ])
 
     const links = container.createDiv({ cls: 'op-wizard-links' })
     links.createEl('a', {
-      href: TEMPLATE_REPO_URL,
-      text: 'Open the template',
+      href: starter.repoUrl,
+      text: `Open the ${starter.name} template`,
       attr: { target: '_blank', rel: 'noopener' },
+    })
+    if (starter.docsUrl) {
+      links.createEl('a', {
+        href: starter.docsUrl,
+        text: 'How it builds from a snapshot',
+        attr: { target: '_blank', rel: 'noopener' },
+      })
+    }
+
+    container.createEl('p', {
+      cls: 'op-muted',
+      text:
+        'Both build the same published notes from the same snapshot, so this decides how your site looks and ' +
+        'nothing about what it contains. You can change your mind later by pointing your host at the other ' +
+        'repository.',
     })
   }
 
@@ -229,7 +260,11 @@ export class SetupWizard extends Modal {
     })
 
     const host = hostById(builder.host)
-    this.instructions(container, host.setup)
+    const starter = starterById(builder.starter)
+    // The output directory in these steps is the starter's, not a constant:
+    // Quartz builds into `public` and jotter into `dist`, and a host told the
+    // wrong one deploys an empty directory and reports success.
+    this.instructions(container, host.setup(starter.build))
 
     const destination = this.plugin.settings.destination
     // The build reads the bucket *directly*, whichever way the plugin writes to

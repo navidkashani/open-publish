@@ -276,6 +276,27 @@ test('a stored host survives a round trip through an older build', () => {
   assert.equal(migrateSettings(throughOldBuild).builder.host, 'vercel')
 })
 
+test('a vault that has never chosen opens on the starter this repository verifies', () => {
+  assert.equal(migrateSettings({}).builder.starter, 'quartz')
+  assert.equal(migrateSettings({ builder: {} }).builder.starter, 'quartz')
+})
+
+test('a stored starter survives a round trip through an older build', () => {
+  // The same property the host label has, and the reason this field could be
+  // added without a version bump: an older build passes a key it has never
+  // heard of straight through, so a downgrade and an upgrade leave it be.
+  const mine = migrateSettings({ builder: { starter: 'jotter' } })
+  assert.equal(mine.builder.starter, 'jotter')
+
+  const throughOldBuild = JSON.parse(JSON.stringify(mine))
+  assert.equal(migrateSettings(throughOldBuild).builder.starter, 'jotter')
+})
+
+test('a starter id from the future falls back rather than reaching a picker that cannot draw it', () => {
+  assert.equal(migrateSettings({ builder: { starter: 'hugo' } }).builder.starter, 'quartz')
+  assert.equal(migrateSettings({ builder: { starter: 42 } }).builder.starter, 'quartz')
+})
+
 test('a host id from the future is re-inferred rather than kept unrenderable', () => {
   const settings = migrateSettings({ builder: { url: NETLIFY_HOOK, host: 'fly' } })
   assert.equal(settings.builder.host, 'netlify')

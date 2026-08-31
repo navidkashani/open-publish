@@ -36,6 +36,10 @@ published in Git.
   `.obsidian/publish.json`. Open Publish reads that file, shows you exactly which
   folders it would publish and how many notes that is, and writes nothing until
   you agree.
+- **Two site themes to choose from.** The setup guide offers the Quartz starter
+  in this repository or [jotter](https://github.com/navidkashani/jotter), an
+  Astro theme. Both build the same published notes from the same snapshot, so
+  the choice decides how your site looks and nothing about what it contains.
 - **Site options that are not theme-specific.** Navigation, search, graph,
   backlinks, outline, tags, theme toggle, homepage, analytics and a
   discourage-search-engines switch, described as intent, so a future starter
@@ -46,7 +50,7 @@ published in Git.
 | Path | What it is |
 |---|---|
 | `plugin/` | The Obsidian plugin. TypeScript, no runtime dependencies. |
-| `starters/quartz/` | The site repository template: fetches a snapshot and builds it with Quartz. |
+| `starters/quartz/` | The reference site template: fetches a snapshot and builds it with Quartz. |
 | `gateway/` | An optional Cloudflare Worker, so the plugin can reach R2 without holding a storage key. |
 | `docs/` | Setup, architecture, security, troubleshooting. |
 | `manifest.json` | The plugin manifest. It lives here, not in `plugin/`, because that is where the Obsidian community directory reads it from. The build copies it next to `main.js`; that copy is generated and gitignored, so edit this one. |

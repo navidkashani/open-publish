@@ -13,9 +13,12 @@
  * and has to be pasted. So the id is *inferred* from the pasted URL and never
  * kept as a second source of truth about it.
  *
- * No imports on purpose. This is a table plus four pure functions, so it runs
- * under plain Node and the tests need no DOM, no Obsidian, and no network.
+ * One type-only import, erased before anything runs, and no value imports. This
+ * is a table plus four pure functions, so it runs under plain Node and the
+ * tests need no DOM, no Obsidian, and no network.
  */
+
+import type { StarterBuild } from './starters.ts'
 
 export type HostId = 'cloudflare-pages' | 'cloudflare-workers' | 'netlify' | 'vercel' | 'other'
 
@@ -61,8 +64,15 @@ export interface Host {
   readsRedirectFiles: boolean
   /** What this host calls the thing the variables go on. */
   projectNoun: string
-  /** Step 4 of the setup guide, in this host's own words. */
-  setup: string[]
+  /**
+   * Step 4 of the setup guide, in this host's own words.
+   *
+   * Takes the chosen starter's build rather than naming a directory, because
+   * "Output directory: public" is true of Quartz and wrong for an Astro
+   * starter, and a host told the wrong one deploys an empty directory and calls
+   * it a success. Each host composes it into its own vocabulary.
+   */
+  setup: (build: StarterBuild) => string[]
   /** Step 5 of the setup guide: where the deploy hook lives. */
   hookSetup: string[]
   /**
@@ -82,10 +92,12 @@ export interface Host {
  * it is the one we recommend.
  *
  * Pages keeps the recommendation even though Workers Builds has the larger
- * allowance and Cloudflare's own investment. The starter now ships the
- * `wrangler.jsonc` a Worker needs, so what is left is one real difference:
- * Workers Builds reports no site address, so OP_SITE_URL has to be set by hand
- * or the build stops. One extra step on the recommended path is one too many.
+ * allowance and Cloudflare's own investment. Two real differences are left, and
+ * the second one arrived with the second starter. Workers Builds reports no
+ * site address, so OP_SITE_URL has to be set by hand or the build stops. And
+ * only a starter shipping a `wrangler.jsonc` makes it connect-and-go at all:
+ * Quartz does, jotter does not, so `setup` below asks the starter rather than
+ * assuming. One extra step on the recommended path is one too many.
  *
  * Netlify is listed rather than left out, for the same reason Wasabi is listed
  * in the storage catalogue. Omitting it does not stop anyone using it; it only
@@ -110,9 +122,9 @@ export const HOSTS: readonly Host[] = [
     allowance: "Cloudflare Pages' free plan allows 500 builds a month and one at a time.",
     readsRedirectFiles: true,
     projectNoun: 'Pages project',
-    setup: [
+    setup: (build) => [
       'In Cloudflare, go to Workers & Pages → Create → Pages → Connect to Git, and pick the repository you just made.',
-      'Framework preset: None. Build command: npm run build. Output directory: public.',
+      `Framework preset: None. Build command: ${build.command}. Output directory: ${build.outputDir}.`,
       'Open Settings → Environment variables and add the variables below, for both Production and Preview.',
       'Mark OP_SECRET_ACCESS_KEY as encrypted.',
     ],
@@ -143,10 +155,19 @@ export const HOSTS: readonly Host[] = [
     allowance: "Cloudflare Workers' free plan allows 3,000 build minutes a month and one build at a time.",
     readsRedirectFiles: true,
     projectNoun: 'Worker',
-    setup: [
+    setup: (build) => [
       'In Cloudflare, go to Workers & Pages → Create → Import a repository, and pick the repository you just made.',
-      'Build command: npm run build. Deploy command: leave the default. The rest comes from wrangler.jsonc in the repository.',
-      'Edit the "name" in wrangler.jsonc to match the Worker you just created. Builds fail when the two disagree.',
+      ...(build.hasWranglerConfig
+        ? [
+            `Build command: ${build.command}. Deploy command: leave the default. The rest comes from wrangler.jsonc in the repository.`,
+            'Edit the "name" in wrangler.jsonc to match the Worker you just created. Builds fail when the two disagree.',
+          ]
+        : [
+            `Build command: ${build.command}.`,
+            // Said plainly rather than hidden, and with the way out named. The
+            // alternative is a build that succeeds and serves nothing.
+            `This starter ships no wrangler.jsonc, so write one that serves ${build.outputDir} as static assets, or use Cloudflare Pages instead, which needs no such file.`,
+          ]),
       'Open Settings → Variables and Secrets and add the variables below.',
       'Add OP_SECRET_ACCESS_KEY as a secret rather than a plain variable.',
       'Set OP_SITE_URL to your site address. Workers Builds does not provide one, and without it the build stops.',
@@ -180,9 +201,9 @@ export const HOSTS: readonly Host[] = [
       'next month. Turning off "Build after publishing" lets you choose when to spend one.',
     readsRedirectFiles: true,
     projectNoun: 'Netlify site',
-    setup: [
+    setup: (build) => [
       'In Netlify, choose Add new site → Import an existing project, and pick the repository you just made.',
-      'Build command: npm run build. Publish directory: public.',
+      `Build command: ${build.command}. Publish directory: ${build.outputDir}.`,
       'Open Site configuration → Environment variables and add the variables below.',
       'Mark OP_SECRET_ACCESS_KEY as a secret so it is not shown again.',
     ],
@@ -215,9 +236,9 @@ export const HOSTS: readonly Host[] = [
     // most of the staleness, which is why this is a line and not a panel.
     readsRedirectFiles: false,
     projectNoun: 'Vercel project',
-    setup: [
+    setup: (build) => [
       'In Vercel, choose Add New → Project, and pick the repository you just made.',
-      'Framework preset: Other. Build command: npm run build. Output directory: public.',
+      `Framework preset: Other. Build command: ${build.command}. Output directory: ${build.outputDir}.`,
       'Open Settings → Environment Variables and add the variables below.',
       'Mark OP_SECRET_ACCESS_KEY as Sensitive.',
     ],
@@ -250,9 +271,9 @@ export const HOSTS: readonly Host[] = [
     allowance: 'Most free plans limit how many builds a month you get. Check yours before turning the wait down.',
     readsRedirectFiles: false,
     projectNoun: 'site build',
-    setup: [
+    setup: (build) => [
       'Connect the repository you just made to your host.',
-      'Build command: npm run build. Output directory: public.',
+      `Build command: ${build.command}. Output directory: ${build.outputDir}.`,
       'Add the variables below wherever your host keeps build environment variables.',
       'Mark OP_SECRET_ACCESS_KEY as a secret if your host offers one.',
       'Set OP_SITE_URL to your site address, so the feed, the sitemap and the 404 page point at the right place.',

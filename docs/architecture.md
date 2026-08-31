@@ -129,6 +129,39 @@ Two rules keep the contract safe as it grows:
 - **Unknown options are dropped and logged.** A starter that predates an option
   ignores it and says so, rather than guessing.
 
+### Two starters, and the one thing the plugin has to know about them
+
+The setup guide offers a choice on step 3: `open-publish-quartz`, the reference
+starter this repository builds and verifies on every commit, or `jotter`, an
+Astro theme in its own repository. Both consume the same snapshot and publish
+the same bytes, which is the rule about site options being intent, working as
+intended: a second starter exists without the plugin knowing anything about it.
+
+Almost. `builders/starters.ts` is the third catalogue after storage providers
+and hosts, and it lives by the same "none of it reaches the wire" rule, with one
+exception that earns the id a place in `Settings`. **Where the build leaves the
+finished site differs**: Quartz writes `public`, Astro writes `dist`. A host told
+the wrong directory deploys an empty one and reports success, which is the same
+class of failure as `OP_FORCE_PATH_STYLE` disagreeing, discovered one step later
+on a machine the user cannot see. So `hosts.ts` takes the chosen starter's build
+rather than naming a directory, and each host composes it into its own
+vocabulary: "Output directory" on Cloudflare and Vercel, "Publish directory" on
+Netlify.
+
+The same table carries `hasWranglerConfig`, because Cloudflare Workers Builds is
+connect-and-go only for a starter that ships one. Quartz does and jotter does
+not, so the Workers instructions say so and name Pages as the way around it,
+rather than letting somebody discover it after the repository is connected.
+
+The environment variables are deliberately *not* per-starter, and a test asserts
+it: both read the same eight, so the block step 4 hands over is identical either
+way. Anything else would mean the snapshot contract had leaked into the guide.
+
+`builder.starter` sits beside `builder.host` and needed no `SETTINGS_VERSION`
+bump for the reason the host label needed none: an older build merges the
+builder with `Object.assign`, so a key it has never heard of passes straight
+through a downgrade and back.
+
 ### The starter is a Quartz fork, not a thin wrapper
 
 The template repository contains Quartz's source rather than cloning it at build

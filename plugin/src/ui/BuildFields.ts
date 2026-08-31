@@ -26,6 +26,8 @@ import { Notice, Setting } from 'obsidian'
 import type { BuilderTestResult } from '../builders/types.ts'
 import { HOSTS, hostById, inferHost, isHostId } from '../builders/hosts.ts'
 import type { Host, HostId } from '../builders/hosts.ts'
+import { STARTERS, isStarterId } from '../builders/starters.ts'
+import type { StarterId } from '../builders/starters.ts'
 import { HOST_MOVED_WARNING, isBuilderReady } from '../settings.ts'
 import type { WebhookBuilderSettings } from '../settings.ts'
 import { advancedLabel, renderDisclosure, validateOnBlur } from './Disclosure.ts'
@@ -424,6 +426,33 @@ export class BuildFields {
  * No extra line: a host's second sentence is its caution, and the ones that do
  * not have one have nothing more to say before the choice is made.
  */
+/**
+ * The starter rows, in the shared list component's terms, exactly as the host
+ * rows below are. Only the wizard picks one: settings has no reason to, since
+ * changing it there would say nothing about the repository already connected to
+ * a host.
+ */
+export function renderStarterList(
+  container: HTMLElement,
+  selected: StarterId,
+  onPick: (id: StarterId) => void,
+): void {
+  renderPickerList(
+    container,
+    STARTERS.map((starter) => ({
+      id: starter.id,
+      name: starter.name,
+      recommended: starter.recommended,
+      summary: starter.summary,
+      caution: starter.caution,
+    })),
+    selected,
+    (id) => {
+      if (isStarterId(id)) onPick(id)
+    },
+  )
+}
+
 export function renderHostList(container: HTMLElement, selected: HostId, onPick: (id: HostId) => void): void {
   renderPickerList(
     container,

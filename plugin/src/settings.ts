@@ -16,6 +16,8 @@ import type { GatewayConfig } from './destinations/gateway.ts'
 import { inferProvider, isProviderId, providerKind } from './destinations/providers.ts'
 import type { ProviderId } from './destinations/providers.ts'
 import { inferHost, isHostId } from './builders/hosts.ts'
+import { isStarterId } from './builders/starters.ts'
+import type { StarterId } from './builders/starters.ts'
 import type { HostId } from './builders/hosts.ts'
 import { isUrlStyle } from './core/slug.ts'
 import { DEFAULT_LOCALE, directionFor, isLocale } from './core/locales.ts'
@@ -38,6 +40,21 @@ export interface WebhookBuilderSettings {
    * truth about which host this is.
    */
   host: HostId
+  /**
+   * Which starter builds the site.
+   *
+   * Beside `host` and kept for the same kind of reason, with one difference
+   * worth naming. A host id is pure presentation: it changes advice and nothing
+   * else. This one is presentation *and* one fact the host must be told
+   * correctly, because Quartz builds into `public` and an Astro starter builds
+   * into `dist`. A host given the wrong directory deploys an empty one and
+   * reports success, so the guide has to know which starter was chosen, and
+   * still know it when the guide is reopened a week later.
+   *
+   * It reaches nothing else. No snapshot carries it, no request mentions it,
+   * and the published bytes are identical either way.
+   */
+  starter: StarterId
   url: string
   method: 'POST' | 'GET'
   siteUrl: string
@@ -183,6 +200,8 @@ export const DEFAULT_SETTINGS: Settings = {
     // The recommended host, so a fresh vault opens on it, and the interval
     // below is that host's own constraint rather than a number from nowhere.
     host: 'cloudflare-pages',
+    // The starter this repository builds and verifies on every commit.
+    starter: 'quartz',
     url: '',
     method: 'POST',
     siteUrl: '',
@@ -266,6 +285,12 @@ export function migrateSettings(raw: unknown): Settings {
   }
 
   settings.builder.host = resolveHost(stored.builder)
+  // Checked rather than copied, like `host` above and `urlStyle` below: an
+  // unrecognised id would reach the picker, which cannot render it, and step 4,
+  // which would then name no output directory at all.
+  settings.builder.starter = isStarterId(stored.builder?.starter)
+    ? stored.builder.starter
+    : DEFAULT_SETTINGS.builder.starter
 
   // Checked against the two values rather than copied across, the same way
   // `analytics.provider` is: an unrecognised style would reach the dropdown,
