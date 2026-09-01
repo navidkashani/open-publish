@@ -207,15 +207,26 @@ export class OpenPublishSettingTab extends PluginSettingTab {
    * These are written by the file context menu and by "Add linked" in the
    * publish window, so they accumulate without anyone deciding to keep a list.
    * That is what makes "3 files" the least useful thing to say about them.
+   *
+   * The heading is drawn even with nothing under it, which is the one case that
+   * used to return early and so was invisible to everybody who had never made a
+   * per-file choice. Publishing a single note is a real route and the only one
+   * with no control anywhere on screen, so the empty state is where it gets
+   * said. Nothing else follows it: no list, and nothing to clear.
    */
   private renderOverrides(containerEl: HTMLElement): void {
     const selection = this.plugin.settings.selection
     const paths = Object.keys(selection.explicit).sort()
-    if (paths.length === 0) return
 
     new Setting(containerEl)
       .setName('Per-file choices')
-      .setDesc(`${paths.length} ${paths.length === 1 ? 'file' : 'files'} individually included or excluded.`)
+      .setDesc(
+        paths.length === 0
+          ? 'None yet. Right click any note and choose "Publish with Open Publish" to publish it on its own, ' +
+            'wherever it lives.'
+          : `${paths.length} ${paths.length === 1 ? 'file' : 'files'} individually included or excluded.`,
+      )
+    if (paths.length === 0) return
 
     const list = containerEl.createDiv({ cls: 'op-rule-list' })
     this.disposeRows = renderRuleRows(

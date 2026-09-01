@@ -32,6 +32,7 @@ import { FolderModal } from './FolderModal.ts'
 import { folderRulesSummary, summarizeRules } from './FolderRules.ts'
 import { ProgressView } from './ProgressView.ts'
 import { ReviewView } from './ReviewView.ts'
+import { ruleTargetExists } from './RuleList.ts'
 import { renderLinkedNotes, renderScanNotices } from './ScanNotices.ts'
 import { publishMessage, stateForSession, upToDateStats } from './messages.ts'
 import type { ActionId, MessageAction, PublishMessage } from './messages.ts'
@@ -237,7 +238,7 @@ export class PublishModal extends Modal {
       files: this.app.vault.getFiles().map((file) => file.path),
       includes: selection.includes,
       excludes: selection.excludes,
-      folderExists: (path) => this.app.vault.getFolderByPath(path) !== null,
+      folderExists: (path) => ruleTargetExists(this.app, path),
     })
 
     new Setting(container)

@@ -17,9 +17,16 @@
  * would actually produce. The per-rule counts beside each row come from
  * `summarizeRules`, which deliberately ignores frontmatter (its header says
  * why: it is recomputed on every keystroke in the dialog it was built for).
- * This screen renders once and carries the single most privacy-critical number
- * in the plugin, so it can afford the walk. When the two disagree, a line
- * under the lists says why.
+ * This screen is opened by hand and redrawn only when a box below is ticked,
+ * and it carries the single most privacy-critical number in the plugin, so it
+ * can afford the walk. When the two disagree, a line under the lists says why.
+ *
+ * The one part of this screen that is not a preview: the notes Publish may have
+ * published individually. Those selections live on Obsidian's servers and this
+ * plugin does not talk to Obsidian, so the offer is inferred from the one trace
+ * left in the vault, a `permalink`, and offered with every box empty. Ticking
+ * one re-renders, because the headline and the button describe what Import will
+ * do and both have to move.
  */
 
 import { Modal, Notice, Setting } from 'obsidian'
@@ -31,12 +38,16 @@ import { extensionOf, getPublishFlag } from '../core/selection.ts'
 import type { SelectionRules } from '../core/selection.ts'
 import { DEAD_RULE_WARNING, noteCountLabel, summarizeRules } from './FolderRules.ts'
 import type { RuleSummary } from './FolderRules.ts'
-import { renderRuleRows } from './RuleList.ts'
+import { renderRuleRows, ruleTargetExists } from './RuleList.ts'
 import type { RuleRow } from './RuleList.ts'
 import {
   EXCLUDES_KEPT_NOTE,
   LEGACY_URL_OFFER,
   LEGACY_URL_TOGGLE,
+  UNCLAIMED_PERMALINK_BLIND_SPOT,
+  UNCLAIMED_PERMALINK_HEADING,
+  UNCLAIMED_PERMALINK_LIMIT,
+  UNCLAIMED_PERMALINK_OFFER,
   effectLabel,
   importBlockedReason,
   importButtonLabel,
@@ -44,8 +55,10 @@ import {
   importWarnings,
   importedNotice,
   planPublishImport,
+  unclaimedPermalinks,
+  unclaimedRemainderNote,
 } from './PublishImport.ts'
-import type { ImportPlan, PublishedCount } from './PublishImport.ts'
+import type { ImportPlan, PublishedCount, UnclaimedPermalink } from './PublishImport.ts'
 
 export interface PublishImportSource {
   config: PublishConfig
@@ -56,8 +69,20 @@ export class PublishImportModal extends Modal {
   private readonly plugin: OpenPublishPlugin
   private readonly source: PublishImportSource
   private readonly onDone: () => void
-  /** Whether to also answer at the old Publish addresses. Pre-ticked when offered. */
-  private keepLegacyUrls = false
+  /**
+   * Whether to also answer at the old Publish addresses.
+   *
+   * Null until the offer has been made once, and pre-ticked when it is. The
+   * tri-state is what stops a re-render from re-arming a toggle somebody has
+   * just turned off: `render()` runs again on every tick below.
+   */
+  private keepLegacyUrls: boolean | null = null
+
+  /**
+   * Notes ticked in the offer below, held here rather than read back off the
+   * checkboxes, because the redraw destroys them.
+   */
+  private readonly ticked: Record<string, boolean> = {}
 
   // Written out rather than as constructor parameter properties: Node's
   // type-stripping cannot erase those, and the test suite runs this file.
@@ -90,17 +115,22 @@ export class PublishImportModal extends Modal {
     // Also accepts a file, because `matchesFolderRule` matches an exact file
     // path too. Publish filters normally name folders, and telling somebody
     // their existing note "no longer exists" would be plainly wrong.
-    const folderExists = (path: string): boolean =>
-      this.app.vault.getFolderByPath(path) !== null || this.app.vault.getFileByPath(path) !== null
+    const folderExists = (path: string): boolean => ruleTargetExists(this.app, path)
     const before = summarizeRules({ files, includes: selection.includes, excludes: selection.excludes, folderExists })
     const after = summarizeRules({ files, includes: plan.includes, excludes: plan.excludes, folderExists })
 
+    const planned: SelectionRules = { includes: plan.includes, excludes: plan.excludes, explicit: selection.explicit }
+    const candidates = this.candidatesFor(planned)
+    const ticked = Object.keys(this.ticked)
+
     const publishedNow = this.countPublished(selection)
-    const publishedAfter = this.countPublished({
-      includes: plan.includes,
-      excludes: plan.excludes,
-      explicit: selection.explicit,
-    })
+    // Twice, and only when something is ticked: the rules on their own are what
+    // the per-rule rows sum to, and the rules plus the ticks are the headline.
+    const publishedFromRules = this.countPublished(planned)
+    const publishedAfter =
+      ticked.length === 0
+        ? publishedFromRules
+        : this.countPublished({ ...planned, explicit: { ...selection.explicit, ...this.ticked } })
 
     contentEl.createEl('p', { cls: 'op-rule-intro', text: importSentence(plan, publishedNow, publishedAfter) })
 
@@ -111,7 +141,7 @@ export class PublishImportModal extends Modal {
       new Setting(contentEl).setName('Excluded').setHeading()
       renderRuleRows(contentEl, this.rowsFor('excludes', plan, before, after), 'Nothing is being held back.')
 
-      if (after.published !== publishedAfter.notes + publishedAfter.attachments) {
+      if (after.published !== publishedFromRules.notes + publishedFromRules.attachments) {
         contentEl.createEl('p', {
           cls: 'op-muted',
           text:
@@ -134,9 +164,10 @@ export class PublishImportModal extends Modal {
       contentEl.createDiv({ cls: 'op-notice-warning', text: warning })
     }
 
+    this.renderUnclaimed(contentEl, candidates)
     this.renderUrlOffer(contentEl, plan)
 
-    const blocked = importBlockedReason(plan)
+    const blocked = importBlockedReason(plan, ticked.length)
     if (blocked) contentEl.createEl('p', { cls: 'op-muted', text: blocked })
 
     const actions = contentEl.createDiv({ cls: 'op-progress-actions' })
@@ -147,12 +178,72 @@ export class PublishImportModal extends Modal {
     cancel.style.marginRight = 'auto'
     cancel.addEventListener('click', () => this.close())
 
-    const label = importButtonLabel(plan, publishedAfter)
+    const label = importButtonLabel(plan, publishedAfter, ticked.length)
     const confirm = actions.createEl('button', { cls: 'mod-cta', text: label })
     confirm.disabled = blocked !== null
     // Deliberately never focused. A plan containing removals must not be
     // confirmable by pressing Enter on a window somebody has not read.
     confirm.addEventListener('click', () => this.commit(plan, publishedAfter))
+  }
+
+  /**
+   * Notes a permalink says Obsidian Publish probably served on its own.
+   *
+   * Resolved against the *planned* rules, so a note a folder already covers is
+   * never offered, and against the vault's saved `explicit` map rather than the
+   * ticks: a candidate that disappeared the moment it was ticked would be an
+   * unusable list.
+   */
+  private candidatesFor(planned: SelectionRules): UnclaimedPermalink[] {
+    return unclaimedPermalinks(
+      this.app.vault.getFiles().map((file) => {
+        const frontmatter = this.app.metadataCache.getCache(file.path)?.frontmatter
+        return {
+          path: file.path,
+          permalink: frontmatter?.['permalink'],
+          flag: getPublishFlag(file.path, frontmatter?.['publish'], planned),
+        }
+      }),
+    )
+  }
+
+  /**
+   * The offer, with every box empty.
+   *
+   * Shown even when the plan is empty, because that is the case where it
+   * matters most: a Publish site that selected everything note by note has an
+   * empty `included` list and would otherwise be a dead end.
+   *
+   * The asymmetry runs the other way from the URL offer directly beneath it.
+   * Wrongly on there costs a redirect page nobody visits; wrongly on here
+   * publishes a private note. So these are unticked, and this is an offer
+   * rather than an import: a permalink is a note saying "I have a fixed public
+   * address", which is good evidence and a poor rule.
+   */
+  private renderUnclaimed(container: HTMLElement, candidates: UnclaimedPermalink[]): void {
+    if (candidates.length === 0) return
+
+    new Setting(container).setName(UNCLAIMED_PERMALINK_HEADING).setHeading()
+    container.createEl('p', { cls: 'op-rule-intro', text: UNCLAIMED_PERMALINK_OFFER })
+
+    for (const candidate of candidates.slice(0, UNCLAIMED_PERMALINK_LIMIT)) {
+      new Setting(container)
+        .setName(candidate.path)
+        .setDesc(candidate.permalink)
+        .addToggle((toggle) =>
+          toggle.setValue(this.ticked[candidate.path] === true).onChange((value) => {
+            if (value) this.ticked[candidate.path] = true
+            else delete this.ticked[candidate.path]
+            // The headline and the button say what Import will do, so both have
+            // to move. The same redraw `FolderModal` does after a mutation.
+            this.render()
+          }),
+        )
+    }
+
+    const remainder = unclaimedRemainderNote(candidates.length)
+    if (remainder) container.createEl('p', { cls: 'op-muted', text: remainder })
+    container.createEl('p', { cls: 'op-muted', text: UNCLAIMED_PERMALINK_BLIND_SPOT })
   }
 
   /**
@@ -174,12 +265,14 @@ export class PublishImportModal extends Modal {
     if (this.plugin.settings.urlStyle !== 'clean') return
     if (!looksLikeObsidianPublish(this.source.config)) return
 
-    this.keepLegacyUrls = true
+    // Pre-ticked on the first pass only. `??=` is doing the work: a redraw after
+    // a note is ticked must not undo an answer already given here.
+    this.keepLegacyUrls ??= true
     new Setting(container)
       .setName(LEGACY_URL_TOGGLE)
       .setDesc(LEGACY_URL_OFFER)
       .addToggle((toggle) =>
-        toggle.setValue(true).onChange((value) => {
+        toggle.setValue(this.keepLegacyUrls === true).onChange((value) => {
           this.keepLegacyUrls = value
         }),
       )
@@ -225,17 +318,32 @@ export class PublishImportModal extends Modal {
     return count
   }
 
-  /** Two arrays and, if it was offered and left ticked, one URL setting. Nothing else. */
+  /**
+   * Two arrays, the ticked notes, and, if it was offered and left ticked, one
+   * URL setting. Nothing else.
+   */
   private commit(plan: ImportPlan, publishedAfter: PublishedCount): void {
     const selection = this.plugin.settings.selection
-    selection.includes = [...plan.includes]
-    selection.excludes = [...plan.excludes]
-    if (this.keepLegacyUrls) this.plugin.settings.urlStyle = 'clean-with-redirects'
+    const ticked = Object.keys(this.ticked)
+
+    // An empty plan has no folders to write, and writing its empty include list
+    // would delete the rules this vault already has. "Nothing to import" must
+    // never mean "everything to remove", and this path is reachable now that a
+    // ticked note unblocks Import.
+    if (!plan.empty) {
+      selection.includes = [...plan.includes]
+      selection.excludes = [...plan.excludes]
+    }
+    // Ticked notes only. An unticked candidate is "no opinion", and writing
+    // `false` there would invent a refusal nobody made, one that then outranks
+    // any folder rule they add later.
+    for (const path of ticked) selection.explicit[path] = true
+    if (this.keepLegacyUrls === true) this.plugin.settings.urlStyle = 'clean-with-redirects'
 
     // The same habit as the manage-folders dialog: nothing here is a draft, and
     // the redraw does not wait on the write.
     void this.plugin.saveSettings()
-    new Notice(importedNotice(plan, publishedAfter), 8000)
+    new Notice(importedNotice(plan, publishedAfter, ticked.length), 8000)
     this.close()
   }
 }

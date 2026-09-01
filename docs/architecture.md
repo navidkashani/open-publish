@@ -392,13 +392,75 @@ permanently, discovered weeks later. It is asked rather than inferred because
 the domain, and asked rather than set silently because it changes what the site
 serves.
 
-Everything else about a Publish site is out of reach, not merely out of scope.
+Everything else about a Publish site lives somewhere this plugin does not go.
 Obsidian's help is explicit that "configuration settings are stored on Obsidian's
 servers": site name, homepage, theme, navigation, graph, backlinks, outline,
 search, line length, stacked pages, custom domain, analytics and every per-file
-selection are not in the vault at all. `publish.css` and `publish.js` do sit in
-the vault root, but they are Publish-specific theming and neither extension is in
-`SUPPORTED_EXTENSIONS`, so they do not carry over either.
+selection are not in the vault at all. Some of them are nevertheless readable
+without a login, which is the next subsection, and reading them is declined on
+purpose. `publish.css` and `publish.js` do sit in the vault root, but they are
+Publish-specific theming and neither extension is in `SUPPORTED_EXTENSIONS`, so
+they do not carry over either.
+
+#### Notes Publish served one at a time
+
+A site can publish a note that no folder filter covers, and `publish.json` says
+nothing about those. On the vault this was measured against, the sitemap lists 96
+URLs, the folder import reproduces 93 of them exactly with a redirect at each old
+address, and the three it misses are `Welcome.md`, `Now.md` and `Start here.md`,
+all at the vault root and all selected individually in Publish.
+
+What those three do leave behind is a `permalink` in their frontmatter, which
+Publish honours as a custom URL. So does the only other permalink in that vault,
+`About/About.md`, which the folder rules already cover: four permalinks, four
+published notes, no false positives. So the import offers every note carrying a
+permalink that the planned rules would *not* publish, resolved through
+`getPublishFlag` so that a note a folder already covers is never offered and an
+explicit `publish: false`, or an excluded folder, is never offered to be
+overturned.
+
+It is an offer with the boxes empty, not an import. A permalink is a note saying
+"I have a fixed public address", which is a thing people write on notes they
+publish: good evidence and a poor rule. The asymmetry runs the other way from the
+legacy-URL offer directly beneath it, and decides the default the other way with
+it: wrongly on there costs a redirect page nobody visits, and wrongly on here
+publishes a private note. Ticking one writes `selection.explicit[path] = true`
+and nothing else; an unticked candidate is "no opinion", never a stored `false`,
+which would invent a refusal nobody made and then outrank any folder rule they
+add later. The list is capped at 25 rows because a vault with hundreds of them is
+one where the inference is weak anyway, and a preview that cannot be read is not
+a preview.
+
+The offer is shown even when the plan is empty, which is the case it matters most
+in: a site that selected every note by hand has an empty `included` list and was
+otherwise a dead end. That makes Import reachable with no folders to write, so
+`commit` leaves both rule lists alone when `plan.empty`, because nothing to
+import must never mean everything to remove, and `importWarnings` says nothing
+about removals there for the same reason.
+
+#### The endpoints, and why they are not called
+
+A live Publish site's own HTML names two addresses:
+
+```
+https://publish-01.obsidian.md/cache/<siteId>
+https://publish-01.obsidian.md/options/<siteId>
+```
+
+Both answer an anonymous GET, and `siteId` sits in `publish.json` in the vault.
+The first returns the complete published file list, which is exactly the per-note
+selection the offer above has to infer. The second returns the site options:
+`indexFile`, `siteName`, `googleAnalytics` and the display toggles.
+
+So "those selections cannot be imported" is not true, and saying so on screen
+would be a lie to anyone who has opened their own site's HTML. **They are
+readable, and this plugin declines to read them.** The promise is that nothing
+passes through anyone else's server, and one request telling Obsidian which site
+is being migrated, from the plugin whose whole purpose is leaving, is a poor
+trade for three checkboxes. The screen says the plugin does not talk to Obsidian
+rather than that the choices are unreachable. This is written down so that the
+next person to open that HTML reads it as a decision rather than an oversight,
+and so it can be reconsidered on purpose.
 
 Deliberately not imported, so the decisions do not get relitigated:
 
@@ -409,6 +471,7 @@ Deliberately not imported, so the decisions do not get relitigated:
 | `core-plugins.json` | Records which panes the *author* has open in their editor, not what *visitors* get. Its defaults disagree in the dangerous direction: `DEFAULT_SETTINGS.site` has all five on and Obsidian ships `outline` and `tag-pane` off, so a typical import would switch site features off on a site nobody has seen yet. Publish keeps its own server-side toggles for these anyway |
 | `appearance.json` | A theme for the *app*, not the site. "Forced light/dark default" is already in the excluded-options table above for the same reason |
 | `app.json` `rightToLeft` | `site.dir` is derived from `site.locale` and rewritten on every load, so the write would not survive a restart, and a write that does not stick is worse than no write |
+| Site options at `/options/<siteId>` (`indexFile`, `siteName`, `googleAnalytics`, the display toggles) | Readable without authentication, and left alone for the reason above. A migrating user re-enters the homepage, the site title and the analytics ID by hand in settings, which is three fields once |
 | `templates.json`, `daily-notes.json` | The genuine near-miss. Publish's own `excluded` list is the user's real answer to "what should not be public", and an exclude the plugin invented appears in Manage folders as a rule nobody typed, holding notes back with no explanation attached |
 
 Also rejected: auto-importing on load or first run (the one operation that decides

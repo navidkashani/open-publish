@@ -56,7 +56,47 @@ const importButton = (modal) => find(modal.contentEl, (node) => node.tagName ===
 const cancelButton = (modal) =>
   find(modal.contentEl, (node) => node.tagName === 'BUTTON' && node.textContent === 'Cancel')
 const warnings = (modal) => findAll(modal.contentEl, byClass('op-notice-warning')).map((node) => node.textContent)
-const toggle = (modal) => find(modal.contentEl, (node) => node.tagName === 'INPUT' && node.type === 'checkbox')
+
+const URL_TOGGLE = 'Keep the URLs Obsidian Publish gave this site'
+const nameOf = (row) => find(row, byClass('setting-item-name'))?.textContent ?? ''
+const checkboxIn = (row) => find(row, (node) => node.tagName === 'INPUT' && node.type === 'checkbox')
+const settingWithCheckbox = (modal) => findAll(modal.contentEl, byClass('setting-item')).filter(checkboxIn)
+
+/** The legacy-URL toggle, found by its row rather than by being the first box on screen. */
+const toggle = (modal) => {
+  const row = settingWithCheckbox(modal).find((item) => nameOf(item) === URL_TOGGLE)
+  return row ? checkboxIn(row) : null
+}
+
+/** Every note offered as one Publish may have served on its own. */
+const candidates = (modal) =>
+  settingWithCheckbox(modal)
+    .filter((item) => nameOf(item) !== URL_TOGGLE)
+    .map((item) => ({
+      path: nameOf(item),
+      permalink: find(item, byClass('setting-item-description')).textContent,
+      ticked: checkboxIn(item).checked,
+    }))
+
+/** Ticks or unticks one offered note, by path. The screen redraws underneath. */
+const tick = (modal, path) => {
+  const row = settingWithCheckbox(modal).find((item) => nameOf(item) === path)
+  assert.ok(row, `no offer row for ${path}`)
+  click(checkboxIn(row))
+}
+
+/**
+ * The three root notes the live site published individually, each carrying the
+ * permalink Publish served it at, none of them inside any folder in publish.json.
+ */
+const REAL_MIGRATION = {
+  extraFiles: ['Welcome.md', 'Now.md', 'Start here.md'],
+  frontmatter: {
+    'Welcome.md': { permalink: 'welcome' },
+    'Now.md': { permalink: 'now' },
+    'Start here.md': { permalink: 'start-here' },
+  },
+}
 
 test('every folder is listed with what it would publish, and what importing does to it', () => {
   const { modal } = open(publishFile({ included: ['Notes', 'Ideas'], excluded: ['Notes/Drafts'] }), {
@@ -230,7 +270,8 @@ test('a site picked note by note says so, rather than appearing broken', () => {
   const { modal } = open(publishFile({ included: [], excluded: [] }))
 
   assert.match(modal.contentEl.textContent, /selects notes individually rather than by folder/)
-  assert.match(modal.contentEl.textContent, /stored on Obsidian's servers/)
+  assert.match(modal.contentEl.textContent, /live on Obsidian's servers rather than in your vault/)
+  assert.match(modal.contentEl.textContent, /this plugin does not talk to Obsidian, so it cannot see them/)
   assert.equal(importButton(modal).disabled, true)
 })
 
@@ -258,6 +299,125 @@ test('nothing in the preview can be edited: no remove control and no picker', ()
     0,
     'this would be someone wiring renderFolderList in by mistake',
   )
+})
+
+// --- notes Publish may have published one at a time ------------------------
+
+test('the notes a permalink points at are offered, unticked, each with its permalink', () => {
+  const { modal } = open(publishFile({ included: ['Notes'] }), REAL_MIGRATION)
+
+  assert.deepEqual(candidates(modal), [
+    { path: 'Now.md', permalink: 'now', ticked: false },
+    { path: 'Start here.md', permalink: 'start-here', ticked: false },
+    { path: 'Welcome.md', permalink: 'welcome', ticked: false },
+  ])
+  // Wrongly on here publishes a private note, which is why this is the one
+  // offer on the screen whose default publishes less.
+  assert.match(modal.contentEl.textContent, /Notes that may have been published individually/)
+  assert.match(modal.contentEl.textContent, /Tick any that belong on your site/)
+})
+
+test('the offer says what it cannot see, so nobody reads it as the whole list', () => {
+  const { modal } = open(publishFile({ included: ['Notes'] }), REAL_MIGRATION)
+  assert.match(modal.contentEl.textContent, /without a permalink cannot be found this way/)
+  assert.match(modal.contentEl.textContent, /Compare against your live site/)
+})
+
+test('ticking one moves the headline and the button, because they say what Import will do', () => {
+  const { modal } = open(publishFile({ included: ['Notes'] }), REAL_MIGRATION)
+  assert.match(modal.contentEl.textContent, /publishes 3 notes instead of nothing\./)
+  assert.equal(importButton(modal).textContent, 'Import 1 folder (3 notes)')
+
+  tick(modal, 'Welcome.md')
+
+  assert.match(modal.contentEl.textContent, /publishes 4 notes instead of nothing\./)
+  assert.equal(importButton(modal).textContent, 'Import 1 folder (4 notes)')
+  assert.deepEqual(
+    candidates(modal).filter((candidate) => candidate.ticked).map((candidate) => candidate.path),
+    ['Welcome.md'],
+    'the tick survives the redraw it causes',
+  )
+})
+
+test('Import writes the ticked notes, and leaves every other per-file choice alone', () => {
+  const { modal, plugin } = open(publishFile({ included: ['Notes'] }), {
+    ...REAL_MIGRATION,
+    selection: { explicit: { 'Archive/2024/Old.md': true } },
+  })
+
+  tick(modal, 'Welcome.md')
+  tick(modal, 'Now.md')
+  tick(modal, 'Now.md')
+  click(importButton(modal))
+
+  // An unticked candidate is "no opinion", never a stored `false`: that would
+  // invent a refusal nobody made and outrank any folder rule added later.
+  assert.deepEqual(plugin.settings.selection.explicit, {
+    'Archive/2024/Old.md': true,
+    'Welcome.md': true,
+  })
+  assert.deepEqual(plugin.settings.selection.includes, ['Notes'], 'and the folders are still imported')
+  assert.equal(plugin.saves, 1)
+})
+
+test('a site that selected every note by hand is no longer a dead end', () => {
+  const { modal, plugin } = open(publishFile({ included: [], excluded: [] }), {
+    ...REAL_MIGRATION,
+    selection: { includes: ['Archive'] },
+  })
+
+  assert.equal(candidates(modal).length, 3, 'the empty plan is the case this matters most in')
+  assert.equal(importButton(modal).disabled, true)
+  assert.match(modal.contentEl.textContent, /There are no folders to import\./)
+
+  tick(modal, 'Welcome.md')
+  assert.equal(importButton(modal).disabled, false)
+  assert.equal(importButton(modal).textContent, 'Import 1 note')
+
+  click(importButton(modal))
+  assert.deepEqual(plugin.settings.selection.explicit, { 'Welcome.md': true })
+  // Nothing to import must never mean everything to remove: an empty include
+  // list is not an instruction to delete the rules this vault already has.
+  assert.deepEqual(plugin.settings.selection.includes, ['Archive'])
+  assert.match(notices.at(-1), /1 note was added individually/)
+})
+
+test('a note a folder already publishes, or one that refuses, is never offered', () => {
+  const { modal } = open(publishFile({ included: ['Notes'], excluded: ['Ideas'] }), {
+    frontmatter: {
+      // Covered by the imported folder: ticking it would do nothing.
+      'Notes/Luhmann.md': { permalink: 'luhmann' },
+      // An explicit refusal, which this must never offer to overturn.
+      'Standalone.md': { permalink: 'standalone', publish: false },
+      // Held back by an exclude, which resolves before every include.
+      'Ideas/WIP.md': { permalink: 'wip' },
+    },
+  })
+
+  assert.deepEqual(candidates(modal), [])
+})
+
+test('past the cap the rest are named rather than listed', () => {
+  const many = Array.from({ length: 30 }, (_, index) => `Root/Note ${String(index).padStart(2, '0')}.md`)
+  const { modal } = open(publishFile({ included: ['Notes'] }), {
+    extraFiles: many,
+    frontmatter: Object.fromEntries(many.map((path, index) => [path, { permalink: `p${index}` }])),
+  })
+
+  assert.equal(candidates(modal).length, 25)
+  assert.match(modal.contentEl.textContent, /5 more notes carry a permalink and are not listed\./)
+})
+
+test('unticking the redirects survives ticking a note', () => {
+  // The redraw must not re-arm an answer already given. Wrongly on there is
+  // cheap; silently overriding a deliberate choice is not.
+  const { modal, plugin } = open(publishFile({ included: ['Notes'] }), REAL_MIGRATION)
+  click(toggle(modal))
+  tick(modal, 'Welcome.md')
+
+  assert.equal(toggle(modal).checked, false)
+  click(importButton(modal))
+  assert.equal(plugin.settings.urlStyle, 'clean')
 })
 
 // --- reading the file ------------------------------------------------------

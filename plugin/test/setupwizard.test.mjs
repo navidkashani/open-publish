@@ -449,6 +449,18 @@ test('and a vault that never used it sees nothing extra on step 6', () => {
   assert.match(wizard.contentEl.textContent, /Folders to publish/, 'the step itself is unchanged')
 })
 
+test('a rule naming a note reads its count on step 6, with no dead-rule warning', () => {
+  // The same rule the import can bring across: `matchesFolderRule` matches an
+  // exact file path too, so this is a working rule and must not be called dead.
+  const { wizard } = open({ selection: { includes: ['Notes/Home.md'], excludes: [], explicit: {} } })
+  goTo(wizard, 5)
+
+  const row = find(wizard.contentEl, byClass('op-rule-row'))
+  assert.equal(find(row, byClass('op-rule-path')).textContent, 'Notes/Home.md')
+  assert.equal(find(row, byClass('op-rule-meta')).textContent, '1 note')
+  assert.equal(row.hasClass('op-rule-dead'), false)
+})
+
 test('step 3 offers both starters, and picking one swaps the template it sends you to', () => {
   const { wizard, plugin } = open()
   goTo(wizard, 2)

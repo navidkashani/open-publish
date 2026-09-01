@@ -798,6 +798,34 @@ test('the Last publish row stops naming a version once a rollback has moved it',
   assert.doesNotMatch(desc, /version/)
 })
 
+test('the per-file heading is there before anyone has made a per-file choice', () => {
+  // It used to return early on an empty map, which made it invisible to
+  // everybody who had never right-clicked a note: the one route into
+  // publishing with no control anywhere on screen.
+  const { root } = open()
+  const row = rowNamed(root, 'Per-file choices')
+
+  assert.ok(row, 'the heading is drawn with nothing under it')
+  assert.match(descOf(row), /Right click any note and choose "Publish with Open Publish"/)
+  assert.equal(findAll(root, byClass('op-rule-row')).length, 0, 'and nothing else: no list')
+  assert.equal(
+    findAll(root, (node) => node.tagName === 'BUTTON' && node.textContent === 'Clear all').length,
+    0,
+    'nothing to clear',
+  )
+})
+
+test('and it becomes a list once there is something to list', () => {
+  const { root } = open({ selection: { includes: [], excludes: [], explicit: { 'Notes/Home.md': true } } })
+
+  assert.match(descOf(rowNamed(root, 'Per-file choices')), /1 file individually included or excluded/)
+  assert.equal(findAll(root, byClass('op-rule-row')).length, 1)
+  assert.equal(
+    findAll(root, (node) => node.tagName === 'BUTTON' && node.textContent === 'Clear all').length,
+    1,
+  )
+})
+
 test('the Site URLs choice is offered under Site options and saved when picked', () => {
   const { root, plugin } = open()
   const row = rowNamed(root, 'Site URLs')

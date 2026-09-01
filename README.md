@@ -13,8 +13,9 @@ published in Git.
 
 ## What it does
 
-- **Publishes a subset of your vault.** Folder rules, or `publish: true` in
-  frontmatter. Frontmatter always wins.
+- **Publishes a subset of your vault.** Folder rules, `publish: true` in
+  frontmatter, or a single note from its right-click menu. Frontmatter always
+  wins.
 - **Never touches your notes.** The plugin only ever reads. Every piece of
   selection state lives in plugin settings, not in your files.
 - **Never breaks the live site.** Publishing is atomic: the site switches to the
@@ -35,7 +36,10 @@ published in Git.
   Publish, the folders it published are already written down in
   `.obsidian/publish.json`. Open Publish reads that file, shows you exactly which
   folders it would publish and how many notes that is, and writes nothing until
-  you agree.
+  you agree. Notes Publish served one at a time are not in that file: those
+  selections live on Obsidian's servers, and this plugin does not talk to
+  Obsidian, so the import offers the notes carrying a `permalink` as candidates
+  and leaves the boxes for you to tick.
 - **Two site themes to choose from.** The setup guide offers the Quartz starter
   in this repository or [jotter](https://github.com/navidkashani/jotter), an
   Astro theme. Both build the same published notes from the same snapshot, so

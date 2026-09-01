@@ -19,7 +19,7 @@ import type { App } from 'obsidian'
 import type OpenPublishPlugin from '../main.ts'
 import { addRule, folderRulesSentence, removeRule, summarizeRules } from './FolderRules.ts'
 import type { RuleSummary } from './FolderRules.ts'
-import { renderFolderList } from './RuleList.ts'
+import { renderFolderList, ruleTargetExists } from './RuleList.ts'
 import type { Disposer } from './RuleList.ts'
 import { renderPublishImportRow } from './PublishImportModal.ts'
 
@@ -60,7 +60,7 @@ export class FolderModal extends Modal {
       files: this.app.vault.getFiles().map((file) => file.path),
       includes: selection.includes,
       excludes: selection.excludes,
-      folderExists: (path) => this.app.vault.getFolderByPath(path) !== null,
+      folderExists: (path) => ruleTargetExists(this.app, path),
     })
   }
 

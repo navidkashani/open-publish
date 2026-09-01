@@ -103,6 +103,14 @@ test('a folder renamed out from under a rule says so', () => {
   assert.match(row.warning, /no longer exists/)
 })
 
+test('a rule naming a note is a working rule, not a dead one', () => {
+  // `matchesFolderRule` matches an exact file path as well as a prefix, so
+  // this publishes one note. A row reading "1 note" and "no longer exists" at
+  // the same time is self-contradictory on its face.
+  const { modal } = open({ includes: ['Notes/Luhmann.md'] })
+  assert.deepEqual(rows(modal), [{ path: 'Notes/Luhmann.md', meta: '1 note', warning: null }])
+})
+
 test('picking a folder stores the rule, saves, and the count appears', () => {
   const { modal, plugin } = open()
   picker(modal, 0).suggest.pick('Notes')

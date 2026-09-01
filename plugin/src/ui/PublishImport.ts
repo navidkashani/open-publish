@@ -18,7 +18,7 @@
  */
 
 import type { PublishConfig, DroppedEntry } from '../core/publishconfig.ts'
-import type { SelectionRules } from '../core/selection.ts'
+import type { PublishFlag, SelectionRules } from '../core/selection.ts'
 import { folderCountLabel, noteCountLabel } from './FolderRules.ts'
 import type { RuleSummary } from './FolderRules.ts'
 
@@ -130,12 +130,7 @@ export function importSentence(plan: ImportPlan, before: PublishedCount, after: 
       'Add folders below.'
     )
   }
-  if (plan.empty) {
-    return (
-      'Your Publish site selects notes individually rather than by folder. Those choices are stored on ' +
-      "Obsidian's servers, not in your vault, so they cannot be imported."
-    )
-  }
+  if (plan.empty) return PER_NOTE_SELECTIONS_UNREACHABLE
   const lists = `Your Obsidian Publish configuration lists ${folderCountLabel(plan.includes.length)}.`
   if (plan.unchanged) return `${lists} They are the folders this vault already publishes, so there is nothing to change.`
   if (totalOf(before) === totalOf(after)) {
@@ -145,8 +140,11 @@ export function importSentence(plan: ImportPlan, before: PublishedCount, after: 
 }
 
 /** The outcome, not the action, the same habit as the wizard's counted Copy button. */
-export function importButtonLabel(plan: ImportPlan, after: PublishedCount): string {
-  if (plan.empty || plan.unchanged) return 'Import'
+export function importButtonLabel(plan: ImportPlan, after: PublishedCount, ticked = 0): string {
+  // With folders to import, the count in brackets already moves as notes are
+  // ticked. Without them there is no other number on screen, so the notes are
+  // the whole of what pressing this does.
+  if (plan.empty || plan.unchanged) return ticked > 0 ? `Import ${noteCountLabel(ticked)}` : 'Import'
   return `Import ${folderCountLabel(plan.includes.length)} (${publishedCountLabel(after)})`
 }
 
@@ -154,7 +152,11 @@ export function importButtonLabel(plan: ImportPlan, after: PublishedCount): stri
  * Why Import is disabled, said in the modal rather than left to be guessed at.
  * Null when it is not.
  */
-export function importBlockedReason(plan: ImportPlan): string | null {
+export function importBlockedReason(plan: ImportPlan, ticked = 0): string | null {
+  // A ticked note is something to do whatever the folder plan says, and the
+  // empty plan is the case where that matters most: a site that selected every
+  // note by hand has an empty include list and would otherwise be a dead end.
+  if (ticked > 0) return null
   if (plan.empty) return 'There are no folders to import.'
   if (plan.unchanged) return 'Your folders already match this configuration.'
   return null
@@ -167,13 +169,23 @@ export function importBlockedReason(plan: ImportPlan): string | null {
  * that also set excludes would apply them invisibly there. The count goes in
  * the sentence for that reason.
  */
-export function importedNotice(plan: ImportPlan, after: PublishedCount): string {
+export function importedNotice(plan: ImportPlan, after: PublishedCount, ticked = 0): string {
+  const said: string[] = []
+  // An empty plan writes no folders at all, so claiming "Imported 0 folders"
+  // would describe a write that did not happen.
+  if (!plan.empty) said.push(`Imported ${folderCountLabel(plan.includes.length)} from Obsidian Publish.`)
+  if (ticked > 0) {
+    said.push(`${capitalize(noteCountLabel(ticked))} ${ticked === 1 ? 'was' : 'were'} added individually.`)
+  }
+  said.push(`${capitalize(publishedCountLabel(after))} will publish.`)
+
   const excludesAdded = plan.changes.filter((change) => change.list === 'excludes' && change.effect === 'added').length
-  const published = `Imported ${folderCountLabel(plan.includes.length)} from Obsidian Publish. ${capitalize(
-    publishedCountLabel(after),
-  )} will publish.`
-  if (excludesAdded === 0) return published
-  return `${published} ${capitalize(folderCountLabel(excludesAdded))} ${excludesAdded === 1 ? 'was' : 'were'} added to your excluded list.`
+  if (excludesAdded > 0 && !plan.empty) {
+    said.push(
+      `${capitalize(folderCountLabel(excludesAdded))} ${excludesAdded === 1 ? 'was' : 'were'} added to your excluded list.`,
+    )
+  }
+  return said.join(' ')
 }
 
 /**
@@ -250,7 +262,10 @@ export function importWarnings(input: {
     )
   }
 
-  const removed = plan.changes.filter((change) => change.effect === 'removed').length
+  // An empty plan writes no folders at all, so nothing it lists as "removed"
+  // is actually removed: `commit` leaves both lists alone there. Warning about
+  // it would describe a write that cannot happen.
+  const removed = plan.empty ? 0 : plan.changes.filter((change) => change.effect === 'removed').length
   if (removed > 0) {
     warnings.push(
       `This replaces the folders this vault publishes now. ${capitalize(folderCountLabel(removed))} ` +
@@ -280,6 +295,92 @@ export const LEGACY_URL_OFFER =
   'existing links and search results still arrive. It cannot help with links to publish.obsidian.md.'
 
 export const LEGACY_URL_TOGGLE = 'Keep the URLs Obsidian Publish gave this site'
+
+// --- notes Publish published one at a time ---------------------------------
+
+/**
+ * Where per-note selections live, and why this plugin cannot read them.
+ *
+ * The second half is the load-bearing half. Those selections are *publicly*
+ * readable: a Publish site's own HTML names the endpoints that return them, and
+ * both answer without authentication. So "they cannot be imported" was never
+ * true. The plugin declines to look, because its promise is that nothing passes
+ * through anyone else's server, and it should say so rather than plead
+ * ignorance to somebody who has opened their own site's HTML.
+ * `docs/architecture.md` records the endpoints and the decision.
+ */
+export const PER_NOTE_SELECTIONS_UNREACHABLE =
+  'Your Publish site selects notes individually rather than by folder. Those choices live on Obsidian\'s ' +
+  'servers rather than in your vault, and this plugin does not talk to Obsidian, so it cannot see them.'
+
+/** A note carrying a permalink that the imported rules would not publish. */
+export interface UnclaimedPermalink {
+  path: string
+  permalink: string
+}
+
+/**
+ * Candidates for "Publish served this one individually".
+ *
+ * `flag` is `getPublishFlag` under the *planned* rules, and only `null`
+ * qualifies. `true` is already covered by a folder, and `false` is a refusal
+ * already recorded, either `publish: false` in frontmatter or an excluded
+ * folder, which this must never offer to overturn.
+ *
+ * A permalink is evidence, not proof: it is a note saying "I have a fixed
+ * public address", which is a thing people write on notes they publish. On the
+ * one real vault this was measured against, four notes carry one, all four were
+ * published, and three of those were selected individually. Good evidence and a
+ * poor rule, which is why the caller offers these with the boxes empty.
+ *
+ * Non-strings, blank strings and whitespace are dropped here rather than in the
+ * caller: a blank permalink never moved a URL, so it says nothing either way.
+ */
+export function unclaimedPermalinks(
+  notes: readonly { path: string; permalink: unknown; flag: PublishFlag }[],
+): UnclaimedPermalink[] {
+  const found: UnclaimedPermalink[] = []
+  for (const note of notes) {
+    if (note.flag !== null) continue
+    if (typeof note.permalink !== 'string') continue
+    const permalink = note.permalink.trim()
+    if (permalink === '') continue
+    found.push({ path: note.path, permalink })
+  }
+  return found.sort((a, b) => a.path.localeCompare(b.path))
+}
+
+/**
+ * How many of them are worth putting on screen.
+ *
+ * A vault with hundreds of unclaimed permalinks is one where the inference is
+ * weak anyway, since somebody who puts a permalink on everything is not telling
+ * us what Publish served, and a preview that cannot be read is not a preview.
+ */
+export const UNCLAIMED_PERMALINK_LIMIT = 25
+
+/** What stands in for the rows past the cap. Null when they all fit. */
+export function unclaimedRemainderNote(total: number): string | null {
+  const hidden = total - UNCLAIMED_PERMALINK_LIMIT
+  if (hidden <= 0) return null
+  return (
+    `${hidden} more ${hidden === 1 ? 'note carries' : 'notes carry'} a permalink and ${hidden === 1 ? 'is' : 'are'} ` +
+    'not listed. When this many notes have one, a permalink stops saying anything about Obsidian Publish. Any of ' +
+    'them can be published on its own from the note\'s right-click menu.'
+  )
+}
+
+export const UNCLAIMED_PERMALINK_HEADING = 'Notes that may have been published individually'
+
+/** The inference and its limit, in the same breath. */
+export const UNCLAIMED_PERMALINK_OFFER =
+  'Obsidian Publish also lets you publish single notes, and it keeps those choices on its own servers rather ' +
+  'than in your vault. These notes carry a permalink, which usually means Publish served them. Tick any that ' +
+  'belong on your site.'
+
+export const UNCLAIMED_PERMALINK_BLIND_SPOT =
+  'A note that Publish published individually without a permalink cannot be found this way. Compare against ' +
+  'your live site if you want to be sure.'
 
 function capitalize(text: string): string {
   return text.charAt(0).toUpperCase() + text.slice(1)

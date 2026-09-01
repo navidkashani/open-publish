@@ -425,10 +425,24 @@ test('a fresh vault is pointed at the folders it has not chosen yet', async () =
   })
   assert.match(root.textContent, /Nothing to publish/)
   assert.match(root.textContent, /No notes are marked for publishing yet/)
+  // All three routes, including the only one with no control anywhere on
+  // screen: this is where somebody with a single note to publish finds out how.
+  assert.match(root.textContent, /Choose folders to publish/)
+  assert.match(root.textContent, /right click any note and choose "Publish with Open Publish"/)
+  assert.match(root.textContent, /put publish: true at the top of a note/)
   assert.match(root.textContent, /None yet\. Nothing is published by folder/)
   assert.equal(buttons(root, 'Choose folders…').length, 1, 'and the missing step is a button, not a sentence')
   assert.equal(reviewing(root), false)
   assert.deepEqual(footerLabels(root), ['Close'])
+})
+
+test('a rule naming a note is counted, not called dead', async () => {
+  const { root } = await openWindow({
+    scan: freshVault(),
+    app: fakeApp({ files: ['Notes/Home.md'], folders: ['Notes'] }),
+    settings: { selection: { includes: ['Notes/Home.md'], excludes: [], explicit: {} } },
+  })
+  assert.match(root.textContent, /1 included · 1 note published/)
 })
 
 test('the review screen draws one rule above its footer, not two', async () => {

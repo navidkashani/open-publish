@@ -358,3 +358,13 @@ test('a fresh install is empty, not "already up to date"', () => {
   assert.match(message.body, /No notes are marked for publishing yet/)
   assert.deepEqual(labels(message), ['Close'])
 })
+
+test('the empty state names all three routes into publishing', () => {
+  // The right-click one is the only route with no control anywhere on screen,
+  // and the one Obsidian Publish puts in the middle of its main flow. Leaving
+  // it out is why somebody with a single note to publish cannot find out how.
+  const { body } = publishMessage({ kind: 'nothing-to-publish', reason: 'nothing-selected' })
+  assert.match(body, /Choose folders to publish/)
+  assert.match(body, /right click any note and choose "Publish with Open Publish"/)
+  assert.match(body, /put publish: true at the top of a note/)
+})

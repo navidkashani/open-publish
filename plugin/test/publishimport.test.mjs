@@ -12,12 +12,17 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
+  UNCLAIMED_PERMALINK_BLIND_SPOT,
+  UNCLAIMED_PERMALINK_LIMIT,
+  importBlockedReason,
   importButtonLabel,
   publishedCountLabel,
   importSentence,
   importWarnings,
   importedNotice,
   planPublishImport,
+  unclaimedPermalinks,
+  unclaimedRemainderNote,
 } from '../src/ui/PublishImport.ts'
 import { summarizeRules } from '../src/ui/FolderRules.ts'
 
@@ -188,7 +193,10 @@ test('each empty-handed case gets its own sentence, because they send you to dif
 
   const perNote = planPublishImport(publishConfig({ included: [] }), rules())
   assert.match(importSentence(perNote, none, none), /selects notes individually/)
-  assert.match(importSentence(perNote, none, none), /stored on Obsidian's servers/)
+  assert.match(importSentence(perNote, none, none), /live on Obsidian's servers rather than in your vault/)
+  // Not "cannot be imported", which was never true: those selections are
+  // publicly readable, and this plugin declines to look. See architecture.md.
+  assert.match(importSentence(perNote, none, none), /this plugin does not talk to Obsidian, so it cannot see them/)
 
   const three = { notes: 3, attachments: 0 }
   const unchanged = planPublishImport(publishConfig({ included: ['Notes'] }), rules({ includes: ['Notes'] }))
@@ -209,6 +217,109 @@ test('the confirmation counts the excludes, which step 6 cannot show', () => {
 
   const noExcludes = planPublishImport(publishConfig({ included: ['Notes'] }), rules())
   assert.doesNotMatch(importedNotice(noExcludes, two), /excluded list/)
+})
+
+// --- notes Publish may have published one at a time ------------------------
+
+/** One note as the modal hands it over: a path, a raw permalink, a resolved flag. */
+const note = (path, permalink, flag = null) => ({ path, permalink, flag })
+
+test('a permalink on a note the imported rules do not publish is offered', () => {
+  // The measured case: three root notes outside every folder in publish.json,
+  // each carrying the permalink Publish served it at.
+  assert.deepEqual(
+    unclaimedPermalinks([
+      note('Welcome.md', 'welcome'),
+      note('Now.md', 'now'),
+      note('Start here.md', 'start-here'),
+    ]),
+    [
+      { path: 'Now.md', permalink: 'now' },
+      { path: 'Start here.md', permalink: 'start-here' },
+      { path: 'Welcome.md', permalink: 'welcome' },
+    ],
+    'sorted by path, so two runs over one vault agree',
+  )
+})
+
+test('a note that already publishes is not offered, and an explicit refusal is never overturned', () => {
+  // `false` is the one that matters: a note saying publish: false, or one
+  // inside an excluded folder, has an answer already, and this must never
+  // offer to reverse it. `true` is merely redundant: a folder covers it.
+  assert.deepEqual(unclaimedPermalinks([note('About/About.md', 'about', true)]), [])
+  assert.deepEqual(unclaimedPermalinks([note('Private/Diary.md', 'diary', false)]), [])
+})
+
+test('a permalink that is not a usable string is no evidence at all', () => {
+  // A blank permalink never moved a URL (`slugForPath` ignores it), so it says
+  // nothing about whether Publish served the note.
+  assert.deepEqual(
+    unclaimedPermalinks([
+      note('Blank.md', ''),
+      note('Spaces.md', '   '),
+      note('Number.md', 42),
+      note('List.md', ['a', 'b']),
+      note('Missing.md', undefined),
+      note('Null.md', null),
+    ]),
+    [],
+  )
+  assert.deepEqual(unclaimedPermalinks([note('Padded.md', '  welcome  ')]), [
+    { path: 'Padded.md', permalink: 'welcome' },
+  ])
+})
+
+test('one ticked note is enough to unblock an import with no folders in it', () => {
+  // The site that selected every note by hand: an empty include list, and
+  // until now a dead end with nothing to press.
+  const perNote = planPublishImport(publishConfig({ included: [] }), rules())
+  assert.equal(importBlockedReason(perNote), 'There are no folders to import.')
+  assert.equal(importBlockedReason(perNote, 1), null)
+  assert.equal(importButtonLabel(perNote, { notes: 1, attachments: 0 }, 1), 'Import 1 note')
+
+  const unchanged = planPublishImport(publishConfig({ included: ['Notes'] }), rules({ includes: ['Notes'] }))
+  assert.equal(importBlockedReason(unchanged), 'Your folders already match this configuration.')
+  assert.equal(importBlockedReason(unchanged, 2), null)
+})
+
+test('an empty plan warns about no removals, because it writes no folders', () => {
+  // Import is reachable there now, and it leaves both rule lists alone. A
+  // warning that folders stop publishing would describe a write that cannot
+  // happen.
+  const perNote = planPublishImport(publishConfig({ included: [] }), rules({ includes: ['Notes'] }))
+  assert.equal(warnings(perNote, { live: true }).some((said) => /stops? publishing|taken off it/.test(said)), false)
+})
+
+test('the confirmation counts the notes apart from the folders', () => {
+  const plan = planPublishImport(publishConfig({ included: ['Notes'] }), rules())
+  const five = { notes: 5, attachments: 0 }
+  assert.match(importedNotice(plan, five, 2), /Imported 1 folder from Obsidian Publish\./)
+  assert.match(importedNotice(plan, five, 2), /2 notes were added individually\./)
+
+  const perNote = planPublishImport(publishConfig({ included: [] }), rules())
+  const one = { notes: 1, attachments: 0 }
+  assert.doesNotMatch(importedNotice(perNote, one, 1), /folder/, 'no folders were written, so none are claimed')
+  assert.match(importedNotice(perNote, one, 1), /1 note was added individually\. 1 note will publish\./)
+})
+
+test('past the cap the rest are named rather than listed', () => {
+  // Somebody who puts a permalink on everything is not telling us what Publish
+  // served, and a preview that cannot be read is not a preview.
+  assert.equal(unclaimedRemainderNote(UNCLAIMED_PERMALINK_LIMIT), null)
+  assert.equal(
+    unclaimedRemainderNote(UNCLAIMED_PERMALINK_LIMIT + 1),
+    '1 more note carries a permalink and is not listed. When this many notes have one, a permalink stops saying ' +
+      "anything about Obsidian Publish. Any of them can be published on its own from the note's right-click menu.",
+  )
+  assert.match(
+    unclaimedRemainderNote(UNCLAIMED_PERMALINK_LIMIT + 15),
+    /^15 more notes carry a permalink and are not listed\./,
+  )
+})
+
+test('the offer says out loud what it cannot see', () => {
+  assert.match(UNCLAIMED_PERMALINK_BLIND_SPOT, /without a permalink cannot be found this way/)
+  assert.match(UNCLAIMED_PERMALINK_BLIND_SPOT, /Compare against your live site/)
 })
 
 // --- warnings --------------------------------------------------------------

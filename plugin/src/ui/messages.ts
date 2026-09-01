@@ -75,7 +75,8 @@ export function publishMessage(state: PublishState): PublishMessage {
         headline: 'Nothing to publish',
         body:
           state.reason === 'nothing-selected'
-            ? 'No notes are marked for publishing yet. Choose folders to publish, or put publish: true at the top of a note.'
+            ? 'No notes are marked for publishing yet. Choose folders to publish, right click any note and ' +
+              'choose "Publish with Open Publish", or put publish: true at the top of a note.'
             : 'Your site already matches your notes.',
         buttons: [{ label: 'Close', id: 'close', primary: true }],
         tone: 'info',

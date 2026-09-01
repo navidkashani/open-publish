@@ -121,6 +121,9 @@ Choose what to publish, either way round:
 - **Folders**: Settings → Open Publish → *Folders* → **Manage folders…**, then
   pick from the list. Each rule shows how many notes it currently publishes,
   so a rule that has stopped matching says so on the spot.
+- **One note**: right click it, anywhere it lives, and choose **Publish with
+  Open Publish**. The choices you make this way are listed under *Per-file
+  choices* in settings.
 - **Frontmatter**: put `publish: true` at the top of a note. This always wins
   over folder rules, and `publish: false` always wins over everything.
 

@@ -94,6 +94,20 @@ function attachRemoveMenu(el: HTMLElement, onRemove: () => void): Disposer {
 
 // --- folder lists ----------------------------------------------------------
 
+/**
+ * A rule may name a single file as well as a folder. Both are real targets.
+ *
+ * `matchesFolderRule` matches an exact file path as well as a prefix, so
+ * `Welcome.md` typed into "Add a folder…" is a working rule that publishes one
+ * note. Four screens render rules, and a row reading "1 note" beside "This
+ * folder no longer exists" is self-contradictory on its face. Exported from
+ * here, beside the component that draws those rows, so a fifth caller cannot
+ * drift.
+ */
+export function ruleTargetExists(app: App, path: string): boolean {
+  return app.vault.getFolderByPath(path) !== null || app.vault.getFileByPath(path) !== null
+}
+
 export interface FolderListOptions {
   app: App
   container: HTMLElement

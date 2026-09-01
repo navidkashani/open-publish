@@ -15,7 +15,7 @@ import { hostById } from '../builders/hosts.ts'
 import { starterById } from '../builders/starters.ts'
 import { renderStarterList } from './BuildFields.ts'
 import { addRule, removeRule, summarizeRules } from './FolderRules.ts'
-import { renderFolderList } from './RuleList.ts'
+import { renderFolderList, ruleTargetExists } from './RuleList.ts'
 import type { Disposer } from './RuleList.ts'
 import { renderPublishImportRow } from './PublishImportModal.ts'
 import { BuildFields, renderHostList, selectHost } from './BuildFields.ts'
@@ -448,7 +448,7 @@ export class SetupWizard extends Modal {
       files: this.app.vault.getFiles().map((file) => file.path),
       includes: selection.includes,
       excludes: selection.excludes,
-      folderExists: (path) => this.app.vault.getFolderByPath(path) !== null,
+      folderExists: (path) => ruleTargetExists(this.app, path),
     })
     this.disposeRows = renderFolderList({
       app: this.app,

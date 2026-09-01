@@ -138,12 +138,22 @@ reasons it is not there. The vault synced without its configuration directory:
 Obsidian Sync carries core plugin settings by default, but iCloud and Git setups
 frequently exclude the whole directory. The Publish setup never got as far as
 choosing folders, so nothing was written. Or the site selects notes one at a
-time, which Obsidian stores on its own servers rather than in your vault.
+time. Those choices live on Obsidian's servers rather than in your vault, and
+this plugin does not talk to Obsidian, so it cannot see them.
 
 If you moved your configuration directory, the plugin follows it: the path comes
 from the vault, never from a hardcoded `.obsidian`. Nothing is lost either way.
 Add the folders in **Manage folders...**, where the count beside each one tells
 you immediately whether you picked the right ones.
+
+**Notes my Publish site had, that the import did not bring across.**
+Publish also lets you publish single notes, and it keeps those selections on its
+own servers. The import offers what it can infer instead: every note carrying a
+`permalink` that the imported folders would not publish, with the boxes empty
+for you to tick. A permalink is evidence rather than proof, and a note Publish
+published individually *without* one leaves no trace in the vault at all, so
+compare the result against your live site. Anything still missing goes on with a
+right click on the note and **Publish with Open Publish**.
 
 **The import lists folders that no longer exist.**
 They were renamed or deleted after Obsidian Publish last saved its filters. The
