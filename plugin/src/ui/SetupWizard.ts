@@ -198,6 +198,44 @@ export class SetupWizard extends Modal {
             'is already public on your site. The read-write pair can replace your site, so it stays scoped to this ' +
             'bucket and nothing else.',
     })
+
+    this.renderSetAsideNotice(container)
+  }
+
+  /**
+   * What the gateway is holding, and how long it holds it for.
+   *
+   * `selectProvider` sets the abandoned shape aside so switching back restores
+   * it, which repaired the two-click round trip that used to empty a working
+   * bucket. The stash lives as long as this modal and no longer, and that half
+   * was still silent: close the guide here and the endpoint, bucket and key id
+   * are gone, with the keychain entry orphaned behind them.
+   *
+   * Said on the step rather than caught on the way out. A modal cannot ask "are
+   * you sure" without hijacking Escape and the close button, and a notice after
+   * the fact would describe a loss nobody can undo. This is visible while the
+   * choice is still reversible, which is the only moment it is worth anything.
+   */
+  private renderSetAsideNotice(container: HTMLElement): void {
+    if (this.plugin.settings.destination.type !== 'gateway') return
+    const setAside = this.stash.s3
+    if (!setAside) return
+    // Nothing typed in is nothing to lose. A fresh vault that opens the guide
+    // and tries the gateway first has an empty shape set aside, and warning
+    // about that would be noise on the one path where it costs nothing.
+    if (!setAside.endpoint && !setAside.bucket && !setAside.accessKeyId) return
+
+    const notice = container.createDiv({ cls: 'op-notice-warning' })
+    notice.createEl('p', {
+      text:
+        `Your ${providerById(setAside.provider).name} details are set aside, not deleted. ` +
+        'Pick that row again and the endpoint, bucket and key come back.',
+    })
+    notice.createEl('p', {
+      text:
+        'Closing this guide while the gateway is chosen does discard them, and nothing here can bring them back ' +
+        'afterwards. Your secret stays in the keychain either way.',
+    })
   }
 
   /**

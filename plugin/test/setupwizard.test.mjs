@@ -259,6 +259,42 @@ test('a trip to the gateway and back leaves the bucket and keys where they were'
   assert.equal(destination.secretRef, 'open-publish-r2-secret')
 })
 
+test('the gateway says what it is holding, and that closing the guide drops it', () => {
+  // The stash lives as long as the modal. Switching back restores everything;
+  // closing here does not, and that half was silent. Said on the step, while
+  // the choice is still reversible, because a notice after the fact would
+  // describe a loss nobody can undo.
+  const { wizard } = open({
+    destination: { endpoint: R2_ENDPOINT, bucket: 'my-notes', accessKeyId: 'AKIA', secretRef: 'op-r2-secret' },
+  })
+  click(rowNamed(wizard, 'Cloudflare R2 without keys'))
+
+  const text = wizard.contentEl.textContent
+  assert.match(text, /Cloudflare R2 details are set aside, not deleted/, 'and it names the row that brings them back')
+  assert.match(text, /Closing this guide while the gateway is chosen does discard them/)
+  assert.match(text, /secret stays in the keychain/, 'the one thing that does survive')
+})
+
+test('a vault with nothing filled in is not warned about losing nothing', () => {
+  // The path a fresh vault takes: open the guide, try the gateway first. An
+  // empty shape set aside costs nothing, and warning about it is noise on the
+  // one route where there is no risk at all.
+  const { wizard } = open()
+  click(rowNamed(wizard, 'Cloudflare R2 without keys'))
+
+  assert.doesNotMatch(wizard.contentEl.textContent, /set aside/)
+})
+
+test('and the warning goes once the details are back', () => {
+  const { wizard } = open({
+    destination: { endpoint: R2_ENDPOINT, bucket: 'my-notes', accessKeyId: 'AKIA', secretRef: 'op-r2-secret' },
+  })
+  click(rowNamed(wizard, 'Cloudflare R2 without keys'))
+  click(rowNamed(wizard, 'Cloudflare R2'))
+
+  assert.doesNotMatch(wizard.contentEl.textContent, /set aside/, 'nothing is being held any more')
+})
+
 test('and a gateway filled in survives the same trip the other way', () => {
   const { wizard, plugin } = open({
     destination: { type: 'gateway', workerUrl: 'https://gw.example.workers.dev', tokenRef: 'op-token', prefix: 'blog' },
