@@ -200,8 +200,10 @@ export const DEFAULT_SETTINGS: Settings = {
     // The recommended host, so a fresh vault opens on it, and the interval
     // below is that host's own constraint rather than a number from nowhere.
     host: 'cloudflare-pages',
-    // The starter this repository builds and verifies on every commit.
-    starter: 'quartz',
+    // The recommended starter, so a fresh vault opens on the row the picker
+    // leads with. Not the one this repository verifies; `starters.ts` says
+    // plainly what that costs.
+    starter: 'jotter',
     url: '',
     method: 'POST',
     siteUrl: '',

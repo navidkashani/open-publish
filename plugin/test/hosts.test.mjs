@@ -180,14 +180,27 @@ test('every host names the output directory of the starter actually chosen', () 
 })
 
 test('a starter with no wrangler.jsonc is told so on the host that needs one', () => {
+  // Both builds are literals rather than catalogue lookups, and that is the
+  // point. This used to find a starter with a config and one without, which
+  // silently stopped testing anything the day the last starter without one
+  // gained it: `find` returned undefined and the branch went unexercised.
+  // `hasWranglerConfig` is a property of a build, so it is tested through one.
   const workers = hostById('cloudflare-workers')
-  const withConfig = STARTERS.find((starter) => starter.build.hasWranglerConfig)
-  const without = STARTERS.find((starter) => !starter.build.hasWranglerConfig)
+  const withConfig = { command: 'npm run build', outputDir: 'dist', hasWranglerConfig: true }
+  const without = { command: 'npm run build', outputDir: 'dist', hasWranglerConfig: false }
 
-  assert.match(workers.setup(withConfig.build).join(' '), /comes from wrangler\.jsonc/)
-  const bare = workers.setup(without.build).join(' ')
+  assert.match(workers.setup(withConfig).join(' '), /comes from wrangler\.jsonc/)
+  const bare = workers.setup(without).join(' ')
   assert.match(bare, /ships no wrangler\.jsonc/)
   assert.match(bare, /Cloudflare Pages instead/, 'and the way out is named, not left to be worked out')
+})
+
+test('every starter in the catalogue is connect-and-go on Workers', () => {
+  // The claim the recommendation now rests on, asserted rather than assumed.
+  // The moment one is not, the picker owes its row a caution again.
+  for (const starter of STARTERS) {
+    assert.equal(starter.build.hasWranglerConfig, true, `${starter.id} would need a config written by hand`)
+  }
 })
 
 test('only the hosts that can run out inside a month get a standing panel', () => {

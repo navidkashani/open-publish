@@ -40,10 +40,12 @@ published in Git.
   selections live on Obsidian's servers, and this plugin does not talk to
   Obsidian, so the import offers the notes carrying a `permalink` as candidates
   and leaves the boxes for you to tick.
-- **Two site themes to choose from.** The setup guide offers the Quartz starter
-  in this repository or [jotter](https://github.com/navidkashani/jotter), an
-  Astro theme. Both build the same published notes from the same snapshot, so
-  the choice decides how your site looks and nothing about what it contains.
+- **Two site themes to choose from.** The setup guide offers
+  [jotter](https://github.com/navidkashani/jotter), an Astro theme and the
+  recommended one, or the Quartz starter in this repository. Both build the same
+  published notes from the same snapshot, so the choice decides how your site
+  looks and nothing about what it contains, and both are connect-and-go on every
+  host listed below.
 - **Site options that are not theme-specific.** Navigation, search, graph,
   backlinks, outline, tags, theme toggle, homepage, analytics and a
   discourage-search-engines switch, described as intent, so a future starter
@@ -199,8 +201,9 @@ the Quartz starter are complete and tested. Phase 3 is underway. The Worker
 gateway has landed, so R2 can be reached with a bearer token instead of a
 storage key, and Site history has landed too, so any version still in your
 storage can be made live again; what remains in that phase is the
-Deploy-to-Cloudflare button and mobile. Phase 4 has started early: `jotter`, the
-Astro starter, is in progress in its own repository.
+Deploy-to-Cloudflare button and mobile. Phase 4 has landed early: `jotter`, the
+Astro starter, is complete in its own repository, ships a `wrangler.jsonc` of its
+own, and is now the starter step 3 recommends.
 
 Mobile is the honest caveat. `manifest.json` does not mark the plugin
 desktop-only, the code avoids Node APIs, and the two places that would notice a

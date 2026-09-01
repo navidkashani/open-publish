@@ -37,13 +37,20 @@ test('the output directories differ, which is the whole reason this is stored', 
   assert.equal(starterById('jotter').build.outputDir, 'dist')
 })
 
-test('an unknown id falls back to the starter this repository verifies', () => {
+test('an unknown id falls back to the starter the list recommends', () => {
   // Unlike `hostById`, which falls back to a deliberate "Another host" escape
   // hatch at the end of its list. There is no such entry here: an id we do not
   // know is a stale or corrupt setting.
-  assert.equal(starterById('made up').id, 'quartz')
-  assert.equal(starterById(undefined).id, 'quartz')
-  assert.equal(starterById('').id, 'quartz')
+  assert.equal(starterById('made up').id, 'jotter')
+  assert.equal(starterById(undefined).id, 'jotter')
+  assert.equal(starterById('').id, 'jotter')
+})
+
+test('the recommended starter is the one the fallback lands on', () => {
+  // Two facts that have to agree and are set in different places: `recommended`
+  // on an entry, and `FALLBACK` being the first of them. A picker whose badge
+  // and whose default disagree is a picker nobody can reason about.
+  assert.equal(starterById('made up').id, STARTERS.find((starter) => starter.recommended).id)
 })
 
 test('isStarterId accepts only what the table holds', () => {

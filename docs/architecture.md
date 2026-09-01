@@ -131,11 +131,20 @@ Two rules keep the contract safe as it grows:
 
 ### Two starters, and the one thing the plugin has to know about them
 
-The setup guide offers a choice on step 3: `open-publish-quartz`, the reference
-starter this repository builds and verifies on every commit, or `jotter`, an
-Astro theme in its own repository. Both consume the same snapshot and publish
-the same bytes, which is the rule about site options being intent, working as
-intended: a second starter exists without the plugin knowing anything about it.
+The setup guide offers a choice on step 3: `jotter`, an Astro theme in its own
+repository and the one recommended, or `open-publish-quartz`, the reference
+starter this repository builds and verifies on every commit. Both consume the
+same snapshot and publish the same bytes, which is the rule about site options
+being intent, working as intended: a second starter exists without the plugin
+knowing anything about it.
+
+The recommendation sits on jotter rather than Quartz, and the trade is worth
+stating. It moved when jotter shipped a `wrangler.jsonc`, which was the last
+thing making it the longer road; what it costs is that Quartz is the starter
+`npm run verify` builds for real against a stand-in bucket on every commit
+*here*, and jotter is not covered by that at all. jotter passes its own suite in
+its own repository, including a test tying its `wrangler.jsonc` to the directory
+its build writes. Good evidence, and not the same evidence.
 
 Almost. `builders/starters.ts` is the third catalogue after storage providers
 and hosts, and it lives by the same "none of it reaches the wire" rule, with one
@@ -149,9 +158,13 @@ vocabulary: "Output directory" on Cloudflare and Vercel, "Publish directory" on
 Netlify.
 
 The same table carries `hasWranglerConfig`, because Cloudflare Workers Builds is
-connect-and-go only for a starter that ships one. Quartz does and jotter does
-not, so the Workers instructions say so and name Pages as the way around it,
-rather than letting somebody discover it after the repository is connected.
+connect-and-go only for a starter that ships one. Both do now, so the Workers
+instructions name where the config comes from instead of telling anyone to write
+one. The field and the branch behind it stay, because the answer belongs to the
+starter rather than to `hosts.ts`, and a third starter is free to answer no;
+`hosts.test.mjs` exercises that branch with a literal build rather than through
+the catalogue, since going through the catalogue is what left it silently
+untested the day the last starter without a config gained one.
 
 The environment variables are deliberately *not* per-starter, and a test asserts
 it: both read the same eight, so the block step 4 hands over is identical either
@@ -563,7 +576,7 @@ Every core module avoids importing Obsidian values, so the real implementation
 | 1 | Scanner, hasher, selection, snapshots, S3 destination, webhook builder, publish UI | done |
 | 2 | Setup wizard, link index, redirects, "Add linked", throttling, error mapping, guards, GC, docs | done |
 | 3 | Worker gateway and Deploy-to-Cloudflare button; mobile testing (including the rule rows' long-press); rollback UI; site options parity | in progress |
-| 4 | Astro starter; optional Git destination | started early |
+| 4 | Astro starter; optional Git destination | starter done, rest started early |
 
 The gateway is done: `gateway/` is a Worker that holds the R2 binding, so the
 plugin carries a bearer token rather than a key pair. The rollback UI is done
@@ -573,14 +586,14 @@ objects clean-up has already collected and naming any site option, `noIndex`
 first, that going back would change. What is left in phase 3 is the
 Deploy-to-Cloudflare button, still gated on whether Cloudflare's setup page can
 bind a bucket that already exists, plus a real device pass. Phase 4 has begun
-out of order too: `jotter`, the Astro starter, is in progress in its own
-repository.
+out of order too, and its first half is done: `jotter`, the Astro starter, is
+complete in its own repository and is the starter step 3 now recommends.
 
 Both halves of the provider work landed early, out of phase 4: storage presets
-first, then hosting. The starter also ships a `wrangler.jsonc`, so Cloudflare
-Workers Builds is a supported target rather than a documented possibility.
-Pages keeps the recommendation, for one reason: Workers Builds reports no site
-address, so `OP_SITE_URL` has to be set by hand there.
+first, then hosting. Both starters ship a `wrangler.jsonc`, so Cloudflare
+Workers Builds is a supported target rather than a documented possibility
+whichever one is chosen. Pages keeps the recommendation, for one reason: Workers
+Builds reports no site address, so `OP_SITE_URL` has to be set by hand there.
 
 Hosting presets (Cloudflare Pages, Cloudflare Workers, Netlify, Vercel and a
 free-form "Another host") work the same way, in `builders/hosts.ts`. The one

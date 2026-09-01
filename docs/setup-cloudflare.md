@@ -150,7 +150,7 @@ actually changed.
 
 ## A note on Cloudflare Pages
 
-Pages is still the recommended path, and the starter is built for it. Worth
+Pages is still the recommended path, and both starters are built for it. Worth
 knowing where Cloudflare is going, though, in their own words from the
 [migration guide](https://developers.cloudflare.com/workers/static-assets/migration-guides/migrate-from-pages/):
 Pages continues to be supported, but all new investment, optimisation and
@@ -161,7 +161,8 @@ and a deploy hook", the identical flow works on Workers Builds, Netlify and
 Vercel, and the plugin has a host picker that swaps these instructions and the
 free-plan numbers for whichever you pick. Workers Builds needs one thing extra:
 it reports no site address, so `OP_SITE_URL` is required rather than optional.
-See [other-providers.md](other-providers.md).
+It used to need a second thing, a hand-written `wrangler.jsonc`, and no longer
+does: both starters ship one. See [other-providers.md](other-providers.md).
 
 If something goes wrong, [troubleshooting.md](troubleshooting.md) lists every
 error message and what to do about it.

@@ -333,7 +333,7 @@ test('step 3 links the template rather than naming it', () => {
   goTo(wizard, 2)
   const anchor = find(wizard.contentEl, (node) => node.tagName === 'A')
   assert.ok(anchor, 'step 3 offers no link at all')
-  assert.match(anchor.getAttribute('href'), /^https:\/\/github\.com\/[\w-]+\/open-publish-quartz$/)
+  assert.match(anchor.getAttribute('href'), /^https:\/\/github\.com\/[\w-]+\/jotter$/)
   assert.equal(anchor.getAttribute('target'), '_blank')
   assert.equal(anchor.getAttribute('rel'), 'noopener')
 })
@@ -367,7 +367,7 @@ test('picking a host swaps the instructions, which is the whole mechanism', () =
   click(hostNamed(wizard, 'Netlify'))
 
   assert.equal(plugin.settings.builder.host, 'netlify')
-  assert.match(wizard.contentEl.textContent, /Publish directory: public/)
+  assert.match(wizard.contentEl.textContent, /Publish directory: dist/)
   assert.doesNotMatch(wizard.contentEl.textContent, /Framework preset: None/)
   assert.equal(hostNamed(wizard, 'Netlify').getAttr('aria-pressed'), 'true')
   assert.equal(hostNamed(wizard, 'Cloudflare Pages').getAttr('aria-pressed'), 'false')
@@ -542,13 +542,18 @@ test('step 3 offers both starters, and picking one swaps the template it sends y
   assert.match(wizard.contentEl.textContent, /Open Publish Quartz/)
   assert.match(wizard.contentEl.textContent, /jotter/)
 
-  const jotter = rows.find((row) => find(row, byClass('op-provider-name'))?.textContent === 'jotter')
-  click(jotter)
-
+  // jotter leads and is where a fresh vault starts, so the *other* row is the
+  // one that proves the swap happens at all.
   assert.equal(plugin.settings.builder.starter, 'jotter')
+  const jotterLink = find(wizard.contentEl, (node) => node.tagName === 'A' && /jotter/.test(node.textContent))
+  assert.equal(jotterLink.getAttr('href'), 'https://github.com/navidkashani/jotter')
+
+  click(rows.find((row) => find(row, byClass('op-provider-name'))?.textContent === 'Open Publish Quartz'))
+
+  assert.equal(plugin.settings.builder.starter, 'quartz')
   assert.ok(plugin.calls.saves > 0, 'the choice survives closing the guide')
-  const link = find(wizard.contentEl, (node) => node.tagName === 'A' && /jotter/.test(node.textContent))
-  assert.equal(link.getAttr('href'), 'https://github.com/navidkashani/jotter')
+  const quartzLink = find(wizard.contentEl, (node) => node.tagName === 'A' && /Quartz/.test(node.textContent))
+  assert.equal(quartzLink.getAttr('href'), 'https://github.com/navidkashani/open-publish-quartz')
 })
 
 test('every picker step keeps its guidance under the option it belongs to', () => {
@@ -584,63 +589,76 @@ test('step 3 drops the instruction that only repeated the link below it', () => 
   assert.match(anchor.textContent, /^Open the .+ template$/, 'and the half that works is still there')
 })
 
-test('a starter caution reads on the row before choosing, and above the steps after', () => {
+test('a caution reads on the row before choosing, and above the steps after', () => {
   // Said twice on purpose: on the row it can still change the choice, and in
-  // the panel it belongs to the option whose steps are on screen. Storage and
-  // hosting already restate theirs; starters were the odd one out.
-  const { wizard } = open({ builder: { starter: 'jotter' } })
-  goTo(wizard, 2)
+  // the panel it belongs to the option whose steps are on screen.
+  //
+  // Asserted on step 4 rather than step 3. Both starters ship a wrangler.jsonc
+  // now, so no starter carries a caution and step 3 cannot exercise this; the
+  // hosting picker can, and it is the same component drawing it.
+  const { wizard } = open({ builder: { host: 'cloudflare-workers' } })
+  goTo(wizard, 3)
 
   const list = find(wizard.contentEl, byClass('op-provider-list'))
   const row = findAll(list, byClass('op-provider-row')).find((entry) => entry.hasClass('is-selected'))
-  assert.match(find(row, byClass('op-provider-caution-line')).textContent, /wrangler\.jsonc/)
+  assert.match(find(row, byClass('op-provider-caution-line')).textContent, /your own site address/)
 
   const panel = find(list, byClass('op-picker-detail'))
   const warning = find(panel, byClass('op-notice-warning'))
-  assert.ok(warning, 'the chosen starter states its cost nowhere near its steps')
-  assert.match(warning.textContent, /wrangler\.jsonc/)
+  assert.ok(warning, 'the chosen option states its cost nowhere near its steps')
+  assert.match(warning.textContent, /your own site address/)
   assert.ok(
     panel.children.indexOf(warning) < panel.children.indexOf(find(panel, byClass('op-wizard-steps'))),
     'a caution read after the steps is a caution read too late',
   )
 })
 
-test('a starter with nothing to warn about opens its panel on the steps', () => {
+test('an option with nothing to warn about opens its panel on the steps', () => {
   const { wizard } = open()
-  goTo(wizard, 2)
+  goTo(wizard, 3)
 
   const panel = find(wizard.contentEl, byClass('op-picker-detail'))
   assert.equal(find(panel, byClass('op-notice-warning')), null, 'no caution, no panel shouting one')
-  // The other starter still says its own on its own row, where it belongs.
-  assert.match(wizard.contentEl.textContent, /Ships no wrangler\.jsonc/)
+  // The options that do have one still say it on their own rows, where it
+  // belongs, whether or not they are the one selected.
+  assert.match(wizard.contentEl.textContent, /You have to set your own site address\./)
 })
 
 test('step 4 names the output directory of the starter chosen on step 3', () => {
   // The quiet failure this prevents: a Pages project told to publish `public`
   // for an Astro starter deploys an empty directory and reports success.
-  const onQuartz = open()
-  goTo(onQuartz.wizard, 3)
-  assert.match(onQuartz.wizard.contentEl.textContent, /Output directory: public\./)
-
-  const onJotter = open({ builder: { starter: 'jotter' } })
+  const onJotter = open()
   goTo(onJotter.wizard, 3)
   assert.match(onJotter.wizard.contentEl.textContent, /Output directory: dist\./)
-  assert.doesNotMatch(onJotter.wizard.contentEl.textContent, /Output directory: public\./)
+
+  const onQuartz = open({ builder: { starter: 'quartz' } })
+  goTo(onQuartz.wizard, 3)
+  assert.match(onQuartz.wizard.contentEl.textContent, /Output directory: public\./)
+  assert.doesNotMatch(onQuartz.wizard.contentEl.textContent, /Output directory: dist\./)
 })
 
 test('the environment variables do not depend on the starter, because both read the same ones', () => {
-  const onQuartz = open()
-  goTo(onQuartz.wizard, 3)
-  const onJotter = open({ builder: { starter: 'jotter' } })
+  const onJotter = open()
   goTo(onJotter.wizard, 3)
+  const onQuartz = open({ builder: { starter: 'quartz' } })
+  goTo(onQuartz.wizard, 3)
 
   assert.deepEqual(envBlock(onJotter.wizard), envBlock(onQuartz.wizard))
 })
 
-test('a starter with no wrangler.jsonc says so on the host that needs one', () => {
-  const wizard = open({ builder: { host: 'cloudflare-workers', starter: 'jotter' } }).wizard
-  goTo(wizard, 3)
+test('neither starter is asked for a hand-written wrangler.jsonc any more', () => {
+  // The inverse of the test that used to live here. Both starters ship one, so
+  // Workers Builds is connect-and-go either way and the step says where the
+  // config comes from instead of telling somebody to write it. `hosts.test.mjs`
+  // still exercises the other branch, with a literal build rather than through
+  // the catalogue, because no starter reaches it now.
+  for (const starter of ['jotter', 'quartz']) {
+    const wizard = open({ builder: { host: 'cloudflare-workers', starter } }).wizard
+    goTo(wizard, 3)
 
-  assert.match(wizard.contentEl.textContent, /ships no wrangler\.jsonc/)
-  assert.match(wizard.contentEl.textContent, /Cloudflare Pages instead/)
+    const text = wizard.contentEl.textContent
+    assert.doesNotMatch(text, /ships no wrangler\.jsonc/, `${starter} is still told to write one`)
+    assert.match(text, /comes from wrangler\.jsonc in the repository/)
+    assert.match(text, /match the Worker you just created/)
+  }
 })

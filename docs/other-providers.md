@@ -74,13 +74,19 @@ and it labels the copy, the build budget and the warnings for the host you
 actually use. The choice is only ever a label: the deploy hook URL is the one
 thing sent, and the site address the one thing polled.
 
-The starter's build command is:
+Both starters build with `npm run build`. **The output directory differs, and
+getting it wrong is the one mistake here that does not announce itself**: a host
+told the wrong directory deploys an empty one and reports success.
 
-```
-node scripts/fetch-content.mjs && node scripts/build-site.mjs && node scripts/finalize.mjs
-```
+| Starter | Build command | Output directory |
+|---|---|---|
+| **jotter** (recommended) | `npm run build` | `dist` |
+| **Open Publish Quartz** | `npm run build`, which runs `node scripts/fetch-content.mjs && node scripts/build-site.mjs && node scripts/finalize.mjs` | `public` |
 
-Output directory: `public`. Environment variables: `OP_ENDPOINT`, `OP_BUCKET`,
+The setup guide fills this in for whichever starter you picked on step 3, so
+this table is for people wiring a host up by hand.
+
+Environment variables, the same for both: `OP_ENDPOINT`, `OP_BUCKET`,
 `OP_REGION`, `OP_ACCESS_KEY_ID`, `OP_SECRET_ACCESS_KEY`, plus `OP_PREFIX` if you
 use one, and `OP_SITE_URL` where the host does not provide an address of its own.
 
@@ -140,16 +146,22 @@ The one thing to get right is the address. Workers Builds sets `CI`,
 So **set `OP_SITE_URL` yourself**. If you forget, the build stops and says so,
 which is deliberate: it used to build a site quietly addressed as `example.com`.
 
-The starter ships the `wrangler.jsonc` a Worker needs: assets-only, no `main`,
-`./public` as the assets directory, `404-page` handling for the 404 Quartz
-emits, and `auto-trailing-slash` so the extensionless links Quartz writes
-resolve to its flat `.html` files. Pages ignores that file, because it carries
-no `pages_build_output_dir`, so one repository serves both.
+Both starters ship the `wrangler.jsonc` a Worker needs, so either is
+connect-and-go here. Each is assets-only with no `main`, and the two differ
+where the sites differ:
+
+| | Assets directory | 404 | Trailing slashes |
+|---|---|---|---|
+| **jotter** | `./dist` | `404-page`, from `src/pages/404.astro` | `drop-trailing-slash`, because Astro writes `dist/notes/index.html` while the links, canonical, sitemap and search all spell it `/notes` |
+| **Open Publish Quartz** | `./public` | `404-page` | `auto-trailing-slash`, so the extensionless links Quartz writes resolve to its flat `.html` files |
+
+Pages ignores that file in either repository, because it carries no
+`pages_build_output_dir`, so one repository serves both hosts.
 
 **Change the `name` in it to match your Worker.** Workers Builds fails the build
 when the two disagree, and the error does not say which name it wanted.
 
-Pages keeps the recommendation anyway, for one reason rather than the old one:
+Pages keeps the recommendation anyway, for one reason rather than the old two:
 Workers Builds reports no site address, so `OP_SITE_URL` is a required manual
 step here and not needed at all there.
 

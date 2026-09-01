@@ -95,9 +95,11 @@ export interface Host {
  * allowance and Cloudflare's own investment. Two real differences are left, and
  * the second one arrived with the second starter. Workers Builds reports no
  * site address, so OP_SITE_URL has to be set by hand or the build stops. And
- * only a starter shipping a `wrangler.jsonc` makes it connect-and-go at all:
- * Quartz does, jotter does not, so `setup` below asks the starter rather than
- * assuming. One extra step on the recommended path is one too many.
+ * only a starter shipping a `wrangler.jsonc` makes it connect-and-go at all,
+ * so `setup` below asks the starter rather than assuming. Both starters ship
+ * one now, which removes the second difference but not the first: the address
+ * still has to be set by hand, and one extra step on the recommended path is
+ * one too many.
  *
  * Netlify is listed rather than left out, for the same reason Wasabi is listed
  * in the storage catalogue. Omitting it does not stop anyone using it; it only
@@ -166,6 +168,14 @@ export const HOSTS: readonly Host[] = [
             `Build command: ${build.command}.`,
             // Said plainly rather than hidden, and with the way out named. The
             // alternative is a build that succeeds and serves nothing.
+            //
+            // No starter in the catalogue reaches this branch today: both ship
+            // a config. It stays because `hasWranglerConfig` is the starter's
+            // answer to give rather than this table's to assume, and a third
+            // starter is free to answer no. `hosts.test.mjs` exercises it with
+            // a literal build for that reason, since going through the
+            // catalogue would leave it silently untested the moment the last
+            // starter without a config gained one, which is what happened.
             `This starter ships no wrangler.jsonc, so write one that serves ${build.outputDir} as static assets, or use Cloudflare Pages instead, which needs no such file.`,
           ]),
       'Open Settings → Variables and Secrets and add the variables below.',

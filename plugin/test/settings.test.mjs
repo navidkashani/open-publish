@@ -276,9 +276,9 @@ test('a stored host survives a round trip through an older build', () => {
   assert.equal(migrateSettings(throughOldBuild).builder.host, 'vercel')
 })
 
-test('a vault that has never chosen opens on the starter this repository verifies', () => {
-  assert.equal(migrateSettings({}).builder.starter, 'quartz')
-  assert.equal(migrateSettings({ builder: {} }).builder.starter, 'quartz')
+test('a vault that has never chosen opens on the recommended starter', () => {
+  assert.equal(migrateSettings({}).builder.starter, 'jotter')
+  assert.equal(migrateSettings({ builder: {} }).builder.starter, 'jotter')
 })
 
 test('a stored starter survives a round trip through an older build', () => {
@@ -293,8 +293,14 @@ test('a stored starter survives a round trip through an older build', () => {
 })
 
 test('a starter id from the future falls back rather than reaching a picker that cannot draw it', () => {
-  assert.equal(migrateSettings({ builder: { starter: 'hugo' } }).builder.starter, 'quartz')
-  assert.equal(migrateSettings({ builder: { starter: 42 } }).builder.starter, 'quartz')
+  assert.equal(migrateSettings({ builder: { starter: 'hugo' } }).builder.starter, 'jotter')
+  assert.equal(migrateSettings({ builder: { starter: 42 } }).builder.starter, 'jotter')
+})
+
+test('a vault already on Quartz stays on Quartz when the recommendation moves', () => {
+  // The default is only ever consulted for a value that is missing or
+  // unrecognised, so moving it is not a migration of anybody's site.
+  assert.equal(migrateSettings({ builder: { starter: 'quartz' } }).builder.starter, 'quartz')
 })
 
 test('a host id from the future is re-inferred rather than kept unrenderable', () => {
