@@ -20,6 +20,7 @@ import type { Disposer } from './RuleList.ts'
 import { renderPublishImportRow } from './PublishImportModal.ts'
 import { BuildFields, renderHostList, selectHost } from './BuildFields.ts'
 import { StorageFields, renderProviderList, selectProvider } from './StorageFields.ts'
+import type { DestinationStash } from './StorageFields.ts'
 
 /**
  * Small counts read as words in this interface, not as digits. Anything past
@@ -39,6 +40,13 @@ interface Step {
 export class SetupWizard extends Modal {
   private stepIndex = 0
   private disposeRows: Disposer = () => {}
+  /**
+   * What step 1 set aside when the choice crossed between keys and a token, so
+   * clicking back restores it. On the modal rather than in `renderBucketStep`,
+   * because every pick re-renders the step and a local would not outlive the
+   * click that filled it.
+   */
+  private readonly stash: DestinationStash = {}
   /**
    * Assigned in the body rather than declared as a constructor parameter
    * property: Node's type stripping, which is what lets the test suites import
@@ -112,6 +120,19 @@ export class SetupWizard extends Modal {
   }
 
   /**
+   * The chosen option's caution, restated at the top of its panel.
+   *
+   * Said twice on purpose. On the row it is visible *before* choosing, which is
+   * where it can still change the choice; here it belongs to the option now
+   * selected, which is the only one whose steps are on screen. Storage and
+   * hosting already do this once the choice is made, in `StorageFields` and
+   * under the host row, and starters were the odd one out.
+   */
+  private caution(container: HTMLElement, text: string | undefined): void {
+    if (text) container.createDiv({ cls: 'op-notice-warning', text })
+  }
+
+  /**
    * The picker, and instructions that swap with it. That is the whole mechanism.
    *
    * Nothing chosen here is ever sent anywhere: it decides what this step says
@@ -124,27 +145,40 @@ export class SetupWizard extends Modal {
     })
 
     const destination = this.plugin.settings.destination
-    renderProviderList(container, destination.provider, (id) => {
-      // Replaced, not edited: crossing between keys and a token changes the
-      // shape of what is stored, and the credentials of the kind being left
-      // behind go with it.
-      this.plugin.settings.destination = selectProvider(destination, id)
-      this.renderStep()
-      void this.plugin.saveSettings()
-    })
-
     const provider = providerById(destination.provider)
-    this.instructions(container, provider.setup)
+    renderProviderList(
+      container,
+      destination.provider,
+      (id) => {
+        // Replaced, not edited: crossing between keys and a token changes the
+        // shape of what is stored, and the credentials of the kind being left
+        // behind go with it. The stash is what makes that survivable: click to
+        // the gateway to read what it says, click back, and the endpoint and
+        // bucket are still there.
+        this.plugin.settings.destination = selectProvider(destination, id, this.stash)
+        this.renderStep()
+        void this.plugin.saveSettings()
+      },
+      (panel) => {
+        this.caution(panel, provider.caution)
+        this.instructions(panel, provider.setup)
 
-    if (provider.consoleUrl || provider.keysUrl) {
-      const links = container.createDiv({ cls: 'op-wizard-links' })
-      const link = (href: string, text: string): void => {
-        links.createEl('a', { href, text, attr: { target: '_blank', rel: 'noopener' } })
-      }
-      if (provider.consoleUrl) link(provider.consoleUrl, provider.consoleLabel ?? `Open ${provider.name}`)
-      if (provider.keysUrl) link(provider.keysUrl, provider.keysLabel ?? 'How to create keys')
-    }
+        if (provider.consoleUrl || provider.keysUrl) {
+          const links = panel.createDiv({ cls: 'op-wizard-links' })
+          const link = (href: string, text: string): void => {
+            links.createEl('a', { href, text, attr: { target: '_blank', rel: 'noopener' } })
+          }
+          if (provider.consoleUrl) link(provider.consoleUrl, provider.consoleLabel ?? `Open ${provider.name}`)
+          if (provider.keysUrl) link(provider.keysUrl, provider.keysLabel ?? 'How to create keys')
+        }
+      },
+    )
 
+    // Below the list, not inside the panel. It is not a step: it says how this
+    // plugin treats keys at all, which is as true before the choice as after,
+    // and three lines of it inside one option's procedure pushed four of the
+    // six options off the bottom of the screen. It still swaps with the kind of
+    // destination chosen, because that is what it is about.
     container.createEl('p', {
       cls: 'op-muted',
       text:
@@ -202,32 +236,39 @@ export class SetupWizard extends Modal {
     })
 
     const builder = this.plugin.settings.builder
-    renderStarterList(container, builder.starter, (id) => {
-      builder.starter = id
-      this.renderStep()
-      void this.plugin.saveSettings()
-    })
-
     const starter = starterById(builder.starter)
-    this.instructions(container, [
-      `Open the ${starter.name} template on GitHub.`,
-      'Choose "Use this template" → "Create a new repository".',
-      'Give it any name. There is nothing to clone and nothing to install locally.',
-    ])
+    renderStarterList(
+      container,
+      builder.starter,
+      (id) => {
+        builder.starter = id
+        this.renderStep()
+        void this.plugin.saveSettings()
+      },
+      (panel) => {
+        this.caution(panel, starter.caution)
+        // No "open the template on GitHub" step: the link below says the same
+        // thing, and the link is the half that actually goes there.
+        this.instructions(panel, [
+          'Choose "Use this template" → "Create a new repository".',
+          'Give it any name. There is nothing to clone and nothing to install locally.',
+        ])
 
-    const links = container.createDiv({ cls: 'op-wizard-links' })
-    links.createEl('a', {
-      href: starter.repoUrl,
-      text: `Open the ${starter.name} template`,
-      attr: { target: '_blank', rel: 'noopener' },
-    })
-    if (starter.docsUrl) {
-      links.createEl('a', {
-        href: starter.docsUrl,
-        text: 'How it builds from a snapshot',
-        attr: { target: '_blank', rel: 'noopener' },
-      })
-    }
+        const links = panel.createDiv({ cls: 'op-wizard-links' })
+        links.createEl('a', {
+          href: starter.repoUrl,
+          text: `Open the ${starter.name} template`,
+          attr: { target: '_blank', rel: 'noopener' },
+        })
+        if (starter.docsUrl) {
+          links.createEl('a', {
+            href: starter.docsUrl,
+            text: 'How it builds from a snapshot',
+            attr: { target: '_blank', rel: 'noopener' },
+          })
+        }
+      },
+    )
 
     container.createEl('p', {
       cls: 'op-muted',
@@ -253,18 +294,24 @@ export class SetupWizard extends Modal {
     })
 
     const builder = this.plugin.settings.builder
-    renderHostList(container, builder.host, (id) => {
-      selectHost(builder, id)
-      this.renderStep()
-      void this.plugin.saveSettings()
-    })
-
     const host = hostById(builder.host)
     const starter = starterById(builder.starter)
-    // The output directory in these steps is the starter's, not a constant:
-    // Quartz builds into `public` and jotter into `dist`, and a host told the
-    // wrong one deploys an empty directory and reports success.
-    this.instructions(container, host.setup(starter.build))
+    renderHostList(
+      container,
+      builder.host,
+      (id) => {
+        selectHost(builder, id)
+        this.renderStep()
+        void this.plugin.saveSettings()
+      },
+      (panel) => {
+        this.caution(panel, host.caution)
+        // The output directory in these steps is the starter's, not a constant:
+        // Quartz builds into `public` and jotter into `dist`, and a host told
+        // the wrong one deploys an empty directory and reports success.
+        this.instructions(panel, host.setup(starter.build))
+      },
+    )
 
     const destination = this.plugin.settings.destination
     // The build reads the bucket *directly*, whichever way the plugin writes to

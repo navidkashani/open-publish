@@ -222,6 +222,77 @@ test('choosing a provider in the wizard leaves the bucket and keys alone', () =>
   assert.equal(destination.forcePathStyle, false, 'AWS is the one provider that is not path-style')
 })
 
+test('a trip to the gateway and back leaves the bucket and keys where they were', () => {
+  // The bug, reported from a real vault: two clicks in the picker (over to the
+  // gateway to read what it says, then back) emptied a working R2 setup and
+  // saved as they went. The two shapes share no fields, so crossing between
+  // them replaces rather than edits, and what was replaced was simply gone.
+  const { wizard, plugin } = open({
+    destination: {
+      endpoint: R2_ENDPOINT,
+      bucket: 'my-notes',
+      region: 'auto',
+      prefix: 'notes',
+      accessKeyId: 'AKIA',
+      secretRef: 'open-publish-r2-secret',
+    },
+  })
+
+  click(rowNamed(wizard, 'Cloudflare R2 without keys'))
+  // Nothing extra reaches storage while the gateway is chosen: the vault still
+  // stops carrying a reference to an S3 key it is not using.
+  assert.deepEqual(plugin.settings.destination, {
+    type: 'gateway',
+    provider: 'gateway',
+    workerUrl: '',
+    tokenRef: '',
+    prefix: '',
+  })
+
+  click(rowNamed(wizard, 'Cloudflare R2'))
+
+  const destination = plugin.settings.destination
+  assert.equal(destination.endpoint, R2_ENDPOINT)
+  assert.equal(destination.bucket, 'my-notes')
+  assert.equal(destination.prefix, 'notes')
+  assert.equal(destination.accessKeyId, 'AKIA')
+  assert.equal(destination.secretRef, 'open-publish-r2-secret')
+})
+
+test('and a gateway filled in survives the same trip the other way', () => {
+  const { wizard, plugin } = open({
+    destination: { type: 'gateway', workerUrl: 'https://gw.example.workers.dev', tokenRef: 'op-token', prefix: 'blog' },
+  })
+
+  click(rowNamed(wizard, 'Amazon S3'))
+  assert.equal(plugin.settings.destination.type, 's3')
+  assert.equal(plugin.settings.destination.workerUrl, undefined, 'the S3 shape carries no Worker address')
+
+  click(rowNamed(wizard, 'Cloudflare R2 without keys'))
+  assert.deepEqual(plugin.settings.destination, {
+    type: 'gateway',
+    provider: 'gateway',
+    workerUrl: 'https://gw.example.workers.dev',
+    tokenRef: 'op-token',
+    prefix: 'blog',
+  })
+})
+
+test('switching between two S3 providers still keeps everything but the endpoint', () => {
+  // The path that never lost anything, asserted alongside the one that did, so
+  // a future change to the stash cannot quietly alter it.
+  const { wizard, plugin } = open({
+    destination: { endpoint: R2_ENDPOINT, bucket: 'my-notes', accessKeyId: 'AKIA', secretRef: 'op-r2-secret' },
+  })
+
+  click(rowNamed(wizard, 'Backblaze B2'))
+  click(rowNamed(wizard, 'Cloudflare R2'))
+
+  assert.equal(plugin.settings.destination.bucket, 'my-notes')
+  assert.equal(plugin.settings.destination.accessKeyId, 'AKIA')
+  assert.equal(plugin.settings.destination.secretRef, 'op-r2-secret')
+})
+
 test('the storage fields on step 2 write straight through to settings', () => {
   const { wizard, plugin } = open()
   goTo(wizard, 1)
@@ -478,6 +549,70 @@ test('step 3 offers both starters, and picking one swaps the template it sends y
   assert.ok(plugin.calls.saves > 0, 'the choice survives closing the guide')
   const link = find(wizard.contentEl, (node) => node.tagName === 'A' && /jotter/.test(node.textContent))
   assert.equal(link.getAttr('href'), 'https://github.com/navidkashani/jotter')
+})
+
+test('every picker step keeps its guidance under the option it belongs to', () => {
+  // Steps 1, 3 and 4 are the same component, and before this the guidance sat
+  // beside the list: switching rows silently swapped a block of text somewhere
+  // below, which is the whole mechanism and was invisible.
+  for (const step of [0, 2, 3]) {
+    const { wizard } = open()
+    goTo(wizard, step)
+
+    const list = find(wizard.contentEl, byClass('op-provider-list'))
+    const panel = find(list, byClass('op-picker-detail'))
+    assert.ok(panel, `step ${step + 1} draws its guidance outside the list`)
+    assert.equal(findAll(list, byClass('op-picker-detail')).length, 1, 'one choice, one panel')
+    assert.ok(find(panel, byClass('op-wizard-steps')), `step ${step + 1} left its instructions behind`)
+
+    const selected = findAll(list, byClass('op-provider-row')).find((row) => row.hasClass('is-selected'))
+    assert.equal(list.children[list.children.indexOf(selected) + 1], panel, 'the panel is under the wrong row')
+  }
+})
+
+test('step 3 drops the instruction that only repeated the link below it', () => {
+  const { wizard } = open()
+  goTo(wizard, 2)
+
+  const steps = findAll(wizard.contentEl, (node) => node.tagName === 'LI')
+  assert.equal(
+    steps.some((line) => /template on GitHub/.test(line.textContent)),
+    false,
+    'naming a repository is not a way to reach it, and the link says the same thing',
+  )
+  const anchor = find(wizard.contentEl, (node) => node.tagName === 'A')
+  assert.match(anchor.textContent, /^Open the .+ template$/, 'and the half that works is still there')
+})
+
+test('a starter caution reads on the row before choosing, and above the steps after', () => {
+  // Said twice on purpose: on the row it can still change the choice, and in
+  // the panel it belongs to the option whose steps are on screen. Storage and
+  // hosting already restate theirs; starters were the odd one out.
+  const { wizard } = open({ builder: { starter: 'jotter' } })
+  goTo(wizard, 2)
+
+  const list = find(wizard.contentEl, byClass('op-provider-list'))
+  const row = findAll(list, byClass('op-provider-row')).find((entry) => entry.hasClass('is-selected'))
+  assert.match(find(row, byClass('op-provider-caution-line')).textContent, /wrangler\.jsonc/)
+
+  const panel = find(list, byClass('op-picker-detail'))
+  const warning = find(panel, byClass('op-notice-warning'))
+  assert.ok(warning, 'the chosen starter states its cost nowhere near its steps')
+  assert.match(warning.textContent, /wrangler\.jsonc/)
+  assert.ok(
+    panel.children.indexOf(warning) < panel.children.indexOf(find(panel, byClass('op-wizard-steps'))),
+    'a caution read after the steps is a caution read too late',
+  )
+})
+
+test('a starter with nothing to warn about opens its panel on the steps', () => {
+  const { wizard } = open()
+  goTo(wizard, 2)
+
+  const panel = find(wizard.contentEl, byClass('op-picker-detail'))
+  assert.equal(find(panel, byClass('op-notice-warning')), null, 'no caution, no panel shouting one')
+  // The other starter still says its own on its own row, where it belongs.
+  assert.match(wizard.contentEl.textContent, /Ships no wrangler\.jsonc/)
 })
 
 test('step 4 names the output directory of the starter chosen on step 3', () => {

@@ -254,7 +254,12 @@
 .op-progress-log-icon { display: inline-flex; flex-shrink: 0; color: var(--text-muted); }
 
 .op-wizard-progress { color: var(--text-muted); font-size: var(--font-ui-smaller); }
-.op-wizard-steps { padding-left: 20px; }
+/*
+ * One size inside the guide. These used to inherit the modal's body size while
+ * the picker beneath them sat two steps smaller, which put the procedure you
+ * read once above the decision you are actually making.
+ */
+.op-wizard-steps { padding-left: 20px; font-size: var(--font-ui-small); }
 .op-wizard-steps li { margin-bottom: 6px; }
 .op-wizard-result { margin: 8px 0; font-size: var(--font-ui-small); }
 .op-wizard-values pre {
@@ -354,9 +359,14 @@
   border-radius: var(--radius-s);
   overflow: hidden;
   margin-bottom: var(--op-gap);
+  --op-mark-size: 14px;
+  --op-mark-gap: 10px;
 }
 .op-provider-row {
-  display: block;
+  display: grid;
+  grid-template-columns: var(--op-mark-size) 1fr;
+  gap: var(--op-mark-gap);
+  align-items: start;
   width: 100%;
   text-align: left;
   padding: 10px 12px;
@@ -370,8 +380,54 @@
   height: auto;
 }
 .op-provider-row:first-child { border-top: none; }
-.op-provider-row.is-selected { background: var(--background-modifier-hover); }
 .op-provider-row.is-selected .op-provider-name { color: var(--text-accent); }
+
+/*
+ * The chosen option and its guidance, bracketed as one block.
+ *
+ * The tint alone was not enough: `--background-modifier-hover` is a few percent
+ * of white, which on a dark theme is very nearly nothing, and it was carrying
+ * the whole answer to "which one is this". The accent edge runs the full height
+ * of the row *and* its panel, so the block reads as chosen from any scroll
+ * position, including one where the name and the mark are above the fold.
+ *
+ * An inset shadow rather than a border, so nothing below it shifts by 3px when
+ * the selection moves.
+ */
+.op-provider-row.is-selected,
+.op-picker-detail {
+  background: var(--background-modifier-active-hover, var(--background-modifier-hover));
+  box-shadow: inset 3px 0 0 0 var(--text-accent);
+}
+
+/*
+ * The mark, and the one thing on the row that says *which* option is chosen.
+ * The tint and the accent-coloured name are both real but neither is legible as
+ * a choice: on a two-row list they amount to one blue word.
+ *
+ * It looks like a radio and is not one. The row is a button with `aria-pressed`
+ * for the reasons in `PickerList.ts`, so this is drawn from `is-selected` and
+ * announced to nobody.
+ */
+.op-picker-mark {
+  box-sizing: border-box;
+  width: var(--op-mark-size);
+  height: var(--op-mark-size);
+  /* Aligned to the cap height of the name beside it, not to its line box. */
+  margin-top: 3px;
+  border: 1px solid var(--background-modifier-border-hover);
+  border-radius: 50%;
+  background: var(--background-primary);
+}
+.op-provider-row.is-selected .op-picker-mark {
+  border-color: var(--text-accent);
+  background: var(--text-accent);
+  box-shadow: inset 0 0 0 3px var(--background-primary);
+}
+
+/* A grid item defaults to `min-width: auto`, which lets a long unbroken word
+ * push the column wider than the modal instead of wrapping. */
+.op-picker-body { min-width: 0; }
 
 .op-provider-heading { display: flex; align-items: baseline; gap: 8px; }
 .op-provider-name { font-weight: var(--font-semibold); }
@@ -382,9 +438,34 @@
   border-radius: var(--radius-s);
   padding: 0 5px;
 }
-.op-provider-summary { color: var(--text-muted); font-size: var(--font-ui-smaller); margin-top: 2px; }
+.op-provider-summary { color: var(--text-muted); font-size: var(--font-ui-small); margin-top: 2px; }
 /* A cost, not a note. It reads in the same colour as the warning panel. */
-.op-provider-caution-line { color: var(--text-warning); font-size: var(--font-ui-smaller); margin-top: 2px; }
+.op-provider-caution-line { color: var(--text-warning); font-size: var(--font-ui-small); margin-top: 2px; }
+
+/*
+ * The guidance for whichever option is selected, joined to that row.
+ *
+ * A sibling of the row rather than a child, because the row is a `<button>` and
+ * the panel holds links. It shares the selected row's background and adds no
+ * border of its own, so the two read as one block; the next row's own
+ * `border-top` closes it off. Text starts under the row's body column, past the
+ * mark, so the panel is visibly attached to a name rather than to the list.
+ */
+.op-picker-detail {
+  padding: 8px 12px 12px calc(12px + var(--op-mark-size) + var(--op-mark-gap));
+  font-size: var(--font-ui-small);
+}
+/*
+ * The panel owns the spacing, so every block inside it starts flush and pushes
+ * the next one down. Stated per block rather than left to the defaults each one
+ * carries elsewhere, which differ and would stack unevenly here.
+ */
+.op-picker-detail .op-notice-warning { margin: 0 0 10px; }
+.op-picker-detail .op-wizard-steps { margin: 0; padding-left: 18px; }
+.op-picker-detail .op-wizard-links { margin: 10px 0 0; }
+.op-picker-detail p { margin: 10px 0 0; }
+/* One size in the panel too: `op-muted` is a colour here, not a demotion. */
+.op-picker-detail .op-muted { font-size: inherit; }
 
 /*
  * A version whose content has been cleaned up: listed, greyed, and not

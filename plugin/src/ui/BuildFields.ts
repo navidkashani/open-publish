@@ -436,6 +436,7 @@ export function renderStarterList(
   container: HTMLElement,
   selected: StarterId,
   onPick: (id: StarterId) => void,
+  renderDetail?: (container: HTMLElement) => void,
 ): void {
   renderPickerList(
     container,
@@ -450,10 +451,16 @@ export function renderStarterList(
     (id) => {
       if (isStarterId(id)) onPick(id)
     },
+    renderDetail,
   )
 }
 
-export function renderHostList(container: HTMLElement, selected: HostId, onPick: (id: HostId) => void): void {
+export function renderHostList(
+  container: HTMLElement,
+  selected: HostId,
+  onPick: (id: HostId) => void,
+  renderDetail?: (container: HTMLElement) => void,
+): void {
   renderPickerList(
     container,
     HOSTS.map((host) => ({
@@ -467,5 +474,6 @@ export function renderHostList(container: HTMLElement, selected: HostId, onPick:
     (id) => {
       if (isHostId(id)) onPick(id)
     },
+    renderDetail,
   )
 }

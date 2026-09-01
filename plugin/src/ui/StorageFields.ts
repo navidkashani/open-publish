@@ -118,27 +118,67 @@ export interface StorageFieldsOptions {
 }
 
 /**
+ * The shape a switch left behind, held for as long as the picker is on screen.
+ *
+ * The two destination kinds share no fields, so crossing between them replaces
+ * rather than edits, and what is replaced used to be gone. Two clicks in the
+ * picker (to the gateway to read what it says, then back) emptied a filled-in
+ * endpoint, bucket and access key id, saving as they went. Nothing warned, and
+ * nothing could undo it.
+ *
+ * So the abandoned shape is set aside here instead, and switching back restores
+ * it. **In memory only, on purpose.** What reaches `data.json` while the
+ * gateway is selected is exactly what reached it before: the gateway's own
+ * fields and no reference to an S3 key the vault is not using. The property
+ * `resolveDestination` documents is unchanged; only the round trip is repaired.
+ *
+ * The cost is that it lasts as long as the screen does. Closing the guide on
+ * the gateway still discards the S3 shape, which is the case worth a warning
+ * rather than a stash: it is a decision somebody made, not a mis-click.
+ */
+export interface DestinationStash {
+  s3?: S3DestinationSettings
+  gateway?: GatewayDestinationSettings
+}
+
+/**
  * Apply a provider choice to a stored destination, in place.
  *
  * Shared so the wizard's row list and the settings dropdown cannot drift into
  * applying the same choice two slightly different ways. Bucket, prefix and
  * credentials are deliberately untouched: a provider has no opinion about them.
  */
-export function selectProvider(current: DestinationSettings, id: ProviderId): DestinationSettings {
-  // Crossing between the two kinds keeps nothing, because the two shapes share
-  // no fields. What that discards now is the *name* of a credential rather than
-  // the credential, and the keychain entry it named survives.
+export function selectProvider(
+  current: DestinationSettings,
+  id: ProviderId,
+  /** Mutated as the switch happens. Omit and a cross-kind switch discards, as it always did. */
+  stash?: DestinationStash,
+): DestinationSettings {
+  // Crossing between the two kinds keeps nothing in the *stored* destination,
+  // because the two shapes share no fields. What that discards is the name of a
+  // credential rather than the credential, and the keychain entry it named
+  // survives.
   //
   // Deliberate, and the right way round. The keychain is shared with every
   // other plugin and is not this one's to empty; switching provider is
   // something people switch back from; and an entry nothing references costs
   // nothing until it is deleted in Obsidian's own keychain settings, which is
   // where deleting it belongs and where the user can see what they are doing.
+  //
+  // "Something people switch back from" is what the stash is for.
   if (providerKind(id) === 'gateway') {
-    return current.type === 'gateway' ? current : emptyGatewayDestination()
+    if (current.type === 'gateway') return current
+    if (stash) stash.s3 = current
+    return stash?.gateway ?? emptyGatewayDestination()
   }
 
-  const base: S3DestinationSettings = current.type === 'gateway' ? emptyS3Destination() : current
+  let base: S3DestinationSettings
+  if (current.type === 'gateway') {
+    if (stash) stash.gateway = current
+    base = stash?.s3 ?? emptyS3Destination()
+  } else {
+    base = current
+  }
   const next = applyProvider(
     {
       provider: base.provider,
@@ -164,6 +204,12 @@ export class StorageFields {
    * honest across every later edit for no benefit.
    */
   private measured: ConcurrencySupport | null = null
+  /**
+   * What a switch to the other kind of destination left behind, so switching
+   * back restores it. Lives as long as this form does, which is as long as the
+   * panel that can switch is on screen.
+   */
+  private readonly stash: DestinationStash = {}
 
   /**
    * The three places one endpoint is visible: the blank it is built from, the
@@ -379,7 +425,7 @@ export class StorageFields {
 
   /** Switching provider is the one edit that rewrites fields the user did not touch. */
   pick(id: ProviderId): void {
-    this.options.replaceDestination(selectProvider(this.destination, id))
+    this.options.replaceDestination(selectProvider(this.destination, id, this.stash))
     // A measurement of the old provider says nothing about the new one. `save`
     // retires it; this is only here to say so at the place it matters most.
     this.measured = null
@@ -667,6 +713,7 @@ export function renderProviderList(
   container: HTMLElement,
   selected: ProviderId,
   onPick: (id: ProviderId) => void,
+  renderDetail?: (container: HTMLElement) => void,
 ): void {
   renderPickerList(
     container,
@@ -682,5 +729,6 @@ export function renderProviderList(
     (id) => {
       if (isProviderId(id)) onPick(id)
     },
+    renderDetail,
   )
 }
