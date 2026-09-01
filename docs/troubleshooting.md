@@ -89,6 +89,35 @@ minutes between builds* in settings, or trigger one manually.
 **"Nothing has changed since the last publish. No build needed."**
 Not an error. No files and no site options changed, so no build was spent.
 
+**"No content has been published yet: current.json is missing from the bucket."**
+Expected, if you have not published yet. This is the first build failing, and
+setting up in the order the guide asks for guarantees it: connecting the
+repository starts a build immediately, and publishing is the last thing you do.
+The build stops rather than putting an empty site at your address. Finish the
+guide, deploy hook included, then publish once from Obsidian: publishing asks
+your host to rebuild by itself, and that build finds your notes. Only if you
+turned **Trigger a build after publishing** off, or never pasted a hook, is
+there a build to start by hand.
+
+If you *have* published, the build is looking in the wrong place. It reads the
+bucket directly, so its variables have to agree with the plugin's settings
+exactly, and the one that is easiest to miss is `OP_PREFIX`: a vault publishing
+under a prefix writes `current.json` inside it, and a build without that
+variable reads the bucket root and finds nothing. Check `OP_ENDPOINT`,
+`OP_BUCKET` and `OP_PREFIX` against **Settings > Storage** character by
+character. Behind a Worker gateway, `OP_PREFIX` is your Worker's own `PREFIX`
+followed by the vault's, and the plugin cannot fill either in for you.
+
+**Which build variables to mark as secret**
+Only `OP_SECRET_ACCESS_KEY`. Encrypting more of them breaks nothing, because
+every host hands encrypted values to the build the same way it hands over plain
+ones, but most hosts will not show you an encrypted value again afterwards, only
+let you overwrite it. That hides exactly the values worth checking when a build
+says the bucket looks empty. `OP_ENDPOINT`, `OP_BUCKET`, `OP_REGION`,
+`OP_PREFIX` and `OP_SITE_URL` are not secrets, and `OP_ACCESS_KEY_ID` is an
+identifier for a read-only key that only unlocks what is already public on your
+site.
+
 ## Content
 
 **"N files would publish to the same URL."**

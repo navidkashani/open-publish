@@ -106,7 +106,15 @@ export class SetupWizard extends Modal {
     next.addEventListener('click', () => {
       if (isLast) {
         this.close()
-        new Notice('Setup complete. Use the ribbon icon or the "Publish" command whenever you are ready.')
+        // "Whenever you are ready" was the wrong ending. Until a publish happens
+        // there is nothing in storage, so the site cannot build and the host's
+        // first attempt has already failed. Publishing is the step that makes
+        // the previous six add up to a site.
+        new Notice(
+          'Setup complete. Publish now, from the ribbon icon or the "Publish" command: your site cannot build ' +
+            'until there is something in your storage.',
+          10000,
+        )
         return
       }
       this.stepIndex++
@@ -312,6 +320,26 @@ export class SetupWizard extends Modal {
         this.instructions(panel, host.setup(starter.build))
       },
     )
+
+    // The one failure this guide *causes*, so it is the one it has to predict.
+    // Connecting the repository starts a build immediately, and publishing is
+    // the last thing anyone does here, so the first build always runs against
+    // an empty bucket and always stops. Both starters refuse identically rather
+    // than deploying an empty site over somebody's address, which is right, and
+    // silent about it, which is not: a red build on a dashboard reads as "I got
+    // something wrong" and sends people back through the steps looking for it.
+    const firstBuild = container.createDiv({ cls: 'op-notice-info' })
+    firstBuild.createEl('p', {
+      text:
+        'Your first build will fail, and that is expected. Connecting the repository starts a build straight ' +
+        'away, and nothing has been published to your storage yet, so it stops with "No content has been ' +
+        'published yet" rather than putting an empty site at your address.',
+    })
+    firstBuild.createEl('p', {
+      text:
+        'Finish this guide, including the deploy hook on the next step, then publish once from Obsidian. ' +
+        'Publishing asks your host to rebuild on its own, and that build finds your notes.',
+    })
 
     const destination = this.plugin.settings.destination
     // The build reads the bucket *directly*, whichever way the plugin writes to

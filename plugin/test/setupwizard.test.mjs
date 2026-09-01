@@ -10,7 +10,7 @@
 
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { SetupWizard, fakeApp, fakeStoragePlugin } from './harness.mjs'
+import { SetupWizard, fakeApp, fakeStoragePlugin, notices } from './harness.mjs'
 import { byClass, click, dispatch, find, findAll, visible } from './dom.mjs'
 import { PROVIDERS } from '../src/destinations/providers.ts'
 
@@ -495,6 +495,37 @@ test('the setup guide is still six steps, so "step 4" keeps meaning the same thi
   goTo(wizard, 3)
   assert.match(wizard.contentEl.textContent, /Step 4 of 6/)
   assert.ok(envBlock(wizard).includes('OP_ENDPOINT'), 'and step 4 is still the one with the variables')
+})
+
+test('step 4 predicts the failed build it is about to cause', () => {
+  // The guide's own order guarantees it: connecting the repository starts a
+  // build immediately and publishing is the last thing anybody does here, so
+  // the first build always runs against an empty bucket. Both starters stop
+  // rather than deploying an empty site, which is right; a red build nobody
+  // warned about reads as "I got something wrong" and sends people back through
+  // the steps hunting for a mistake they did not make.
+  const { wizard } = open()
+  goTo(wizard, 3)
+
+  const text = wizard.contentEl.textContent
+  assert.match(text, /first build will fail, and that is expected/)
+  assert.match(text, /No content has been published yet/, 'and it quotes what the build actually says')
+  // And it does not invent a manual step: with a hook set and auto-trigger on,
+  // which is the default, the publish asks the host to rebuild by itself.
+  assert.match(text, /publish once from Obsidian/i)
+  assert.match(text, /asks your host to rebuild on its own/)
+})
+
+test('finishing tells you to publish, rather than wishing you well', () => {
+  // Until a publish happens there is nothing in storage, so the site cannot
+  // build and the host's first attempt has already failed.
+  notices.length = 0
+  const { wizard } = open()
+  goTo(wizard, 5)
+  click(find(wizard.contentEl, (node) => node.tagName === 'BUTTON' && node.textContent === 'Finish'))
+
+  assert.match(notices.at(-1), /Publish now/)
+  assert.match(notices.at(-1), /cannot build until there is something in your storage/)
 })
 
 test('step 6 offers the Publish import, which is where the folder names would be retyped', () => {
