@@ -32,7 +32,9 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '24'
+          # Read rather than named, so CI cannot drift from the version a
+          # deploy of the template actually runs on.
+          node-version-file: 'starters/quartz/.node-version'
 
       # Only the tip tree is needed, and the template carries Quartz's full
       # history, so depth 1 keeps this to a couple of seconds.

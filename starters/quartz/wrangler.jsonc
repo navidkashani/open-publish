@@ -5,6 +5,21 @@
 // local development only, so shipping this changes nothing for the Pages setup
 // in docs/setup-cloudflare.md.
 //
+// It does not ignore it *quietly*, which is worth knowing before you read it as
+// a problem. Every Pages build of this template logs:
+//
+//   A Wrangler configuration file was found but it does not appear to be valid.
+//   Did you mean to use wrangler.toml to configure Pages? If so, then make sure
+//   the file is valid and contains the `pages_build_output_dir` property.
+//   Skipping file and continuing.
+//
+// The build then succeeds. Expected, and harmless. Adding
+// `pages_build_output_dir` to silence it is not the fix: that key promotes this
+// file from local-development-only to the source of truth for a Pages
+// project's build settings, silently overriding what the dashboard says, and
+// `wrangler deploy` warns and stops on a config carrying both it and `assets`.
+// The line stays and this comment is the answer to it.
+//
 // Netlify and Vercel never look at it.
 {
   // This has to match the Worker's name in the Cloudflare dashboard. Workers

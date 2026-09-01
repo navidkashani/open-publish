@@ -156,7 +156,29 @@ where the sites differ:
 | **Open Publish Quartz** | `./public` | `404-page` | `auto-trailing-slash`, so the extensionless links Quartz writes resolve to its flat `.html` files |
 
 Pages ignores that file in either repository, because it carries no
-`pages_build_output_dir`, so one repository serves both hosts.
+`pages_build_output_dir`, so one repository serves both hosts. It says so
+loudly, though, and the line reads worse than it is:
+
+```
+A Wrangler configuration file was found but it does not appear to be valid.
+Did you mean to use wrangler.toml to configure Pages? ... Skipping file and continuing.
+```
+
+Every Pages build of either starter prints that and then succeeds. Adding
+`pages_build_output_dir` to silence it would make the file the source of truth
+for the Pages project's build settings, overriding the dashboard, so it stays.
+
+### Node version
+
+Both starters pin Node with a `.node-version` file, currently `24.20.0`, and
+you should leave it alone unless you mean to move it.
+
+It matters because the hosts disagree about where to look. Cloudflare Pages,
+Workers Builds and Netlify read `.node-version`; **Pages does not read
+`package.json` engines at all**, and its build image default was 22.16.0, older
+than what some dependencies ask for. Vercel is the other way round and reads
+`engines`. Both files ship, saying the same version, so the same template does
+not build on two different Node versions depending on who is building it.
 
 **Change the `name` in it to match your Worker.** Workers Builds fails the build
 when the two disagree, and the error does not say which name it wanted.

@@ -22,7 +22,9 @@ jobs:
       # build step and no test-only toolchain. 24 is the floor we develop on.
       - uses: actions/setup-node@v4
         with:
-          node-version: '24'
+          # Read rather than named, so CI cannot drift from the version a
+          # deploy of the template actually runs on.
+          node-version-file: 'starters/quartz/.node-version'
           cache: npm
           cache-dependency-path: plugin/package-lock.json
 
@@ -53,7 +55,9 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '24'
+          # Read rather than named, so CI cannot drift from the version a
+          # deploy of the template actually runs on.
+          node-version-file: 'starters/quartz/.node-version'
 
       # No install step. The starter has no dependencies of its own, and the
       # build fetches Quartz and installs it inside a temporary directory.

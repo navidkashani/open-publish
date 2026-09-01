@@ -56,6 +56,12 @@ export const OVERLAY_FILES = [
   // overlay one top-level name at a time, and `styles/` is where ours lives.
   'styles',
   'wrangler.jsonc',
+  // Pinned, and it has to ship: Cloudflare Pages does *not* read
+  // `package.json` engines, so this file is the only thing that decides which
+  // Node a deploy of the template runs on. Without it Pages picks its build
+  // image default, which was 22.16.0 on a real build while this repository was
+  // developing and testing on 24.
+  '.node-version',
   'README.md',
 ]
 
@@ -175,6 +181,11 @@ async function mergePackageJson() {
     // Quartz already owns `test`, so ours is namespaced rather than clobbering it.
     'test:starter': 'node --test scripts/*.test.mjs',
   }
+  // Set rather than merged, and the one field here that overrides Quartz's own.
+  // `.node-version` covers Cloudflare Pages, Workers Builds and Netlify; Vercel
+  // reads this instead and reads nothing else, so the two have to agree or the
+  // same template deploys on two different Node versions depending on the host.
+  pkg.engines = { ...pkg.engines, node: '>=24.20.0' }
   await writeFile(path, JSON.stringify(pkg, null, 2) + '\n')
 }
 

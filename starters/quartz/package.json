@@ -5,7 +5,7 @@
   "private": true,
   "type": "module",
   "engines": {
-    "node": ">=20"
+    "node": ">=24.20.0"
   },
   "scripts": {
     "build": "node scripts/fetch-content.mjs && node scripts/build-site.mjs && node scripts/finalize.mjs",
