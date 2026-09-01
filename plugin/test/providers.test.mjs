@@ -47,6 +47,15 @@ test('every provider has the copy each surface needs', () => {
   assert.equal(PROVIDERS.at(-1).id, 'other', 'the escape hatch is last')
 })
 
+test('the gateway row names the terminal it costs, where the choice is made', () => {
+  // Without it this row reads strictly better than plain R2: same bucket, same
+  // site, fewer secrets on the device. The four wrangler commands are what
+  // actually decides it, and the picker is the last honest place to say so.
+  const gateway = PROVIDERS.find((provider) => provider.kind === 'gateway')
+  assert.match(gateway.summary, /token that reaches this one bucket/)
+  assert.match(gateway.summary, /terminal/)
+})
+
 test('a blank survives the round trip through the endpoint it builds', () => {
   for (const provider of templated) {
     const value = SAMPLES[provider.id]

@@ -132,7 +132,14 @@ export const PROVIDERS: readonly StorageProvider[] = [
     // longer one. "Gateway" is our word for it, not the user's, and it should
     // not appear in the interface at all.
     name: 'Cloudflare R2 without keys',
-    summary: 'Your keys stay in Cloudflare. Obsidian only holds a token that reaches this one bucket.',
+    // The terminal is in the summary because the picker is where the choice is
+    // made. Read without it, this row is strictly better than the one above:
+    // same bucket, same site, fewer secrets on the device. The cost that
+    // actually decides it for most people is four wrangler commands, and
+    // finding that out after picking is finding it out too late.
+    summary:
+      'Your keys stay in Cloudflare: Obsidian only holds a token that reaches this one bucket. ' +
+      'Needs a terminal once, to deploy a small Worker.',
     concurrency: 'Two devices can publish safely.',
     // R2 is underneath, so this is the same promise as R2's, made for the same
     // reason: the Worker passes the conditional straight through to it.
