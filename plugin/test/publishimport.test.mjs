@@ -231,11 +231,11 @@ test('a permalink on a note the imported rules do not publish is offered', () =>
     unclaimedPermalinks([
       note('Welcome.md', 'welcome'),
       note('Now.md', 'now'),
-      note('Start here.md', 'start-here'),
+      note('Start here.md', 'start'),
     ]),
     [
       { path: 'Now.md', permalink: 'now' },
-      { path: 'Start here.md', permalink: 'start-here' },
+      { path: 'Start here.md', permalink: 'start' },
       { path: 'Welcome.md', permalink: 'welcome' },
     ],
     'sorted by path, so two runs over one vault agree',

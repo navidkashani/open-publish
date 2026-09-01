@@ -94,7 +94,7 @@ const REAL_MIGRATION = {
   frontmatter: {
     'Welcome.md': { permalink: 'welcome' },
     'Now.md': { permalink: 'now' },
-    'Start here.md': { permalink: 'start-here' },
+    'Start here.md': { permalink: 'start' },
   },
 }
 
@@ -308,7 +308,7 @@ test('the notes a permalink points at are offered, unticked, each with its perma
 
   assert.deepEqual(candidates(modal), [
     { path: 'Now.md', permalink: 'now', ticked: false },
-    { path: 'Start here.md', permalink: 'start-here', ticked: false },
+    { path: 'Start here.md', permalink: 'start', ticked: false },
     { path: 'Welcome.md', permalink: 'welcome', ticked: false },
   ])
   // Wrongly on here publishes a private note, which is why this is the one
