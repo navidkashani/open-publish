@@ -11,10 +11,16 @@ import {
   snapshotContentKey,
   MAX_REDIRECTS,
 } from '../src/core/snapshot.ts'
+import { DEFAULT_SETTINGS } from '../src/settings.ts'
 
-const site = { title: 'N', homepage: '', locale: 'en-US', dir: 'ltr', noIndex: false, showThemeToggle: true,
-  strictLineBreaks: false, showNavigation: true, showSearch: true, showGraph: true, showOutline: true,
-  showBacklinks: true, showTags: true, analytics: { provider: 'none', id: '' } }
+/**
+ * The plugin's own defaults rather than a copy of them, so that `Object.keys`
+ * below is the real key set of `SnapshotSite`. Written out, this block went
+ * stale silently: the completeness check under `variants` would compare a
+ * hand-maintained map against a hand-maintained object and find them in
+ * perfect agreement about an option neither had heard of.
+ */
+const site = { ...DEFAULT_SETTINGS.site, title: 'N' }
 const file = (hash, slug, extra = {}) => ({ hash, size: 1, mtime: 0, slug, ...extra })
 
 const snapshot = (files, overrides = {}) => ({
@@ -50,6 +56,20 @@ test('id ignores mtime, so touching a file without editing it does not rebuild',
   const a = await computeSnapshotId({ 'a.md': file('h1', 'a', { mtime: 1 }) }, site, 1000)
   const b = await computeSnapshotId({ 'a.md': file('h1', 'a', { mtime: 999999 }) }, site, 1000)
   assert.equal(a, b)
+})
+
+test('id ignores ctime too, so a restored vault does not rebuild the whole site', async () => {
+  // `ctime` comes off the filesystem, and sync, a restore from backup or a
+  // plain file transfer resets it on every file at once. In the content key
+  // that would be a full rebuild triggered by a copy operation.
+  const a = await computeSnapshotId({ 'a.md': file('h1', 'a', { ctime: 1 }) }, site, 1000)
+  const b = await computeSnapshotId({ 'a.md': file('h1', 'a', { ctime: 999999 }) }, site, 1000)
+  assert.equal(a, b)
+  assert.equal(
+    snapshotContentKey({ 'a.md': file('h1', 'a', { ctime: 1 }) }, site),
+    snapshotContentKey({ 'a.md': file('h1', 'a') }, site),
+    'a snapshot written before ctime existed must compare equal to one written after',
+  )
 })
 
 test('ids sort chronologically', async () => {
@@ -115,6 +135,42 @@ test('the same holds when the bytes are identical, which is what a slug-scheme c
 test('a slug that did not move emits nothing', () => {
   const previous = snapshot({ 'a.md': file('h1', 'a') })
   assert.deepEqual(detectRenames(previous, { 'a.md': file('h2', 'a') }).redirects, [])
+})
+
+/**
+ * Promoting a note to the homepage, which is the one redirect a starter cannot
+ * work out for itself and the one most easily lost.
+ *
+ * The plugin applies `site.homepage` by giving that note the slug `index`. To a
+ * generator that is a note sitting at the site root with no history: under
+ * `slugs: 'preserve'` it is even written to disk *at* `index.md`, so every
+ * vacated-slug rule a generator has short-circuits (`from === to`), and `index`
+ * is not a URL to redirect from anyway. The rule below is the *only* thing
+ * carrying the note's old address across, and without it every link anybody
+ * ever published to the note that is now the front page 404s, silently.
+ */
+test('promoting a note to the homepage carries its old URL across', () => {
+  const previous = snapshot({ 'Welcome.md': file('h1', 'welcome') })
+  const { redirects } = detectRenames(previous, { 'Welcome.md': file('h1', 'index') })
+  assert.deepEqual(redirects, [{ from: 'welcome', to: 'index' }])
+})
+
+test('and a homepage set on a first publish emits none, because nothing served it', () => {
+  // Deliberate rather than accidental: there is no previous snapshot, so there
+  // is no address anybody could have published, and a redirect from a URL that
+  // never existed is a rule that can only ever shadow a real page later.
+  assert.deepEqual(detectRenames(null, { 'Welcome.md': file('h1', 'index') }), {
+    redirects: [],
+    renames: [],
+  })
+})
+
+test('demoting the homepage again redirects / to wherever the note went', () => {
+  // The reverse move has to work too, or turning the setting off strands every
+  // link to the site root that was published while it was on.
+  const previous = snapshot({ 'Welcome.md': file('h1', 'index') })
+  const { redirects } = detectRenames(previous, { 'Welcome.md': file('h1', 'welcome') })
+  assert.deepEqual(redirects, [{ from: 'index', to: 'welcome' }])
 })
 
 test('a slug changed twice collapses to one hop, same as a rename does', () => {
@@ -194,8 +250,22 @@ test('every site option affects the snapshot id, so flipping one triggers a rebu
     showOutline: { ...site, showOutline: false },
     showBacklinks: { ...site, showBacklinks: false },
     showTags: { ...site, showTags: false },
+    showPageMetadata: { ...site, showPageMetadata: true },
+    showPrevNext: { ...site, showPrevNext: false },
     analytics: { ...site, analytics: { provider: 'google', id: 'G-1' } },
   }
+  /**
+   * The map above is written out by hand, so this is what stops it going stale:
+   * a site option added to `SnapshotSite` and not to `variants` would leave
+   * this test green while the option it forgot rode along in every snapshot
+   * without ever triggering a rebuild.
+   */
+  assert.deepEqual(
+    Object.keys(variants).sort(),
+    Object.keys(site).sort(),
+    'every key of SnapshotSite needs a variant here, or it is not being tested at all',
+  )
+
   for (const [name, variant] of Object.entries(variants)) {
     assert.notEqual(await computeSnapshotId(files, variant, 1000), base, `${name} did not change the id`)
   }

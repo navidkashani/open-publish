@@ -150,6 +150,21 @@ Working as intended. Workers Builds provides no site address of its own, so
 without `OP_SITE_URL` the site would be built as `example.com` and nothing would
 look wrong until someone opened the feed. Set `OP_SITE_URL` and build again.
 
+**The build stops with "This build is running on Cloudflare Pages, and the only
+address it was given…".**
+Also working as intended, and this one prevents the worst failure in the whole
+pipeline. Pages injects five variables and none of them carries your site's
+stable address: `CF_PAGES_URL` is the *deployment's* own URL, a fresh hash
+subdomain minted on every deploy (`2f8bfad6.my-notes.pages.dev`) which
+Cloudflare serves with `x-robots-tag: noindex`. Taken as the site address it
+becomes every page's canonical link, its `og:url`, every entry in the sitemap
+and the `Sitemap:` line in `robots.txt`, all naming a host search engines are
+forbidden to index, and pages dropping out of the index is the documented
+result of that contradiction. Nothing can derive the right answer, so the build
+asks for it. Add `OP_SITE_URL` under **Settings → Variables and secrets**, for
+Production and Preview both, with the address readers actually use
+(`https://<project>.pages.dev`, or your own domain), and deploy again.
+
 **The publish waits ten minutes and then says "Saved, still waiting".**
 Usually the site URL. If it names a site that has never been built, every poll
 gets a 404, which the plugin correctly reads as "not built yet" rather than as

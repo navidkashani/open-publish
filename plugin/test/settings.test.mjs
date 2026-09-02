@@ -85,7 +85,23 @@ test('new site options arrive with safe defaults, never undefined', () => {
   assert.equal(settings.site.noIndex, false)
   assert.equal(settings.site.homepage, '')
   assert.equal(settings.site.strictLineBreaks, false, 'off by default: notes use single line breaks')
+  assert.equal(settings.site.showPrevNext, true)
+  assert.equal(
+    settings.site.showPageMetadata,
+    false,
+    'off by default, the way Obsidian Publish is: a guessed created date is worse than none',
+  )
   assert.deepEqual(settings.site.analytics, { provider: 'none', id: '' })
+
+  /**
+   * And the general rule the assertions above are instances of. A site option
+   * added to `DEFAULT_SETTINGS` without a line in `migrateSettings` arrives
+   * `undefined` on every vault that has published before, which is falsy: the
+   * feature switches itself off on somebody's live site with nothing said.
+   */
+  for (const key of Object.keys(DEFAULT_SETTINGS.site)) {
+    assert.notEqual(settings.site[key], undefined, `site.${key} survived no migration`)
+  }
 })
 
 test('a half-written analytics block cannot lose its provider', () => {

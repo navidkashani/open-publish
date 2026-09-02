@@ -74,10 +74,11 @@ export interface Starter {
  * is the starter `npm run verify` builds for real against a stand-in bucket on
  * every commit *in this repository*; jotter is not covered by that at all. It
  * passes its own suite in its own repository, including a test tying its
- * `wrangler.jsonc` to the directory its build actually writes, which is the
- * exact failure this table exists to prevent. That is good evidence. It is not
- * the same evidence, and anyone weighing the two should be able to find out
- * which of them this repository can vouch for.
+ * `wrangler.jsonc` to the directory its build actually writes and a `--full`
+ * pass that fetches a snapshot, builds the site and asserts the addresses it
+ * serves. That is good evidence. It is not the same evidence, and anyone
+ * weighing the two should be able to find out which of them this repository can
+ * vouch for. See `docs/architecture.md` for exactly where the line falls.
  */
 export const STARTERS: readonly Starter[] = [
   {

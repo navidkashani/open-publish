@@ -454,6 +454,8 @@ const TOGGLES = {
   showOutline: 'Table of contents',
   showBacklinks: 'Backlinks',
   showTags: 'Tags',
+  showPageMetadata: 'Page metadata',
+  showPrevNext: 'Previous and next links',
 } satisfies Record<SiteToggleKey, string>
 
 /**

@@ -20,6 +20,15 @@ export const site = {
   showOutline: true,
   showBacklinks: true,
   showTags: true,
+  showPageMetadata: false,
+  /**
+   * Read by nothing here, and that is deliberate rather than an omission.
+   * Quartz has no previous/next component, so this starter has nothing to
+   * honour the intent with. Site options are intent, not layout
+   * (`docs/architecture.md`), so it is carried and ignored, and a future
+   * starter that does have one gets the answer without a plugin change.
+   */
+  showPrevNext: true,
   analytics: { provider: 'none', id: '' },
 }
 export default site

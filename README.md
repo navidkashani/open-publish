@@ -47,9 +47,10 @@ published in Git.
   looks and nothing about what it contains, and both are connect-and-go on every
   host listed below.
 - **Site options that are not theme-specific.** Navigation, search, graph,
-  backlinks, outline, tags, theme toggle, homepage, analytics and a
-  discourage-search-engines switch, described as intent, so a future starter
-  can honour them without the plugin knowing anything about it.
+  backlinks, outline, tags, theme toggle, page metadata, previous/next links,
+  homepage, analytics and a discourage-search-engines switch, described as
+  intent, so a future starter can honour them without the plugin knowing
+  anything about it.
 
 ## Repository layout
 

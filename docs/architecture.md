@@ -52,7 +52,8 @@ there, corruption does not.
   "site": { "title": "My Notes", "showGraph": true },
   "files": {
     "Notes/Zettelkasten.md": {
-      "hash": "…", "size": 4211, "mtime": 1755900000000,
+      "hash": "…", "size": 4211,
+      "mtime": 1755900000000, "ctime": 1750000000000,   // best effort; see below
       "slug": "notes/zettelkasten", "title": "Zettelkasten", "aliases": ["Zettel"],
       "legacyUrls": ["Notes/Zettelkasten"]   // only when the vault is migrating; see below
     }
@@ -71,7 +72,31 @@ there, corruption does not.
 The ID is derived from the file set **and** the `site` block, so flipping a
 single site toggle produces a new snapshot and therefore a rebuild, even with no
 file changes. Republishing identical content within the same second yields the
-same ID: retries are idempotent by construction.
+same ID: retries are idempotent by construction. Neither timestamp is part of
+it, so touching a file, or restoring a vault from a backup that reset every
+creation date, costs no build.
+
+### The two timestamps are best effort, and `created:` outranks them
+
+`mtime` and `ctime` come from Obsidian's `FileStats`, which comes from the
+filesystem. The filesystem loses them: sync, a restore from backup and an
+ordinary file transfer all reset the creation date to the moment the copy
+landed, which is why Obsidian's own forum carries a long-standing request to
+stop deriving it that way, and why plugins exist whose whole job is to write a
+creation date into frontmatter instead.
+
+So the precedence a starter should implement is:
+
+1. **the note's own `created:` / `updated:` frontmatter**, the only trustworthy
+   source, and the only one the author controls;
+2. then the snapshot's `ctime` / `mtime`;
+3. and `mtime` again wherever `ctime` is later than it, which is corruption
+   rather than a note edited before it existed.
+
+They are worth carrying anyway, because the alternative is not a better date. A
+vault fetched from a snapshot is written fresh, with no git history, so every
+fallback a generator has of its own collapses to the moment of the build, and
+every note on the site reads as created the day it was last deployed.
 
 ## Key decisions
 
@@ -87,9 +112,19 @@ could honour it. That second clause is load-bearing: it is why there is no
 capability-negotiation protocol between plugin and starter. There is nothing to
 negotiate when every option is universal.
 
-Currently fourteen: `title`, `homepage`, `locale`, `dir`, `noIndex`,
+Currently sixteen: `title`, `homepage`, `locale`, `dir`, `noIndex`,
 `showThemeToggle`, `strictLineBreaks`, `showNavigation`, `showSearch`,
-`showGraph`, `showOutline`, `showBacklinks`, `showTags`, `analytics`.
+`showGraph`, `showOutline`, `showBacklinks`, `showTags`, `showPageMetadata`,
+`showPrevNext`, `analytics`.
+
+The last two are the clearest illustration of the rule and of its limit.
+`showPageMetadata` is honoured by both starters, because both have a block of
+dates and fields under the title to drop. `showPrevNext` is honoured by neither
+today: Quartz ships no previous/next component, so it carries the intent and
+renders nothing for it. That is the contract working, not failing. A generator
+that cannot express an option ignores it; it must never guess, and it must never
+report it as an option it does not know, which would tell the user their plugin
+is too new when the truth is that their generator has no such control.
 
 Deliberately excluded, so the decisions do not get relitigated:
 
@@ -144,7 +179,19 @@ thing making it the longer road; what it costs is that Quartz is the starter
 `npm run verify` builds for real against a stand-in bucket on every commit
 *here*, and jotter is not covered by that at all. jotter passes its own suite in
 its own repository, including a test tying its `wrangler.jsonc` to the directory
-its build writes. Good evidence, and not the same evidence.
+its build writes, and a `--full` pass that fetches a snapshot from a stand-in
+bucket, builds the site and asserts the addresses it serves. Good evidence, and
+not the same evidence.
+
+What this repository can vouch for, precisely, is the half of every contract
+that lives *here*: `snapshot.test.mjs` asserts the rules the plugin emits (a
+promoted homepage carries its old URL, a first publish emits none), and
+`starters/quartz/scripts/pipeline.test.mjs` asserts one starter consuming them.
+The gap that remains is the *other* starter's consumption, and closing it here
+would mean cloning, installing and building a second repository inside this
+one's test run. That is the trade, written down rather than implied: the rules
+are covered on both sides, and only jotter's side of them is covered somewhere
+else.
 
 Almost. `builders/starters.ts` is the third catalogue after storage providers
 and hosts, and it lives by the same "none of it reaches the wire" rule, with one

@@ -84,6 +84,11 @@ const snapshot = {
     showOutline: true,
     showBacklinks: true,
     showTags: true,
+    // On, against the default, so the assertion below is about the option
+    // rather than about Quartz's own layout: `ContentMeta` is what Quartz
+    // renders here, and off is the state a fresh install is already in.
+    showPageMetadata: true,
+    showPrevNext: false,
     analytics: { provider: 'google', id: 'G-VERIFY123' },
   },
   files: snapFiles, links, redirects: [{ from: 'notes/old-name', to: 'notes/zettelkasten' }],
@@ -175,6 +180,14 @@ check('showThemeToggle:false removes the dark-mode control', !/class="[^"]*darkm
 check('showSearch:true keeps search', /class="[^"]*search/.test(home))
 check('showGraph:true keeps the graph', /id="graph-container"|class="[^"]*graph/.test(html))
 check('showBacklinks:true keeps backlinks', /backlink/i.test(html))
+check('showPageMetadata:true keeps the page metadata block', /class="[^"]*content-meta/.test(html))
+// `showPrevNext:false` is set in the snapshot above and there is no markup to
+// assert it against: Quartz has no previous/next component, so this starter
+// carries the intent and renders nothing for it. What can be checked is that it
+// was carried rather than dropped as an option this starter does not know, which
+// is the difference between "ignored on purpose" and "your plugin is too new".
+const opSite = await readFile(join(WORK, 'op-site.ts'), 'utf8')
+check('an option Quartz cannot render is still carried through', /"showPrevNext": false/.test(opSite))
 // Quartz emits analytics into its script bundle, not inline in the HTML.
 const scripts = await Promise.all(
   out.filter((f) => f.endsWith('.js')).map((f) => readFile(join(WORK, 'public', f), 'utf8')),

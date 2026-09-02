@@ -23,11 +23,21 @@ export const sharedPageComponents: SharedLayout = {
   }),
 }
 
+/**
+ * `ContentMeta` is Quartz's page-metadata block: the reading time and the
+ * modified date under the title. `showPageMetadata` off drops it rather than
+ * hiding it, so nothing is rendered and then styled away.
+ *
+ * `showPrevNext` has no component to map onto here: Quartz ships no
+ * previous/next control. Ignoring an option a generator cannot express is what
+ * `docs/architecture.md` says to do with one, and it stays in the snapshot for
+ * the starter that can.
+ */
 export const defaultContentPageLayout: PageLayout = {
   beforeBody: [
     Component.Breadcrumbs(),
     Component.ArticleTitle(),
-    Component.ContentMeta(),
+    ...optional(site.showPageMetadata, Component.ContentMeta()),
     ...optional(site.showTags, Component.TagList()),
   ],
   left: [
@@ -45,7 +55,11 @@ export const defaultContentPageLayout: PageLayout = {
 }
 
 export const defaultListPageLayout: PageLayout = {
-  beforeBody: [Component.Breadcrumbs(), Component.ArticleTitle(), Component.ContentMeta()],
+  beforeBody: [
+    Component.Breadcrumbs(),
+    Component.ArticleTitle(),
+    ...optional(site.showPageMetadata, Component.ContentMeta()),
+  ],
   left: [
     Component.PageTitle(),
     Component.MobileOnly(Component.Spacer()),

@@ -96,6 +96,8 @@ export const site = {
   showOutline: true,
   showBacklinks: true,
   showTags: true,
+  showPageMetadata: false,
+  showPrevNext: true,
   analytics: { provider: 'none', id: '' },
 }
 

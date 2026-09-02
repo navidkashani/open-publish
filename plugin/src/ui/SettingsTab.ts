@@ -47,6 +47,14 @@ const APPEARANCE = {
   showOutline: { label: 'Table of contents', desc: 'The outline of headings on each page.' },
   showBacklinks: { label: 'Backlinks', desc: 'Which published pages link to this one.' },
   showTags: { label: 'Tags', desc: "Show a page's tags, and give each tag its own page." },
+  showPageMetadata: {
+    label: 'Page metadata',
+    desc: 'Created and updated dates, and the frontmatter fields the site chooses to show.',
+  },
+  showPrevNext: {
+    label: 'Previous and next links',
+    desc: 'Links to the pages either side of this one, at the foot of the page.',
+  },
 } satisfies Record<AppearanceKey, { label: string; desc: string }>
 
 export class OpenPublishSettingTab extends PluginSettingTab {

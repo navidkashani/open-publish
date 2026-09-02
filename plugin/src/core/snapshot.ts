@@ -41,6 +41,25 @@ export interface SnapshotFile {
   hash: string
   size: number
   mtime: number
+  /**
+   * Creation time, milliseconds since the epoch, from Obsidian's `FileStats`.
+   *
+   * **Best effort, and the starters are told so.** Obsidian takes this from the
+   * filesystem, and the filesystem loses it: sync, a restore from backup and an
+   * ordinary file transfer all reset it to the moment the copy landed. Obsidian's
+   * own forum carries a long-standing request to stop trusting it for exactly
+   * that reason, which is why plugins exist that write a creation date into
+   * frontmatter instead.
+   *
+   * So a note's own `created:` frontmatter outranks this wherever a starter
+   * reads both, and this exists for the much commoner case: a vault that has
+   * neither, where the alternative is not a better date but the build's own
+   * clock printed on every page as if it were the day the note was written.
+   *
+   * Optional, because a snapshot written before this field existed has none and
+   * must keep working.
+   */
+  ctime?: number
   slug: string
   title?: string
   aliases?: string[]
@@ -123,6 +142,25 @@ export interface SnapshotSite {
   showOutline: boolean
   showBacklinks: boolean
   showTags: boolean
+  /**
+   * The block of metadata about the page itself: when it was created, when it
+   * was last updated, and the frontmatter fields a generator chooses to print.
+   *
+   * Off by default, which is what Obsidian Publish does: it shows none of this.
+   * It is an option rather than a decision because a garden and a changelog
+   * want opposite answers, and because a generator that has real dates for a
+   * note should be able to say so.
+   */
+  showPageMetadata: boolean
+  /**
+   * Links to the previous and next page at the foot of each one.
+   *
+   * Intent, not layout: a generator with no such component ignores it, which is
+   * the same contract every option here has. What counts as "next" is the
+   * generator's business too, and the only sensible answer is the order its own
+   * navigation already uses.
+   */
+  showPrevNext: boolean
   analytics: SnapshotAnalytics
 }
 
@@ -226,7 +264,9 @@ export async function listObjects(destination: Pick<Destination, 'list'>): Promi
  * Everything about a snapshot that decides whether the site needs rebuilding:
  * which paths exist, what content each holds, where each one lives, every other
  * address each one answers at, and the site block. Deliberately not the
- * timestamp. See `sameContent`.
+ * timestamps: neither `mtime` nor `ctime` is in here, so touching a file, or
+ * restoring a vault from a backup that reset every creation date, does not cost
+ * a build. See `sameContent`.
  *
  * Legacy URLs are in here for the same reason slugs are: turning them on adds a
  * page to the site at every old address, and a publish that decided nothing had

@@ -233,6 +233,11 @@ export const DEFAULT_SETTINGS: Settings = {
     showOutline: true,
     showBacklinks: true,
     showTags: true,
+    // Off, the way Obsidian Publish is: a created date is worth showing only
+    // where it is a real one, and a generator that has to guess at it prints
+    // the day of the build on every page.
+    showPageMetadata: false,
+    showPrevNext: true,
     analytics: { provider: 'none', id: '' },
   },
   // Clean URLs, and nothing else, for everyone who is not migrating.

@@ -55,7 +55,7 @@ function makeBucket({ files, links = {}, redirects = [], corrupt = null, site = 
     parent: null,
     createdAt: Date.now(),
     generator: { plugin: 'open-publish', version: '0.1.0' },
-    site: { title: 'My Notes', showGraph: true, showBacklinks: true, showSearch: true, showOutline: true, showTags: true, ...site },
+    site: { title: 'My Notes', showGraph: true, showBacklinks: true, showSearch: true, showOutline: true, showTags: true, showPageMetadata: false, showPrevNext: true, ...site },
     files: snapshotFiles,
     links,
     redirects,
@@ -330,6 +330,42 @@ test('an older snapshot missing new options gets defaults, not silent switch-off
       // left-to-right site it has always built.
       assert.match(opSite, /"locale": "en-US"/)
       assert.match(opSite, /"dir": "ltr"/)
+      // And the two newest, which arrive the same way. `showPageMetadata`
+      // defaults *off*, so this is the one place the rule cuts the other way:
+      // a snapshot that predates it gets no metadata block rather than one.
+      assert.match(opSite, /"showPageMetadata": false/)
+      assert.match(opSite, /"showPrevNext": true/)
+    },
+  )
+})
+
+test('the metadata toggle reaches the module the layout reads', async () => {
+  await withBucket(
+    { files: { 'a.md': { content: 'a', slug: 'a' } }, site: { showPageMetadata: true } },
+    async ({ cwd, env }) => {
+      const result = await runScript('fetch-content.mjs', cwd, env)
+      assert.equal(result.code, 0, result.stderr)
+      const opSite = await readFile(join(cwd, 'op-site.ts'), 'utf8')
+      assert.match(opSite, /"showPageMetadata": true/)
+      assert.doesNotMatch(result.stdout, /ignoring site option/, 'it is an option this starter knows')
+    },
+  )
+})
+
+/**
+ * Quartz has no previous/next component, so this option has nothing to render.
+ * Carrying it anyway is the contract in `docs/architecture.md`: options are
+ * intent, and a starter that cannot express one ignores it rather than
+ * reporting it as unknown, which would teach the user their plugin is too new.
+ */
+test('an option this starter carries but cannot render is not reported as unknown', async () => {
+  await withBucket(
+    { files: { 'a.md': { content: 'a', slug: 'a' } }, site: { showPrevNext: false } },
+    async ({ cwd, env }) => {
+      const result = await runScript('fetch-content.mjs', cwd, env)
+      assert.equal(result.code, 0, result.stderr)
+      assert.match(await readFile(join(cwd, 'op-site.ts'), 'utf8'), /"showPrevNext": false/)
+      assert.doesNotMatch(result.stdout, /ignoring site option/)
     },
   )
 })

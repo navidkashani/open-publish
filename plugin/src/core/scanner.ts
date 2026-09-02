@@ -204,6 +204,15 @@ export async function scanVault(options: ScanOptions): Promise<ScanResult> {
       hash,
       size: file.stat.size,
       mtime: file.stat.mtime,
+      /**
+       * Both times, so a starter can date a note without inventing one. A vault
+       * fetched from a snapshot is written fresh to a scratch directory with no
+       * git history, so every fallback a generator has of its own collapses to
+       * the moment of the build: without this, every note on the site reads as
+       * created the day it was last deployed. See `SnapshotFile.ctime` for why
+       * this is best effort rather than authoritative.
+       */
+      ctime: file.stat.ctime,
       slug: slugByPath.get(path) as string,
     }
     if (path.toLowerCase().endsWith('.md')) Object.assign(entry, noteMetadata(resolver, path))

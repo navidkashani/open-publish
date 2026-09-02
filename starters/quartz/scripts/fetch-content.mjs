@@ -198,6 +198,8 @@ const DEFAULT_SITE = {
   showOutline: true,
   showBacklinks: true,
   showTags: true,
+  showPageMetadata: false,
+  showPrevNext: true,
   analytics: { provider: 'none', id: '' },
 }
 

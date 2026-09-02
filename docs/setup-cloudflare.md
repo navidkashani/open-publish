@@ -75,9 +75,22 @@ needs and that two devices can publish safely.
    | `OP_ACCESS_KEY_ID` | read-only key ID |
    | `OP_SECRET_ACCESS_KEY` | read-only secret, mark it **encrypted** |
    | `OP_PREFIX` | only if you set a key prefix in the plugin |
+   | `OP_SITE_URL` | the address readers use: `https://<project>.pages.dev`, or your own domain |
 
    The setup guide in Obsidian prints these with your own values filled in, and
    has a Copy button.
+
+   **`OP_SITE_URL` is required here, and the build stops without it.** Pages
+   injects five variables and none of them carries your site's stable address:
+   `CF_PAGES_URL` is the *deployment's* own URL, a fresh hash subdomain minted on
+   every deploy (`2f8bfad6.my-notes.pages.dev`) which Cloudflare serves with
+   `x-robots-tag: noindex`. Used as the site address it becomes every page's
+   canonical link, its `og:url`, every entry in the sitemap and the `Sitemap:`
+   line in `robots.txt`: the whole site telling search engines that the real
+   version of each page lives at a host they are forbidden to index. The usual
+   result of that contradiction is the site dropping out of the index, which is
+   the exact opposite of what preserving your URLs was for. There is nothing to
+   derive the right answer from, so the build asks rather than guesses.
 
 > **Why the plugin does not ask for the read-only key.** It never uses it: only
 > the build does. Keeping a copy would put both tokens in the same place and
@@ -104,13 +117,13 @@ allow 500 a month, and a test button should not spend one uninvited.
 10. Optional: **Custom domains → Set up a domain**. Cloudflare handles DNS and
     TLS.
 
-    One extra step that is easy to miss. A custom domain moves the pages, but
-    the build still learns its address from `CF_PAGES_URL`, so the feed, the
-    sitemap and the 404 page keep pointing at `*.pages.dev`. Nothing fails, and
-    nobody notices until someone subscribes. Add `OP_SITE_URL` with your real
-    address to the environment variables from step 8. If the site is served
-    from a sub-path rather than a domain root, add `OP_SITE_ROOT` as well, e.g.
-    `/notes`.
+    **Change `OP_SITE_URL` before you move DNS, not after.** A custom domain
+    moves the pages; nothing moves the address in step 8, so until you edit it
+    every canonical link, `og:url` and sitemap entry on the new domain still
+    names `*.pages.dev`, and a search engine reading them concludes the new
+    domain is a duplicate of the old one. Edit it in the environment variables
+    from step 8 and redeploy. If the site is served from a sub-path rather than
+    a domain root, add `OP_SITE_ROOT` as well, e.g. `/notes`.
 
 ---
 
