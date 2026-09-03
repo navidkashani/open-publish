@@ -482,6 +482,11 @@ const SPECIAL = {
   // row. Listing it twice would be telling somebody the same thing twice.
   dir: null,
   nav: 'Navigation order',
+  // Derived from where the notes are, so it cannot change on its own: renaming
+  // a folder in Obsidian moves every note inside it, and those moves are
+  // already in the file list this sits beside. A row here would say the same
+  // thing a second time, which is the reason `dir` above says nothing either.
+  folders: null,
   analytics: 'Analytics',
 } satisfies Record<Exclude<keyof SnapshotSite, SiteBooleanKey>, string | null>
 

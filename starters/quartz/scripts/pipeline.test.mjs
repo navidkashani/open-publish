@@ -415,6 +415,52 @@ test('a snapshot with no navigation block still builds, with both lists empty', 
   )
 })
 
+test('the folder names reach the module the layout reads', async () => {
+  await withBucket(
+    {
+      files: { 'a.md': { content: 'a', slug: 'a' } },
+      site: { folders: { 'wisdom-approaches/index': 'Wisdom & Approaches' } },
+    },
+    async ({ cwd, env }) => {
+      const result = await runScript('fetch-content.mjs', cwd, env)
+      assert.equal(result.code, 0, result.stderr)
+      const opSite = await readFile(join(cwd, 'op-site.ts'), 'utf8')
+      assert.match(opSite, /"wisdom-approaches\/index": "Wisdom & Approaches"/)
+      assert.doesNotMatch(result.stdout, /ignoring site option/, 'it is an option this starter knows')
+    },
+  )
+})
+
+test('a snapshot with no folder names still builds, with an empty map', async () => {
+  await withBucket(
+    { files: { 'a.md': { content: 'a', slug: 'a' } }, site: { title: 'Old Snapshot' } },
+    async ({ cwd, env }) => {
+      const result = await runScript('fetch-content.mjs', cwd, env)
+      assert.equal(result.code, 0, result.stderr)
+      assert.match(await readFile(join(cwd, 'op-site.ts'), 'utf8'), /"folders": \{\}/)
+    },
+  )
+})
+
+test('a folder name that is not a pair of strings is dropped rather than rendered', async () => {
+  // Written straight into a page, so a snapshot off the network is not trusted
+  // to have put strings in it.
+  await withBucket(
+    {
+      files: { 'a.md': { content: 'a', slug: 'a' } },
+      site: { folders: { 'good/index': 'Good', 'bad/index': 42, '': 'Nameless' } },
+    },
+    async ({ cwd, env }) => {
+      const result = await runScript('fetch-content.mjs', cwd, env)
+      assert.equal(result.code, 0, result.stderr)
+      const opSite = await readFile(join(cwd, 'op-site.ts'), 'utf8')
+      assert.match(opSite, /"good\/index": "Good"/)
+      assert.doesNotMatch(opSite, /bad\/index/)
+      assert.doesNotMatch(opSite, /Nameless/)
+    },
+  )
+})
+
 test('half a navigation block does not leave the other half undefined', async () => {
   await withBucket(
     { files: { 'a.md': { content: 'a', slug: 'a' } }, site: { nav: { order: ['a'] } } },

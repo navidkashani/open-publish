@@ -204,6 +204,9 @@ const DEFAULT_SITE = {
   // as an option this starter has never heard of. Empty is the whole default:
   // no arrangement, nothing hidden, and the explorer left exactly as it was.
   nav: { order: [], hidden: [] },
+  // Same reason as `nav` above: present so it is copied across rather than
+  // dropped as an option this starter has never heard of.
+  folders: {},
   analytics: { provider: 'none', id: '' },
 }
 
@@ -222,6 +225,7 @@ async function applySiteConfig(rawSite) {
     order: navList(rawSite?.nav?.order),
     hidden: navList(rawSite?.nav?.hidden),
   }
+  site.folders = folderNames(rawSite?.folders)
 
   const unknown = Object.keys(rawSite ?? {}).filter((key) => !(key in DEFAULT_SITE))
   if (unknown.length > 0) {
@@ -239,6 +243,22 @@ async function applySiteConfig(rawSite) {
   await writeFile('op-site.ts', body, 'utf8')
   console.log('[open-publish] site options written to op-site.ts')
   return site
+}
+
+/**
+ * Strings to strings, and nothing else. A snapshot is data off the network, and
+ * these names are written straight into the page, so anything that is not a
+ * pair of non-empty strings is dropped rather than rendered.
+ */
+function folderNames(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+  const names = {}
+  for (const [slug, name] of Object.entries(value)) {
+    if (typeof slug === 'string' && slug.length > 0 && typeof name === 'string' && name.length > 0) {
+      names[slug] = name
+    }
+  }
+  return names
 }
 
 /** Slugs only: a snapshot is data off the network, so neither list is trusted. */

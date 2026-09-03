@@ -213,6 +213,20 @@ export interface SnapshotSite {
    * IDs and never spends a build on a feature it does not use.
    */
   nav?: SnapshotNav
+  /**
+   * What to call each folder, for the folders whose name a generator cannot
+   * work out on its own.
+   *
+   * Keyed by the slug of the folder's index page, as `nav` is, and carrying the
+   * name only: `{"wisdom-approaches/index": "Wisdom & Approaches"}`. A folder
+   * has no file, so nothing else in this snapshot carries a title for one, and
+   * a generator rebuilding the tree from slugs would otherwise print the
+   * address instead of the name.
+   *
+   * Absent when there is nothing to say, which is a vault whose folders are all
+   * already lowercase and hyphenated. See `resolveFolderNames`.
+   */
+  folders?: Record<string, string>
   analytics: SnapshotAnalytics
 }
 

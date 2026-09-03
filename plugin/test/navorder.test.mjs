@@ -21,6 +21,7 @@ import {
   migrateNavPaths,
   readNavHidden,
   readNavOrder,
+  resolveFolderNames,
   resolveNav,
 } from '../src/core/navorder.ts'
 
@@ -49,10 +50,11 @@ test('nothing arranged means nothing carried, so an untouched vault costs no byt
 
 test('the default is the generator\'s own: folders first, then notes, each natural', () => {
   const tree = buildNavTree(VAULT, EMPTY)
-  // A folder with no index page is labelled by its slug segment, lowercase,
-  // because that is exactly what the generator will print in the sidebar. This
-  // dialog shows the site, not the vault.
-  assert.deepEqual(labels(tree), ['notes', 'Apple', 'Zebra'])
+  // A folder with no index page is labelled by the vault's own name for it.
+  // The slug is the address it is served at, not what anybody calls it, and a
+  // generator is sent the difference rather than left to guess. See
+  // `resolveFolderNames`.
+  assert.deepEqual(labels(tree), ['Notes', 'Apple', 'Zebra'])
   assert.deepEqual(labels(tree[0].children), ['Alpha', 'Beta'])
 })
 
@@ -137,7 +139,7 @@ test('an index note gives its folder the title it wrote, not the word "index"', 
   assert.deepEqual(labels(tree), ['Field Guide', 'Apple'])
 
   const literal = [note('Notes/index.md', 'notes/index', 'index'), note('Apple.md', 'apple', 'Apple')]
-  assert.deepEqual(labels(buildNavTree(literal, EMPTY)), ['notes', 'Apple'], 'the folder segment, as Quartz does')
+  assert.deepEqual(labels(buildNavTree(literal, EMPTY)), ['Notes', 'Apple'], 'the folder, not the filename')
   assert.deepEqual(buildNavTree(literal, EMPTY)[0].paths, ['Notes', 'Notes/index.md'])
 })
 
@@ -291,7 +293,7 @@ test('a homepage that lives inside a folder draws at the root, and claims no fol
   // "notes" would store a decision against the homepage's own path.
   const notes = [note('Notes/Home.md', 'index', 'Home'), note('Notes/Alpha.md', 'notes/alpha', 'Alpha')]
   const tree = buildNavTree(notes, EMPTY)
-  assert.deepEqual(labels(tree), ['notes', 'Home'])
+  assert.deepEqual(labels(tree), ['Notes', 'Home'])
   assert.deepEqual(tree[0].paths, ['Notes'])
   assert.deepEqual(tree[1].paths, ['Notes/Home.md'])
   assert.deepEqual(labels(tree[0].children), ['Alpha'], 'and it is not also inside the folder')
@@ -302,6 +304,46 @@ test('a folder index page is still a folder, because the guard is on the depth',
   const tree = buildNavTree(notes, EMPTY)
   assert.equal(tree[0].key, 'notes/index')
   assert.equal(tree[0].isFolder, true)
+})
+
+// --- what a folder is called -----------------------------------------------
+
+test('a folder is named by the vault, because no file carries a name for one', () => {
+  const notes = [
+    note('Wisdom & Approaches/Integrity.md', 'wisdom-approaches/integrity', 'Integrity'),
+    note('Notes/Alpha.md', 'notes/alpha', 'Alpha'),
+  ]
+  assert.deepEqual(resolveFolderNames(notes), {
+    'wisdom-approaches/index': 'Wisdom & Approaches',
+    'notes/index': 'Notes',
+  })
+})
+
+test('a folder already called what its slug says costs nothing to send', () => {
+  // The whole reason only the differences travel: a vault whose folders are
+  // lowercase and hyphenated emits nothing, so it keeps the snapshot id it had.
+  const notes = [note('notes/alpha.md', 'notes/alpha', 'Alpha')]
+  assert.deepEqual(resolveFolderNames(notes), {})
+})
+
+test('an index page outranks the folder name, because somebody wrote it down', () => {
+  const notes = [note('Notes/index.md', 'notes/index', 'Field Guide')]
+  assert.deepEqual(resolveFolderNames(notes), { 'notes/index': 'Field Guide' })
+})
+
+test('a nested folder is named too, and keyed by its whole slug path', () => {
+  const notes = [note('Recommended/Anime/One Piece.md', 'recommended/anime/one-piece', 'One Piece')]
+  assert.deepEqual(resolveFolderNames(notes), {
+    'recommended/index': 'Recommended',
+    'recommended/anime/index': 'Anime',
+  })
+})
+
+test('a folder no vault path lines up with is not named, rather than guessed at', () => {
+  // Every note in it arrived by permalink, so there is no folder on disk to
+  // take a name from and the generator's own guess is as good as anything.
+  const notes = [note('Drafts/Essay.md', 'writing/essay', 'Essay')]
+  assert.deepEqual(resolveFolderNames(notes), {})
 })
 
 // --- renames ---------------------------------------------------------------
@@ -396,7 +438,7 @@ test('a permalink that moves a note to another folder moves it in the sidebar to
     note('Writing/Other.md', 'writing/other', 'Other'),
   ]
   const tree = buildNavTree(notes, EMPTY)
-  assert.deepEqual(labels(tree), ['writing'])
+  assert.deepEqual(labels(tree), ['Writing'])
   assert.deepEqual(labels(tree[0].children), ['Essay', 'Other'])
   // And the folder takes the vault path that really is that folder. Taking
   // "Drafts" from the visiting note would mean hiding "writing" hid "Drafts",

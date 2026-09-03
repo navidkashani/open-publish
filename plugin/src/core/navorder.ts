@@ -221,6 +221,42 @@ export function resolveNav(notes: NavNote[], settings: NavSettings): SnapshotNav
 }
 
 /**
+ * What each folder should be called, for the folders whose name a generator
+ * cannot work out on its own.
+ *
+ * A folder has no file, so nothing in the snapshot carries a title for one. A
+ * generator rebuilding the tree from slugs can only call it `wisdom-approaches`,
+ * where the vault calls it "Wisdom & Approaches". This is the map that closes
+ * that gap, and it is why a jotter site had to keep the same names typed out by
+ * hand in its own config.
+ *
+ * Keyed the way every other folder reference in this contract is: by the slug
+ * of the folder's index page, whether or not one exists. See `SnapshotNav`.
+ *
+ * Only the folders that differ are carried, and only the name, never the whole
+ * tree. A folder already called what its slug segment says tells a generator
+ * nothing it has not already worked out, so a vault whose folders are all
+ * lowercase and hyphenated emits nothing at all and keeps the snapshot id it
+ * always had.
+ */
+export function resolveFolderNames(notes: NavNote[]): Record<string, string> {
+  const names: Record<string, string> = {}
+
+  const walk = (nodes: NavNode[]): void => {
+    for (const node of nodes) {
+      if (node.isFolder) {
+        const slugPath = node.key.slice(0, -'/index'.length)
+        const segment = slugPath.slice(slugPath.lastIndexOf('/') + 1)
+        if (node.label !== segment) names[node.key] = node.label
+      }
+      walk(node.children)
+    }
+  }
+  walk(buildNodes(notes))
+  return names
+}
+
+/**
  * One parent's siblings, in the order they should appear.
  *
  * The three steps in the order they have to run in. Frontmatter is last because
@@ -393,12 +429,25 @@ function buildNodes(notes: NavNote[]): NavNode[] {
     if (isFolder && draft.folderPath) paths.push(draft.folderPath)
     if (draft.note) paths.push(draft.note.path)
 
+    // What a folder is called when no index page has named it: the vault's own
+    // name for it, not the slug segment. The two differ for any folder that is
+    // not already lowercase and hyphenated, and the slug is the wrong one to
+    // show: "Wisdom & Approaches" is what the vault calls it and what a reader
+    // should see, where `wisdom-approaches` is only the address it is served at.
+    //
+    // A generator cannot work this out for itself, because a folder has no file
+    // to carry a title, which is what `resolveFolderNames` exists to send.
+    const folderName =
+      isFolder && draft.folderPath
+        ? draft.folderPath.slice(draft.folderPath.lastIndexOf('/') + 1)
+        : undefined
+
     return {
       key: isFolder ? `${slugPath}/index` : slugPath,
       paths,
       // Quartz shows a note's title, except the literal "index", which is the
       // filename of a folder page rather than a name anybody chose.
-      label: title && title !== 'index' ? title : segment,
+      label: title && title !== 'index' ? title : (folderName ?? segment),
       isFolder,
       children: [...draft.children.values()].map(convert),
       ...(draft.note?.order !== undefined ? { order: draft.note.order } : {}),

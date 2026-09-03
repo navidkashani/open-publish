@@ -107,6 +107,14 @@ const snapshot = {
       order: ['index', 'notes/index', 'wisdom-approaches/index'],
       hidden: ['wisdom-approaches/index'],
     },
+    // What the vault calls these folders. `wisdom-approaches` is the address,
+    // and it is all Quartz can print on its own: a folder has no file to carry
+    // a title, so the trie falls back to the slug segment. The ampersand and
+    // the spaces are the point, being exactly what cannot survive a slug.
+    folders: {
+      'wisdom-approaches/index': 'Wisdom & Approaches',
+      'notes/index': 'Notes',
+    },
   },
   files: snapFiles, links, redirects: [{ from: 'notes/old-name', to: 'notes/zettelkasten' }],
 }
@@ -262,6 +270,16 @@ if (dataFns) {
     'the rebuilt comparator puts the arranged folders first, in the arranged order',
     sorted[0] === 'notes/index' && sorted[1] === 'wisdom-approaches/index',
   )
+  // The rename, which only a real build can show: `mapFn` makes the same trip
+  // through `.toString()` as the other two, and Quartz runs it before the sort,
+  // so a folder ends up sorted under the name a reader sees.
+  const mapFn = new Function('return ' + decoded.mapFn)()
+  const renamed = node('wisdom-approaches/index', true)
+  mapFn(renamed)
+  check('the rebuilt rename calls a folder what the vault calls it', renamed.displayName === 'Wisdom & Approaches')
+  const untouched = node('attachments/index', true)
+  mapFn(untouched)
+  check('and leaves a folder it does not name alone', untouched.displayName === 'index')
   check('the rebuilt filter drops the hidden folder', filterFn(node('wisdom-approaches/index', true)) === false)
   check('and still drops the tag index, which is Quartz\'s own rule', filterFn(node('tags', true)) === false)
   check('and keeps everything else', filterFn(node('notes/index', true)) === true)

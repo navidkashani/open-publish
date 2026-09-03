@@ -27,7 +27,7 @@ import {
   tooLargeToUploadMessage,
   tooManyFilesMessage,
 } from './limits.ts'
-import { migrateNavPaths, readNavHidden, readNavOrder, resolveNav } from './navorder.ts'
+import { migrateNavPaths, readNavHidden, readNavOrder, resolveFolderNames, resolveNav } from './navorder.ts'
 import type { NavNote, NavSettings } from './navorder.ts'
 import { getPublishFlag, homepageWarnings, isAlwaysExcluded, isSupportedFile } from './selection.ts'
 import type { SelectionRules } from './selection.ts'
@@ -285,13 +285,21 @@ export async function scanVault(options: ScanOptions): Promise<ScanResult> {
     }
     return false
   })
-  const nav = resolveNav(navNotes(app, files), navRenamed ?? storedNav)
+  const notes = navNotes(app, files)
+  const nav = resolveNav(notes, navRenamed ?? storedNav)
+  // What each folder is called, which is a fact about the vault rather than
+  // anything anybody arranged, so it is worked out whether or not the manager
+  // has ever been opened.
+  const folders = resolveFolderNames(notes)
   const publishedSite: SnapshotSite = { ...site }
   // Deleted rather than left empty: a vault that has never arranged anything
   // must produce the snapshot ID it always did, or upgrading the plugin would
-  // spend everybody a build on a feature nobody switched on.
+  // spend everybody a build on a feature nobody switched on. The same rule for
+  // folder names, which a vault of lowercase hyphenated folders has none of.
   if (nav) publishedSite.nav = nav
   else delete publishedSite.nav
+  if (Object.keys(folders).length > 0) publishedSite.folders = folders
+  else delete publishedSite.folders
 
   const createdAt = Date.now()
   const id = await computeSnapshotId(files, publishedSite, createdAt)

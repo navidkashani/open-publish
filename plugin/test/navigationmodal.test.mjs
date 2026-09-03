@@ -89,7 +89,15 @@ function press(modal, label) {
 
 test('the tree opens in the order the site will use: folders first, then notes', () => {
   const { modal } = open()
-  assert.deepEqual(names(modal), ['notes', 'Alpha', 'Beta', 'Apple', 'Zebra'])
+  assert.deepEqual(names(modal), ['Notes', 'Alpha', 'Beta', 'Apple', 'Zebra'])
+})
+
+test('a folder is called what the vault calls it, not what its address says', () => {
+  // `Wisdom & Approaches` is served at `/wisdom-approaches`, and the address is
+  // not its name. Nothing in a snapshot carries a title for a folder, so the
+  // plugin sends the difference; see `resolveFolderNames`.
+  const { modal } = open({ files: ['Wisdom & Approaches/Integrity.md'] })
+  assert.deepEqual(names(modal), ['Wisdom & Approaches', 'Integrity'])
 })
 
 test('moving a row down stores the whole sibling list, not just the pair', () => {
@@ -100,14 +108,14 @@ test('moving a row down stores the whole sibling list, not just the pair', () =>
   // place to keep.
   assert.deepEqual(plugin.settings.site.nav.order, ['Notes', 'Zebra.md', 'Apple.md'])
   assert.equal(plugin.calls.saves, 1)
-  assert.deepEqual(names(modal), ['notes', 'Alpha', 'Beta', 'Zebra', 'Apple'])
+  assert.deepEqual(names(modal), ['Notes', 'Alpha', 'Beta', 'Zebra', 'Apple'])
 })
 
 test('a note can be moved above the folder it sits beside', () => {
   const { modal, plugin } = open()
   press(modal, 'Move Apple up')
   assert.deepEqual(plugin.settings.site.nav.order, ['Apple.md', 'Notes', 'Zebra.md'])
-  assert.deepEqual(names(modal), ['Apple', 'notes', 'Alpha', 'Beta', 'Zebra'])
+  assert.deepEqual(names(modal), ['Apple', 'Notes', 'Alpha', 'Beta', 'Zebra'])
 })
 
 test('the first row cannot go up and the last cannot go down', () => {
@@ -128,7 +136,7 @@ test('moving happens within a parent only: a child never leaves its folder', () 
   const { modal, plugin } = open()
   press(modal, 'Move Beta up')
   assert.deepEqual(plugin.settings.site.nav.order, ['Notes/Beta.md', 'Notes/Alpha.md'])
-  assert.deepEqual(names(modal), ['notes', 'Beta', 'Alpha', 'Apple', 'Zebra'])
+  assert.deepEqual(names(modal), ['Notes', 'Beta', 'Alpha', 'Apple', 'Zebra'])
 })
 
 test('a row frontmatter has already placed says so and offers no move', () => {
@@ -146,10 +154,10 @@ test('a neighbour cannot be swapped past a row frontmatter has placed either', (
   // Half a move is worse than none: the swap would appear to work and the
   // resolved order would put the numbered note straight back on top.
   const { modal } = open({ frontmatter: { 'Apple.md': { 'nav-order': 1 } } })
-  assert.deepEqual(names(modal), ['Apple', 'notes', 'Alpha', 'Beta', 'Zebra'])
-  const folder = rows(modal).find((row) => row.name === 'notes')
-  assert.equal(folder.buttons.find((button) => button.label === 'Move notes up').enabled, false)
-  assert.equal(folder.buttons.find((button) => button.label === 'Move notes down').enabled, true)
+  assert.deepEqual(names(modal), ['Apple', 'Notes', 'Alpha', 'Beta', 'Zebra'])
+  const folder = rows(modal).find((row) => row.name === 'Notes')
+  assert.equal(folder.buttons.find((button) => button.label === 'Move Notes up').enabled, false)
+  assert.equal(folder.buttons.find((button) => button.label === 'Move Notes down').enabled, true)
 })
 
 // --- hiding ----------------------------------------------------------------
@@ -178,7 +186,7 @@ test('turning off "show hidden pages" is how the sidebar gets previewed', () => 
 
 test('hiding a folder is allowed, and the dialog says what it takes with it', () => {
   const { modal, plugin } = open()
-  press(modal, 'Hide notes in navigation')
+  press(modal, 'Hide Notes in navigation')
   assert.deepEqual(plugin.settings.site.nav.hidden, ['Notes'])
   const note = find(modal.contentEl, byClass('op-nav-note'))
   assert.match(note.textContent, /still published/)
@@ -243,7 +251,7 @@ test('an order past the threshold is warned about in the dialog itself', () => {
 
 test('the homepage is a row like any other, badged so, and can be arranged', () => {
   const { modal, plugin } = open({ homepage: 'Apple.md' })
-  assert.deepEqual(names(modal), ['notes', 'Alpha', 'Beta', 'Apple', 'Zebra'])
+  assert.deepEqual(names(modal), ['Notes', 'Alpha', 'Beta', 'Apple', 'Zebra'])
   assert.deepEqual(rows(modal).find((row) => row.name === 'Apple').badges, ['homepage'])
   press(modal, 'Move Apple up')
   assert.deepEqual(plugin.settings.site.nav.order, ['Apple.md', 'Notes', 'Zebra.md'])
@@ -253,7 +261,7 @@ test('a homepage that lives in a folder draws at the root, where the site serves
   // The badge is doing real work here rather than decorating: the row is not
   // where the file is, and without it that reads as a bug instead of an answer.
   const { modal } = open({ files: [...VAULT.files, 'Notes/Home.md'], homepage: 'Notes/Home.md' })
-  assert.deepEqual(names(modal), ['notes', 'Alpha', 'Beta', 'Apple', 'Home', 'Zebra'])
+  assert.deepEqual(names(modal), ['Notes', 'Alpha', 'Beta', 'Apple', 'Home', 'Zebra'])
   assert.deepEqual(rows(modal).find((row) => row.name === 'Home').badges, ['homepage'])
 })
 
@@ -267,17 +275,17 @@ test('the homepage can be hidden, like anything else in the list', () => {
 
 test('folders start closed, so a big vault opens showing its shape', () => {
   const { modal } = open()
-  assert.equal(twistyFor(modal, 'notes').hasClass('op-twisty-open'), false)
+  assert.equal(twistyFor(modal, 'Notes').hasClass('op-twisty-open'), false)
   assert.equal(visible(rowFor(modal, 'Alpha')), false, 'built, but not on screen until it is asked for')
   assert.equal(visible(rowFor(modal, 'Apple')), true)
 })
 
 test('the twisty opens a folder', () => {
   const { modal } = open()
-  click(twistyFor(modal, 'notes'))
-  assert.equal(twistyFor(modal, 'notes').hasClass('op-twisty-open'), true)
+  click(twistyFor(modal, 'Notes'))
+  assert.equal(twistyFor(modal, 'Notes').hasClass('op-twisty-open'), true)
   assert.equal(visible(rowFor(modal, 'Alpha')), true)
-  click(twistyFor(modal, 'notes'))
+  click(twistyFor(modal, 'Notes'))
   assert.equal(visible(rowFor(modal, 'Alpha')), false)
 })
 
@@ -286,10 +294,10 @@ test('an open folder stays open across a move, or arranging one would be unusabl
   // folders are open, the tree would slam shut under the row being moved and
   // arranging a folder of ten would be twenty clicks of re-opening it.
   const { modal } = open()
-  click(twistyFor(modal, 'notes'))
+  click(twistyFor(modal, 'Notes'))
   press(modal, 'Move Beta up')
-  assert.deepEqual(names(modal), ['notes', 'Beta', 'Alpha', 'Apple', 'Zebra'])
-  assert.equal(twistyFor(modal, 'notes').hasClass('op-twisty-open'), true)
+  assert.deepEqual(names(modal), ['Notes', 'Beta', 'Alpha', 'Apple', 'Zebra'])
+  assert.equal(twistyFor(modal, 'Notes').hasClass('op-twisty-open'), true)
   assert.equal(visible(rowFor(modal, 'Beta')), true)
 })
 
@@ -308,13 +316,13 @@ test('dropping a row onto a sibling takes that sibling\'s place', () => {
   const { modal, plugin } = open()
   drag(modal, 'Apple', 'Zebra')
   assert.deepEqual(plugin.settings.site.nav.order, ['Notes', 'Zebra.md', 'Apple.md'])
-  assert.deepEqual(names(modal), ['notes', 'Alpha', 'Beta', 'Zebra', 'Apple'])
+  assert.deepEqual(names(modal), ['Notes', 'Alpha', 'Beta', 'Zebra', 'Apple'])
   assert.equal(plugin.calls.saves, 1)
 })
 
 test('a note can be dragged above the folder it sits beside', () => {
   const { modal, plugin } = open()
-  drag(modal, 'Zebra', 'notes')
+  drag(modal, 'Zebra', 'Notes')
   assert.deepEqual(plugin.settings.site.nav.order, ['Zebra.md', 'Notes', 'Apple.md'])
 })
 
@@ -338,7 +346,7 @@ test('the line falls below the target dragging down, and above it dragging up', 
 
   const up = open().modal
   dispatch(rowFor(up, 'Zebra'), 'dragstart')
-  const above = rowFor(up, 'notes')
+  const above = rowFor(up, 'Notes')
   dispatch(above, 'dragover')
   assert.equal(above.hasClass('op-nav-drop-before'), true)
 })
@@ -354,7 +362,7 @@ test('leaving a row takes its line with it', () => {
 
 test('a drop onto a row in another folder is refused, and draws no line', () => {
   const { modal, plugin } = open()
-  click(twistyFor(modal, 'notes'))
+  click(twistyFor(modal, 'Notes'))
   dispatch(rowFor(modal, 'Alpha'), 'dragstart')
   const target = rowFor(modal, 'Apple')
   const over = dispatch(target, 'dragover')

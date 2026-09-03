@@ -1,6 +1,6 @@
 /**
- * The sort and filter Quartz's explorer is handed, put through the exact
- * transform the browser performs on them.
+ * The sort, the filter and the rename Quartz's explorer is handed, put through
+ * the exact transform the browser performs on them.
  *
  * `Explorer.tsx` stringifies them into a `data-data-fns` attribute and
  * `explorer.inline.ts` rebuilds them with `new Function("return " + src)()`. A
@@ -13,12 +13,12 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 
-import { navExplorerOptions, navFilterFn, navSortFn } from '../nav-sort.ts'
+import { navExplorerOptions, navFilterFn, navMapFn, navSortFn } from '../nav-sort.ts'
 
 /** Exactly what `explorer.inline.ts` does with the attribute it reads back. */
 const rebuild = (fn) => new Function('return ' + fn.toString())()
 
-/** As much of Quartz's `FileTrieNode` as either function touches. */
+/** As much of Quartz's `FileTrieNode` as any of the three functions touches. */
 const node = (slug, { isFolder = false, displayName } = {}) => ({
   slug,
   slugSegment: slug.split('/').pop(),
@@ -88,15 +88,67 @@ test('an empty arrangement produces no options at all, so the explorer is untouc
   // call as `Explorer()`, down to the rendered byte.
   assert.equal(navExplorerOptions(undefined), undefined)
   assert.equal(navExplorerOptions({ order: [], hidden: [] }), undefined)
+  assert.equal(navExplorerOptions({ order: [], hidden: [] }, {}), undefined)
   assert.notEqual(navExplorerOptions({ order: ['a'], hidden: [] }), undefined)
   assert.notEqual(navExplorerOptions({ order: [], hidden: ['a'] }), undefined)
+  assert.notEqual(
+    navExplorerOptions(undefined, { 'notes/index': 'Notes' }),
+    undefined,
+    'names alone are worth options: nothing else can tell Quartz what a folder is called',
+  )
 })
 
-test('the options carry both functions, and both of them round trip', () => {
-  const options = navExplorerOptions({ order: ['b', 'a'], hidden: ['c'] })
+test('the options carry every function they need, and all of them round trip', () => {
+  const options = navExplorerOptions({ order: ['b', 'a'], hidden: ['c'] }, { 'notes/index': 'Notes' })
   assert.deepEqual(sorted(rebuild(options.sortFn), [node('a'), node('b')]), ['b', 'a'])
   assert.equal(rebuild(options.filterFn)(node('c')), false)
   assert.equal(rebuild(options.filterFn)(node('tags')), false)
+  const folder = node('notes/index', { isFolder: true, displayName: 'notes' })
+  rebuild(options.mapFn)(folder)
+  assert.equal(folder.displayName, 'Notes')
+})
+
+test('no names means no mapFn at all, rather than one that renames nothing', () => {
+  const options = navExplorerOptions({ order: ['a'], hidden: [] })
+  assert.equal('mapFn' in options, false, 'the attribute Quartz writes on every page carries no empty map')
+})
+
+// --- what a folder is called -----------------------------------------------
+
+test('the rename survives being stringified and rebuilt, like the other two', () => {
+  const map = rebuild(navMapFn({ 'wisdom-approaches/index': 'Wisdom & Approaches' }))
+  const folder = node('wisdom-approaches/index', { isFolder: true, displayName: 'wisdom-approaches' })
+  map(folder)
+  assert.equal(folder.displayName, 'Wisdom & Approaches')
+})
+
+test('a folder the names do not mention keeps whatever Quartz called it', () => {
+  const map = rebuild(navMapFn({ 'notes/index': 'Notes' }))
+  const other = node('other/index', { isFolder: true, displayName: 'other' })
+  map(other)
+  assert.equal(other.displayName, 'other')
+})
+
+test('a note is untouched, because the names only ever key folders', () => {
+  const map = rebuild(navMapFn({ 'notes/index': 'Notes' }))
+  const note = node('notes/alpha', { displayName: 'Alpha' })
+  map(note)
+  assert.equal(note.displayName, 'Alpha')
+})
+
+test('a folder called __proto__ is renamed like any other', () => {
+  const map = rebuild(navMapFn({ '__proto__/index': 'Prototype' }))
+  const folder = node('__proto__/index', { isFolder: true, displayName: '__proto__' })
+  map(folder)
+  assert.equal(folder.displayName, 'Prototype')
+})
+
+test('a name with a quote in it cannot break out of the source it is embedded in', () => {
+  const name = 'It\'s "Quoted" \\ Done'
+  const map = rebuild(navMapFn({ 'a/index': name }))
+  const folder = node('a/index', { isFolder: true })
+  map(folder)
+  assert.equal(folder.displayName, name)
 })
 
 test('a slug with a quote in it cannot break out of the source it is embedded in', () => {

@@ -19,10 +19,11 @@ const optional = <T>(enabled: boolean, component: T): T[] => (enabled ? [compone
  * Built once and used by both layouts so the two cannot drift apart, and called
  * rather than shared as a value because each layout needs its own component
  * instance. `navExplorerOptions` returns undefined when the snapshot carries no
- * navigation, and `Explorer(undefined)` is the same call as `Explorer()`: a site
- * nobody has arranged renders byte for byte what it always did.
+ * navigation and no folder names, and `Explorer(undefined)` is the same call as
+ * `Explorer()`: a site nobody has arranged, whose folders are already named
+ * after their own addresses, renders byte for byte what it always did.
  */
-const explorer = () => Component.Explorer(navExplorerOptions(site.nav))
+const explorer = () => Component.Explorer(navExplorerOptions(site.nav, site.folders))
 
 export const sharedPageComponents: SharedLayout = {
   head: Component.Head(),

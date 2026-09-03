@@ -35,6 +35,12 @@ export const site = {
    * index page: `notes/index` for the folder published at `/notes`.
    */
   nav: { order: [], hidden: [] },
+  /**
+   * What to call each folder, keyed the same way: `wisdom-approaches/index`.
+   * Empty for a vault whose folders are already named after their own
+   * addresses, which is the only case Quartz can work out for itself.
+   */
+  folders: {},
   analytics: { provider: 'none', id: '' },
 }
 export default site

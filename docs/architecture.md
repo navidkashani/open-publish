@@ -112,10 +112,10 @@ could honour it. That second clause is load-bearing: it is why there is no
 capability-negotiation protocol between plugin and starter. There is nothing to
 negotiate when every option is universal.
 
-Currently seventeen: `title`, `homepage`, `locale`, `dir`, `noIndex`,
+Currently eighteen: `title`, `homepage`, `locale`, `dir`, `noIndex`,
 `showThemeToggle`, `strictLineBreaks`, `showNavigation`, `showSearch`,
 `showGraph`, `showOutline`, `showBacklinks`, `showTags`, `showPageMetadata`,
-`showPrevNext`, `nav`, `analytics`.
+`showPrevNext`, `nav`, `folders`, `analytics`.
 
 The last two are the clearest illustration of the rule and of its limit.
 `showPageMetadata` is honoured by both starters, because both have a block of
@@ -211,6 +211,24 @@ Two things about the shape are load-bearing rather than tidy:
   the plugin states what the site shows, and a generator with no such row ignores
   the line. `verify-build.mjs` puts `index` in the order it builds for real,
   which is the only place that inertness is actually checked.
+
+`folders` is the smallest of them and the least like the rest: not intent at
+all, but a fact the generator cannot reach. Every other name on a site travels
+inside a file. A folder has no file, so a generator rebuilding the tree from
+slugs can only call it by its address, and the sidebar reads `wisdom-approaches`
+where the vault reads "Wisdom & Approaches". So the plugin sends the difference,
+keyed the way folders are keyed everywhere in this contract and carrying only
+the folders whose name is not already their slug segment. A vault of lowercase
+hyphenated folders emits nothing and keeps the snapshot id it had.
+
+It is the panel's own labels that travel, which is what makes the sidebar read
+back exactly what Customize navigation showed, index-page titles included.
+jotter used to work these out for itself by zipping each manifest key against
+its slug, which is good guesswork and is kept as the fallback for older
+snapshots; where the key is present it wins, because it is an answer rather than
+an inference. Quartz has no equivalent to fall back on: it applies the names
+through the explorer's `mapFn`, which runs before the sort, so a renamed folder
+also sorts under the name a reader sees.
 
 If somebody genuinely needs thousands of pages ordered, the escape hatch is to
 patch `contentIndex.tsx` to carry a per-note rank into `ContentDetails`, which is
