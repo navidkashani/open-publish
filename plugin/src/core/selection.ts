@@ -128,3 +128,49 @@ export function getPublishFlag(
   }
   return null
 }
+
+/**
+ * Everything worth saying about the homepage setting, given three facts about
+ * the note it names.
+ *
+ * Pure and separate from the scan because all three answers are decided by
+ * those facts and no vault walking, and because a warning nobody can test is a
+ * warning that quietly stops being true.
+ *
+ * The third one is the reason this stopped being two lines inline. A note set
+ * as the homepage is published at the site root, which means this plugin
+ * *overrules* a `permalink:` in its frontmatter, which is the one place the
+ * two disagree. Whether the starter then honours that is the starter's business:
+ * jotter drops the overruled key, and the Quartz starter honours `permalink`
+ * character for character and would serve the note there instead. Either way
+ * the author wrote two addresses for one note and only one of them can win, so
+ * they are told which, before publishing rather than by comparing URLs
+ * afterwards.
+ *
+ * @param homepage the configured vault path; empty means a generated index
+ * @param facts `exists` in the vault, `published` in this scan's selection, and
+ *   the `permalink` its frontmatter declares, if any
+ */
+export function homepageWarnings(
+  homepage: string,
+  facts: { exists: boolean; published: boolean; permalink?: string },
+): string[] {
+  const path = homepage.trim()
+  if (!path) return []
+
+  if (!facts.exists) return [`"${path}" is set as your homepage but no longer exists in the vault.`]
+  if (!facts.published) {
+    return [
+      `"${path}" is set as your homepage but is not being published, so the site will use a ` +
+        'generated index page instead.',
+    ]
+  }
+
+  const permalink = facts.permalink?.trim()
+  if (!permalink) return []
+  return [
+    `"${path}" is your homepage, so it is published at the site root and the permalink ` +
+      `"${permalink}" in its frontmatter is not where it will be served. Remove that line if ` +
+      'you did not mean to keep it.',
+  ]
+}

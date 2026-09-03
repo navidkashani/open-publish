@@ -27,7 +27,7 @@ import {
   tooLargeToUploadMessage,
   tooManyFilesMessage,
 } from './limits.ts'
-import { getPublishFlag, isAlwaysExcluded, isSupportedFile } from './selection.ts'
+import { getPublishFlag, homepageWarnings, isAlwaysExcluded, isSupportedFile } from './selection.ts'
 import type { SelectionRules } from './selection.ts'
 import { findSlugCollisions, legacyUrlsFor, slugForPath } from './slug.ts'
 import type { UrlStyle } from './slug.ts'
@@ -158,13 +158,25 @@ export async function scanVault(options: ScanOptions): Promise<ScanResult> {
   const blockers: ScanBlocker[] = []
   const warnings: string[] = []
 
-  if (homepage && !selected.has(homepage)) {
-    warnings.push(
-      fileByPath.has(homepage)
-        ? `"${homepage}" is set as your homepage but is not being published, so the site will use a generated index page instead.`
-        : `"${homepage}" is set as your homepage but no longer exists in the vault.`,
-    )
+  /**
+   * Read for the warning only. The slug loop above deliberately keeps its own
+   * narrower read: it honours a string `permalink:` and nothing else, and
+   * widening that here would change where notes are published rather than what
+   * the author is told about it.
+   */
+  const declaredPermalink = (path: string): string | undefined => {
+    const value = app.metadataCache.getCache(path)?.frontmatter?.['permalink']
+    const first = Array.isArray(value) ? value[0] : value
+    return typeof first === 'string' ? first : undefined
   }
+
+  warnings.push(
+    ...homepageWarnings(homepage, {
+      exists: fileByPath.has(homepage),
+      published: selected.has(homepage),
+      permalink: homepage ? declaredPermalink(homepage) : undefined,
+    }),
+  )
 
   for (const collision of findSlugCollisions(slugByPath)) {
     blockers.push({
