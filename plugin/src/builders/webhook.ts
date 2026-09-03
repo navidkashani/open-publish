@@ -21,9 +21,25 @@ export interface WebhookConfig {
 
 export const PUBLISH_MARKER_PATH = '_publish.json'
 
+/**
+ * What a starter writes to `/_publish.json`, and the only thing a deployed site
+ * ever tells this plugin about itself.
+ *
+ * `snapshot` is what the poll is for. `starter` is what answers the question the
+ * poll cannot: a site is a *copy* of a starter repository with no link back to
+ * it, so when the starter fixes something, nothing tells the person running it.
+ * Reported on every publish, it costs no extra request and is the only channel
+ * that reaches a live site at all.
+ *
+ * Both extra fields are optional and must stay that way. A site built before its
+ * starter learned to write them is not broken, it is older, and the plugin's job
+ * is to keep publishing to it.
+ */
 export interface PublishMarker {
   snapshot: string
   builtAt?: number
+  /** Which starter built the site, from its own `package.json`. */
+  starter?: { name: string; version: string }
 }
 
 export class WebhookBuilder implements Builder {
@@ -106,9 +122,32 @@ export class WebhookBuilder implements Builder {
       }
       if (response.status >= 200 && response.status < 300) {
         const marker = parseMarker(response.text)
-        return marker
-          ? { ok: true, reason: `Site is live, currently serving snapshot ${marker.snapshot}.` }
-          : { ok: false, reason: '/_publish.json exists but is not valid JSON.', hint: 'Check the starter version.' }
+        if (!marker) {
+          return {
+            ok: false,
+            reason: '/_publish.json exists but is not a publish marker.',
+            /**
+             * It used to say "Check the starter version", for a version no
+             * starter reported and nothing could look up. The realistic causes
+             * are a host serving an error page or an SPA fallback with a 200,
+             * which is what somebody should actually go and look at.
+             */
+            hint: 'Open that URL in a browser: a host serving an error page or an index.html for every path looks exactly like this.',
+          }
+        }
+        /**
+         * The starter and its version, where somebody is already asking the
+         * site about itself. This is the one place the plugin learns which
+         * theme a site runs, which is what makes "yours is behind" possible to
+         * say at all.
+         */
+        const running = describeStarter(marker)
+        return {
+          ok: true,
+          reason:
+            `Site is live, currently serving snapshot ${marker.snapshot}` +
+            (running ? `, built with ${running}.` : '.'),
+        }
       }
       return { ok: false, reason: `The site URL returned HTTP ${response.status}.`, hint: 'Check the site URL.' }
     } catch (error) {
@@ -177,8 +216,26 @@ export class WebhookBuilder implements Builder {
 export function parseMarker(text: string): PublishMarker | null {
   try {
     const parsed = JSON.parse(text) as Partial<PublishMarker>
-    return typeof parsed.snapshot === 'string' ? { snapshot: parsed.snapshot, builtAt: parsed.builtAt } : null
+    if (typeof parsed.snapshot !== 'string') return null
+    return { snapshot: parsed.snapshot, builtAt: parsed.builtAt, starter: starterOf(parsed.starter) }
   } catch {
     return null
   }
+}
+
+/**
+ * The marker is a file off somebody's own web server, so its shape is checked
+ * rather than trusted: half a `starter` object reaching the settings pane as
+ * `undefined undefined` would look like a bug in the site.
+ */
+function starterOf(value: unknown): { name: string; version: string } | undefined {
+  const starter = value as { name?: unknown; version?: unknown } | undefined
+  return typeof starter?.name === 'string' && typeof starter?.version === 'string'
+    ? { name: starter.name, version: starter.version }
+    : undefined
+}
+
+/** "jotter 1.4", or nothing at all for a site whose starter does not report one. */
+export function describeStarter(marker: PublishMarker | null): string {
+  return marker?.starter ? `${marker.starter.name} ${marker.starter.version}` : ''
 }

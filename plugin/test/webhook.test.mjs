@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { WebhookBuilder, parseMarker } from '../src/builders/webhook.ts'
+import { WebhookBuilder, parseMarker, describeStarter } from '../src/builders/webhook.ts'
 
 const config = {
   url: 'https://api.cloudflare.com/hook/abc',
@@ -143,7 +143,48 @@ test('a malformed URL is caught before any request is made', async () => {
 })
 
 test('marker parsing rejects anything without a snapshot id', () => {
-  assert.deepEqual(parseMarker('{"snapshot":"s","builtAt":5}'), { snapshot: 's', builtAt: 5 })
+  assert.deepEqual(parseMarker('{"snapshot":"s","builtAt":5}'), {
+    snapshot: 's',
+    builtAt: 5,
+    starter: undefined,
+  })
   assert.equal(parseMarker('<!doctype html>'), null, 'an HTML 404 page must not read as a marker')
   assert.equal(parseMarker('{"builtAt":5}'), null)
+})
+
+test('marker parsing carries the starter a site reports, and only a whole one', () => {
+  assert.deepEqual(
+    parseMarker('{"snapshot":"s","starter":{"name":"jotter","version":"1.4.0"}}').starter,
+    { name: 'jotter', version: '1.4.0' },
+  )
+  assert.equal(describeStarter(parseMarker('{"snapshot":"s","starter":{"name":"jotter","version":"1.4.0"}}')), 'jotter 1.4.0')
+
+  /**
+   * A site built before its starter learned to write the field is older, not
+   * broken: the marker still parses and the publish still confirms.
+   */
+  assert.equal(parseMarker('{"snapshot":"s"}').starter, undefined)
+  assert.equal(describeStarter(parseMarker('{"snapshot":"s"}')), '')
+
+  // Half an object off somebody's own web server must not reach the settings
+  // pane as "undefined undefined".
+  assert.equal(parseMarker('{"snapshot":"s","starter":{"name":"jotter"}}').starter, undefined)
+  assert.equal(parseMarker('{"snapshot":"s","starter":"jotter 1.4"}').starter, undefined)
+})
+
+test('a check against a live site names the starter it is running', async () => {
+  const { client } = respond([
+    { status: 200, text: '{"snapshot":"abc","starter":{"name":"jotter","version":"1.4.0"}}' },
+  ])
+  const result = await new WebhookBuilder(config, client, noSleep).test()
+  assert.equal(result.ok, true)
+  assert.match(result.reason, /snapshot abc/)
+  assert.match(result.reason, /jotter 1\.4\.0/)
+})
+
+test('a 200 that is not a marker at all points at the page, not at a version', async () => {
+  const { client } = respond([{ status: 200, text: '<!doctype html><title>Not found</title>' }])
+  const result = await new WebhookBuilder(config, client, noSleep).test()
+  assert.equal(result.ok, false)
+  assert.match(result.hint, /browser/)
 })
