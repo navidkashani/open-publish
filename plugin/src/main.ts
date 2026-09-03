@@ -483,6 +483,10 @@ export default class OpenPublishPlugin extends Plugin {
             autoTrigger: this.settings.builder.autoTrigger,
             minIntervalMinutes: this.settings.builder.minIntervalMinutes,
             lastBuildTriggeredAt: this.settings.lastBuildTriggeredAt,
+            // Preflight otherwise trusts the live snapshot to name only objects
+            // that are really in storage. A bucket that has just changed under
+            // us is the one case where that is a guess, so check everything.
+            verifyAll: hasStorageMoved(this.settings),
             logsUrl: this.settings.builder.logsUrl || undefined,
             signal,
           },
@@ -508,7 +512,9 @@ export default class OpenPublishPlugin extends Plugin {
 
   private async finishSession(session: PublishSession, status: SessionStatus): Promise<void> {
     const outcome = status.outcome
-    if (outcome?.committed) {
+    // `buildTriggered` without `committed` is a repair: no new snapshot, but a
+    // build allowance really was spent, and the throttle has to know.
+    if (outcome && (outcome.committed || outcome.buildTriggered)) {
       recordPublish(this.settings, outcome, Date.now())
       try {
         await this.saveSettings()

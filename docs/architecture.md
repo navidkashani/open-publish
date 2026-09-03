@@ -32,7 +32,7 @@ A publish uploads missing objects, writes a snapshot, then commits by replacing
 | File deleted | Absent from the next snapshot. No delete API call anywhere |
 | Two devices publish at once | Compare-and-swap rejects the loser; no corruption |
 | Rollback | Rewrite one ~60-byte file. Site history in settings lists what is in the bucket and makes any of it live |
-| Resume after a crash | `HEAD` each object, skip what exists |
+| Resume after a crash | The pointer never moved, so the new hashes are unknown to the live snapshot and get checked; anything already uploaded is skipped |
 | Garbage collection | Separate, optional, never on the publish path |
 
 The commit uses `If-Match` on the ETag read at scan time. R2 and S3 both support
@@ -550,7 +550,7 @@ IDLE
                 walk the vault, resolve flags, pull in embeds, hash,
                 build the link index, detect renames, check slugs and sizes
  → REVIEW       the user ticks files            [the only interactive state]
- → PREFLIGHT    HEAD objects, skip what is already stored
+ → PREFLIGHT    skip every hash the live snapshot already names; HEAD the rest, 8 at a time
  → UPLOADING    PUT missing objects, 4 at a time, 3 retries with backoff
  → COMMITTING   PUT the snapshot, then current.json with If-Match  ← the atomic commit
  → TRIGGERING   POST the deploy hook  (skipped if nothing changed, throttled, or turned off)
@@ -562,7 +562,23 @@ Rules that fall out of this:
 
 - **Single-flight.** One publish per vault; a second click joins the running one
   rather than starting a second.
-- **No changes means no build.** Free-tier build allowances are scarce.
+- **No changes means no build.** Free-tier build allowances are scarce. The one
+  thing that run still does is confirm the objects the live snapshot names are
+  really there, because the build refuses to run when one is missing and tells
+  the reader to publish again from Obsidian. Without that check, publishing
+  again would take this exit and do nothing, for ever. If something *is*
+  missing, the bytes go back up and a rebuild is asked for: no new snapshot and
+  no pointer write, because the committed snapshot already names the right
+  hashes.
+- **Preflight costs one request per *changed* file, not per published file.**
+  Every hash in the live snapshot was in storage when that snapshot was
+  committed, and nothing on this path deletes: garbage collection always keeps
+  the current snapshot and everything it references. So those hashes are
+  resolved locally, with no request at all. Two things are never taken on
+  trust: a file held at its published version, whose bytes are gone from the
+  vault and so has no plan B, and every object at all when storage has moved,
+  since a half-copied bucket is the realistic way for the assumption to be
+  wrong.
 - Anything failing **before** `COMMITTING` leaves the site untouched. Uploaded
   objects are harmless orphans and are reused next time.
 - `COMMITTING` failing on `If-Match` means someone else published. Re-scan and

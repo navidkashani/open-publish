@@ -432,8 +432,21 @@ test('a publish that committed nothing records nothing at all', () => {
   // build, so it is not a publish to remember.
   const settings = published({ lastSnapshotId: 'snap-1' })
   const before = JSON.parse(JSON.stringify(settings))
-  recordPublish(settings, outcome({ committed: false }), 1_700_000_000_000)
+  recordPublish(settings, outcome({ committed: false, buildTriggered: false }), 1_700_000_000_000)
   assert.deepEqual(settings, before)
+})
+
+test('a repair spends a build without committing, and the throttle is told', () => {
+  // Putting back objects that went missing from storage rebuilds the snapshot
+  // that is already live: no new content, but the host's allowance is a file
+  // lighter. Forgetting that lets the very next publish walk past the minimum
+  // interval as though no build had run.
+  const settings = published({ lastSnapshotId: 'snap-1' })
+  recordPublish(settings, outcome({ snapshotId: 'snap-1', committed: false }), 1_700_000_000_000)
+
+  assert.equal(settings.lastBuildTriggeredAt, 1_700_000_000_000, 'the build really happened')
+  assert.equal(settings.lastPublishedAt, null, 'but no new version of the site did')
+  assert.equal(settings.lastSnapshotId, 'snap-1', 'and the live snapshot is the one it always was')
 })
 
 test('content published with no build leaves the old host on the record', () => {

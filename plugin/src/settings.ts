@@ -595,11 +595,18 @@ export function hasHostMoved(settings: Settings): boolean {
  *
  * `now` is passed in rather than read here, so a test can say when.
  *
- * Nothing happens unless the publish committed. An uncommitted run changed
- * nothing about where the site's content lives, so recording it would be
- * recording a publish that did not happen.
+ * Almost nothing happens unless the publish committed: an uncommitted run
+ * changed nothing about where the site's content lives, so recording it would
+ * be recording a publish that did not happen. The one exception is the build
+ * throttle, which is about the host's allowance rather than about the content,
+ * and a repair spends one of those without committing anything.
  */
 export function recordPublish(settings: Settings, outcome: PublishRecord, now: number): void {
+  // Ahead of the `committed` gate: a repair publish uploads objects the live
+  // snapshot was already missing and asks for a rebuild of that same snapshot.
+  // No new content, but a build allowance is gone, and forgetting that lets the
+  // next publish sail straight past the minimum interval.
+  if (outcome.buildTriggered) settings.lastBuildTriggeredAt = now
   if (!outcome.committed) return
   settings.lastSnapshotId = outcome.snapshotId
   settings.lastPublishedAt = now
@@ -614,7 +621,6 @@ export function recordPublish(settings: Settings, outcome: PublishRecord, now: n
   // See `hasStorageMoved`.
   settings.lastPublishedTarget = storageTarget(settings.destination)
   if (!outcome.buildTriggered) return
-  settings.lastBuildTriggeredAt = now
   // And which host is now serving it. Gated on the build actually being asked
   // for, not merely on the content being committed: with automatic builds off,
   // throttled, or refused, the notes are in storage and the *old* host is still

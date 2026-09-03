@@ -156,6 +156,11 @@ export class PublishSession {
       delete next.total
     }
 
+    // Set, never add. Preflight resolves most files without a request and
+    // reports a running total; a second preflight after a re-plan reports its
+    // own total, which replaces the first rather than doubling it.
+    if (typeof event.alreadyStored === 'number') next.skippedCount = event.alreadyStored
+
     if (event.fileDone) {
       if (event.fileDone.skipped) {
         next.skippedCount = progress.skippedCount + 1

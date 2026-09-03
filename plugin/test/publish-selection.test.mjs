@@ -251,5 +251,9 @@ test('republishing the same notes later does not spend a build', async () => {
 
   assert.equal(outcome.committed, false)
   assert.equal(triggered, false)
-  assert.equal(destination.log.length, 0, 'and it costs no network traffic at all')
+  assert.equal(destination.writeOrder().length, 0, 'and it writes nothing')
+  assert.ok(
+    destination.log.every((entry) => entry.method === 'HEAD'),
+    'the only traffic is confirming the site still has the files it names',
+  )
 })

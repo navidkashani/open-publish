@@ -63,6 +63,13 @@ export interface PublishEvent {
   detail?: string
   current?: number
   total?: number
+  /**
+   * Running total of files already in storage, as an absolute count rather
+   * than an increment. Preflight resolves most of them locally and in bulk, so
+   * there is no per-file moment to count, and a re-planned second preflight
+   * would otherwise add its total to the first one's.
+   */
+  alreadyStored?: number
   /** Per-file upload outcomes, appended as they land. */
   fileDone?: { path: string; skipped: boolean }
   /** Set once the notes are safely stored. Everything after this is the site catching up. */
@@ -107,6 +114,12 @@ export interface PublishInput {
   autoTrigger: boolean
   minIntervalMinutes: number
   lastBuildTriggeredAt: number | null
+  /**
+   * Check every object rather than trusting the live snapshot to name only
+   * things that are really there. Set when storage has moved: a half-copied
+   * bucket is the realistic way for that assumption to be wrong.
+   */
+  verifyAll?: boolean
   logsUrl?: string
   verifyTimeoutMs?: number
   signal?: AbortSignal
@@ -126,8 +139,19 @@ export interface PublishOutcome {
 }
 
 const UPLOAD_CONCURRENCY = 4
+/**
+ * Higher than `UPLOAD_CONCURRENCY` on purpose: a HEAD carries no body, so the
+ * bandwidth reason for keeping uploads to four does not apply. The cost of one
+ * is almost entirely the SigV4 signature and the round trip.
+ */
+const PREFLIGHT_CONCURRENCY = 8
 const UPLOAD_RETRIES = 3
 const DEFAULT_VERIFY_TIMEOUT_MS = 10 * 60 * 1000
+
+const PREFLIGHT_MESSAGE = 'Checking what is already in storage…'
+const REPAIR_DETAIL =
+  'Some of your files were missing from storage, so your site could not finish building. ' +
+  'Nothing in your notes has changed; this puts the missing files back.'
 
 export class Publisher {
   /** Single-flight: a second Publish click attaches to the run already going. */
@@ -172,24 +196,9 @@ export class Publisher {
     let plan = planFiles(scan.snapshot, scan.previous, selection)
     let snapshot = await buildSnapshot(scan, plan, input.site, input.pluginVersion)
 
-    // --- no changes -> no build -------------------------------------------
-    // Free-tier build allowances are small (Pages: 500/month). Burning one on a
-    // no-op is pure waste, so this exits before touching the network at all.
-    if (sameContent(snapshot, scan.previous)) {
-      onEvent({ phase: 'done', message: 'Nothing has changed since the last publish. No build needed.' })
-      return {
-        snapshotId: scan.previous?.id ?? snapshot.id,
-        committed: false,
-        uploaded: 0,
-        skipped: 0,
-        buildTriggered: false,
-        deploy: null,
-      }
-    }
-
-    // --- PREFLIGHT ---------------------------------------------------------
-    onEvent({ phase: 'preflight', message: 'Checking what is already in storage…' })
-    let preflight = await this.preflight(snapshot, plan.kept, input, onEvent)
+    // Which hashes preflight may resolve without asking storage. See
+    // `publishedHashes`; `verifyAll` empties it when storage has moved.
+    let known = input.verifyAll ? new Set<string>() : publishedHashes(scan.previous)
 
     // A file held at its published version names an *old* hash. If that object
     // has gone missing (an over-eager clean-up, a half-migrated bucket), the
@@ -197,47 +206,65 @@ export class Publisher {
     // bytes under yesterday's hash would poison content-addressed storage for
     // every snapshot that references it, so the only honest repair is to
     // publish the current version of that file instead.
-    if (preflight.unrecoverable.length > 0) {
+    const republishUnrecoverable = async (paths: string[]): Promise<void> => {
+      // Getting here means the live snapshot has been caught naming an object
+      // that is not in storage, and that hash was in `known`. Whatever went
+      // wrong could have taken others with it, so nothing is resolved locally
+      // from here on: the pass that follows checks every object for real.
+      known = new Set()
       selection = {
-        include: new Set([...selection.include, ...preflight.unrecoverable]),
-        keepPrevious: setWithout(selection.keepPrevious, preflight.unrecoverable),
+        include: new Set([...selection.include, ...paths]),
+        keepPrevious: setWithout(selection.keepPrevious, paths),
       }
       plan = planFiles(scan.snapshot, scan.previous, selection)
       snapshot = await buildSnapshot(scan, plan, input.site, input.pluginVersion)
-      onEvent({
-        phase: 'preflight',
-        message: 'Checking what is already in storage…',
-        detail:
-          preflight.unrecoverable.length === 1
-            ? `The published version of "${preflight.unrecoverable[0]}" is no longer in storage, so your current version is being published instead.`
-            : `${preflight.unrecoverable.length} files are no longer in storage at their published version, so your current versions are being published instead.`,
-      })
-      preflight = await this.preflight(snapshot, plan.kept, input, onEvent)
+      onEvent({ phase: 'preflight', message: PREFLIGHT_MESSAGE, detail: unrecoverableDetail(paths) })
+    }
+
+    // --- no changes -> no build -------------------------------------------
+    // Free-tier build allowances are small (Pages: 500/month). Burning one on a
+    // no-op is pure waste. What this still has to do is confirm that "nothing
+    // to do" is true, because the build refuses to run when an object the
+    // snapshot names is missing and tells the reader to publish again from
+    // Obsidian. Without the check below that instruction is a dead end: the
+    // content has not changed, so publishing again would return right here and
+    // do nothing, for ever.
+    if (sameContent(snapshot, scan.previous)) {
+      onEvent({ phase: 'preflight', message: PREFLIGHT_MESSAGE })
+      const stored = await this.preflight(snapshot, plan.kept, new Set(), input, onEvent)
+      if (stored.unrecoverable.length > 0) {
+        // Nothing can put those bytes back, so the site can only be repaired by
+        // publishing the vault's current version of them. That is a real change:
+        // fall through to a full publish.
+        await republishUnrecoverable(stored.unrecoverable)
+      } else if (stored.needed.length === 0) {
+        onEvent({ phase: 'done', message: 'Nothing has changed since the last publish. No build needed.' })
+        return {
+          snapshotId: scan.previous?.id ?? snapshot.id,
+          committed: false,
+          uploaded: 0,
+          skipped: stored.skipped,
+          buildTriggered: false,
+          deploy: null,
+        }
+      } else {
+        return await this.repair(input, scan.previous?.id ?? snapshot.id, stored, onEvent)
+      }
+    }
+
+    // --- PREFLIGHT ---------------------------------------------------------
+    onEvent({ phase: 'preflight', message: PREFLIGHT_MESSAGE })
+    let preflight = await this.preflight(snapshot, plan.kept, known, input, onEvent)
+
+    if (preflight.unrecoverable.length > 0) {
+      await republishUnrecoverable(preflight.unrecoverable)
+      preflight = await this.preflight(snapshot, plan.kept, known, input, onEvent)
     }
 
     const { needed, skipped } = preflight
 
     // --- UPLOADING ---------------------------------------------------------
-    onEvent({ phase: 'uploading', message: uploadingMessage(needed.length), current: 0, total: needed.length })
-    let uploaded = 0
-
-    await runWithConcurrency(needed, UPLOAD_CONCURRENCY, async (item) => {
-      throwIfAborted()
-      const body = await input.readFile(item.path)
-      await withRetry(
-        () => destination.put(objectKey(item.hash), body, { contentType: contentTypeForPath(item.path) }),
-        UPLOAD_RETRIES,
-        signal,
-      )
-      uploaded++
-      onEvent({
-        phase: 'uploading',
-        message: uploadingMessage(needed.length),
-        current: uploaded,
-        total: needed.length,
-        fileDone: { path: item.path, skipped: false },
-      })
-    })
+    const uploaded = await this.uploadAll(input, needed, onEvent)
 
     throwIfAborted()
 
@@ -261,7 +288,7 @@ export class Publisher {
     onEvent({ phase: 'committing', message: 'Your notes are saved.', committed: true })
 
     // --- TRIGGERING --------------------------------------------------------
-    let deploy = await this.requestDeploy(input, snapshot, onEvent)
+    let deploy = await this.requestDeploy(input, snapshot.id, onEvent)
     const buildTriggered = deploy.kind === 'requested' || deploy.kind === 'unverifiable'
     onEvent({ phase: 'triggering', message: '', committed: true, deploy })
 
@@ -294,41 +321,145 @@ export class Publisher {
     return { snapshotId: snapshot.id, committed: true, uploaded, skipped, buildTriggered, deploy, deployWarning }
   }
 
-  /** One HEAD per distinct content hash; the ones already there cost nothing. */
+  /**
+   * Work out which objects are missing, with as few requests as possible.
+   *
+   * `known` is the set of hashes we can answer for without asking storage. Every
+   * hash it holds was in the bucket at the last successful publish and cannot
+   * have been removed since by anything this plugin does, so a HEAD for it would
+   * only ever confirm what we already know. On a typical republish that is the
+   * whole vault bar a file or two, which is the difference between one request
+   * per published file and one request per *changed* file.
+   *
+   * What is left is genuinely unknown and is checked, eight at a time. No retry:
+   * a HEAD that throws is a storage failure and has to surface as one, not be
+   * quietly downgraded into "missing, upload it".
+   */
   private async preflight(
     snapshot: Snapshot,
     kept: Set<string>,
+    known: Set<string>,
     input: PublishInput,
     onEvent: (event: PublishEvent) => void,
   ): Promise<{ needed: UploadCandidate[]; skipped: number; unrecoverable: string[] }> {
     const candidates = uploadCandidates(snapshot.files, kept)
-    const needed: UploadCandidate[] = []
-    const unrecoverable: string[] = []
-    let skipped = 0
-    let checked = 0
+    const toCheck: UploadCandidate[] = []
+    let alreadyStored = 0
 
     for (const candidate of candidates) {
-      if (input.signal?.aborted) throw new PublishError('aborted', 'Publish cancelled.')
-      checked++
-      onEvent({ phase: 'preflight', message: 'Checking what is already in storage…', current: checked, total: candidates.length })
-      const existing = await input.destination.head(objectKey(candidate.hash))
-      if (existing) {
-        skipped++
-        onEvent({ phase: 'preflight', message: '', fileDone: { path: candidate.path, skipped: true } })
-      } else if (candidate.reproducible) {
-        needed.push(candidate)
-      } else {
-        unrecoverable.push(candidate.path)
-      }
+      // A file held at its published version is checked even when the live
+      // snapshot names its hash. Its bytes are gone from the vault, so if that
+      // object has vanished there is no second chance to notice: this is the
+      // only moment when re-planning around it is still possible.
+      if (candidate.reproducible && known.has(candidate.hash)) alreadyStored++
+      else toCheck.push(candidate)
     }
 
-    return { needed, skipped, unrecoverable }
+    // An empty check means no bar at all, rather than a bar sitting at 100%.
+    if (toCheck.length === 0) {
+      onEvent({ phase: 'preflight', message: PREFLIGHT_MESSAGE, alreadyStored })
+      return { needed: [], skipped: alreadyStored, unrecoverable: [] }
+    }
+
+    const present = new Array<boolean>(toCheck.length)
+    let checked = 0
+    let found = 0
+
+    await runWithConcurrency(toCheck, PREFLIGHT_CONCURRENCY, async (candidate, index) => {
+      if (input.signal?.aborted) throw new PublishError('aborted', 'Publish cancelled.')
+      const existing = await input.destination.head(objectKey(candidate.hash))
+      present[index] = existing !== null
+      checked++
+      if (existing) found++
+      onEvent({
+        phase: 'preflight',
+        message: PREFLIGHT_MESSAGE,
+        current: checked,
+        total: toCheck.length,
+        alreadyStored: alreadyStored + found,
+      })
+    })
+
+    // Built here rather than in the workers so the order is the candidate order
+    // whatever order the answers arrived in: `unrecoverable[0]` names a file in
+    // a sentence the user reads.
+    const needed: UploadCandidate[] = []
+    const unrecoverable: string[] = []
+    for (const [index, candidate] of toCheck.entries()) {
+      if (present[index]) continue
+      if (candidate.reproducible) needed.push(candidate)
+      else unrecoverable.push(candidate.path)
+    }
+
+    return { needed, skipped: alreadyStored + found, unrecoverable }
+  }
+
+  /** PUT every missing object, four at a time, three attempts each. */
+  private async uploadAll(
+    input: PublishInput,
+    needed: UploadCandidate[],
+    onEvent: (event: PublishEvent) => void,
+    detail?: string,
+  ): Promise<number> {
+    onEvent({ phase: 'uploading', message: uploadingMessage(needed.length), detail, current: 0, total: needed.length })
+    let uploaded = 0
+
+    await runWithConcurrency(needed, UPLOAD_CONCURRENCY, async (item) => {
+      if (input.signal?.aborted) throw new PublishError('aborted', 'Publish cancelled.')
+      const body = await input.readFile(item.path)
+      await withRetry(
+        () => input.destination.put(objectKey(item.hash), body, { contentType: contentTypeForPath(item.path) }),
+        UPLOAD_RETRIES,
+        input.signal,
+      )
+      uploaded++
+      onEvent({
+        phase: 'uploading',
+        message: uploadingMessage(needed.length),
+        detail,
+        current: uploaded,
+        total: needed.length,
+        fileDone: { path: item.path, skipped: false },
+      })
+    })
+
+    return uploaded
+  }
+
+  /**
+   * Put back objects the live snapshot names but the bucket no longer holds.
+   *
+   * Nothing is committed here and no pointer is written, because neither needs
+   * to be: the snapshot already names exactly the right hashes, and only the
+   * bytes behind them were gone. A build is asked for, since the last one is
+   * what failed and told the reader to publish again from Obsidian.
+   */
+  private async repair(
+    input: PublishInput,
+    liveSnapshotId: string,
+    stored: { needed: UploadCandidate[]; skipped: number },
+    onEvent: (event: PublishEvent) => void,
+  ): Promise<PublishOutcome> {
+    const uploaded = await this.uploadAll(input, stored.needed, onEvent, REPAIR_DETAIL)
+    onEvent({ phase: 'committing', message: 'Your files are back in storage.', committed: true })
+
+    const deploy = await this.requestDeploy(input, liveSnapshotId, onEvent)
+    const buildTriggered = deploy.kind === 'requested' || deploy.kind === 'unverifiable'
+    onEvent({ phase: 'triggering', message: '', committed: true, deploy })
+
+    // No verify loop. `/_publish.json` already carries this snapshot id, which
+    // is the point: the pointer never moved. Polling for it would report "live"
+    // the instant it started, long before the rebuild that actually puts the
+    // missing page back has finished.
+    const deployWarning = warningFor(deploy)
+    onEvent({ phase: 'done', message: 'Your site has everything it needs again.', committed: true, deploy, error: deployWarning })
+    return { snapshotId: liveSnapshotId, committed: false, uploaded, skipped: stored.skipped, buildTriggered, deploy, deployWarning }
   }
 
   /** Ask the host to rebuild, or explain, in one value, why we did not. */
   private async requestDeploy(
     input: PublishInput,
-    snapshot: Snapshot,
+    snapshotId: string,
     onEvent: (event: PublishEvent) => void,
   ): Promise<DeployOutcome> {
     if (!input.builder) return { kind: 'not-configured' }
@@ -339,7 +470,7 @@ export class Publisher {
 
     onEvent({ phase: 'triggering', message: 'Asking your host to update the site…', committed: true })
     try {
-      await input.builder.trigger(snapshot.id)
+      await input.builder.trigger(snapshotId)
     } catch (error) {
       // Content is already committed. This is a notification problem, not a
       // data problem, and the UI must say so.
@@ -517,6 +648,29 @@ interface UploadCandidate {
   reproducible: boolean
 }
 
+/**
+ * Hashes we can say are in storage without asking.
+ *
+ * `previous` is the live snapshot, re-read from the bucket at the start of
+ * every scan rather than remembered locally, so this is not a cache and cannot
+ * go stale: every hash in it was in storage when that snapshot was committed,
+ * and nothing here can have removed it since. Garbage collection is the only
+ * thing that deletes, and it always keeps the current snapshot and everything
+ * it references (`core/gc.ts`). Content addressing does the rest: a hash that
+ * is present is the same bytes wherever it came from.
+ */
+function publishedHashes(previous: Snapshot | null): Set<string> {
+  const hashes = new Set<string>()
+  for (const file of Object.values(previous?.files ?? {})) hashes.add(file.hash)
+  return hashes
+}
+
+function unrecoverableDetail(paths: string[]): string {
+  return paths.length === 1
+    ? `The published version of "${paths[0]}" is no longer in storage, so your current version is being published instead.`
+    : `${paths.length} files are no longer in storage at their published version, so your current versions are being published instead.`
+}
+
 /** One entry per distinct content hash: identical files upload once. */
 function uploadCandidates(files: Record<string, SnapshotFile>, kept: Set<string>): UploadCandidate[] {
   const byHash = new Map<string, UploadCandidate>()
@@ -557,17 +711,18 @@ export function throttleState(
   return { throttled: elapsedMs < minIntervalMinutes * 60000, agoMinutes }
 }
 
+/** The index is handed to the worker so results can be collected in order. */
 async function runWithConcurrency<T>(
   items: T[],
   limit: number,
-  worker: (item: T) => Promise<void>,
+  worker: (item: T, index: number) => Promise<void>,
 ): Promise<void> {
   let next = 0
   const runners = Array.from({ length: Math.min(limit, items.length) }, async () => {
     while (true) {
       const index = next++
       if (index >= items.length) return
-      await worker(items[index])
+      await worker(items[index], index)
     }
   })
   await Promise.all(runners)
