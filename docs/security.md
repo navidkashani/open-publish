@@ -93,6 +93,12 @@ you work rather than saving it.
   the main README.
 - No writes to your notes, ever. Selection state lives in plugin settings, not
   in your files.
+- No access control on the site itself. Two settings sound like they might be
+  one and neither is: *Discourage search engines* is a request to crawlers, and
+  hiding a page in *Customize navigation* only takes it out of the sidebar. A
+  hidden page is built, served at its own address, found by the site's own
+  search and linked to from other pages. The only way to keep something private
+  is not to publish it.
 
 ## The Worker gateway, which removes the key rather than hiding it
 

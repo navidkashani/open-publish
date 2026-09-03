@@ -140,6 +140,32 @@ Choose what to publish, either way round:
 - **Frontmatter**: put `publish: true` at the top of a note. This always wins
   over folder rules, and `publish: false` always wins over everything.
 
+Two more frontmatter keys change where a note sits in the site navigation, and
+neither changes whether it is published:
+
+- `nav-order: 1` puts a note ahead of its siblings. Any number works: negatives
+  go above everything, and `1.5` slots between `1` and `2` so nothing else has to
+  be renumbered. Notes with a number come before notes without one.
+- `nav-hidden: true` takes a note out of the navigation. **It is still
+  published**: still at its own address, still in search, still linked to from
+  other pages. It is a tidier sidebar and nothing more. `nav-hidden: false` keeps
+  a note in the navigation even if it was hidden in settings.
+
+Both can also be set without touching your notes, under *Settings → Open Publish
+→ Customize navigation → Manage*. Folders open closed; click one to see inside
+it. Drag a page onto the row whose place you want it to take, or use the Move up
+and Move down buttons on its own row. Those buttons are there because a drag
+works on no phone and no keyboard; on a phone, a long press on a row offers the
+same three actions. Either way a page can only move among its own siblings.
+The third control on each row leaves the page out of the navigation. Your
+homepage is listed too, badged *homepage*: it sits with the top-level notes
+wherever its file happens to live, because that is where the site serves it.
+Frontmatter wins over anything set here, and the dialog marks the rows where it
+has. What the dialog stores lives in the plugin's own settings, in
+`.obsidian/plugins/open-publish/data.json`, so publishing from a second device
+that does not sync `.obsidian` reverts it. The frontmatter keys travel with the
+note and do not have that problem.
+
 Then click the ribbon icon (or run the **Publish** command). You get a review
 window listing new, changed, unchanged and removed files, and a **Publish**
 button. The first publish uploads everything; later ones upload only what

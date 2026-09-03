@@ -439,6 +439,15 @@ export default class OpenPublishPlugin extends Plugin {
       onProgress: options.onProgress,
       signal: options.signal,
     })
+    // A note that moved takes its place in the navigation with it. The scan
+    // works out where the entries went, because it is the only thing that knows
+    // what was renamed, and saving that answer is a decision, so it happens
+    // here. Nothing is pruned: a note unpublished for an afternoon keeps its
+    // place for when it comes back.
+    if (result.navRenamed) {
+      this.settings.site.nav = result.navRenamed
+      await this.saveSettings()
+    }
     // Storage that has moved since the last publish is why this screen is about
     // to show the entire vault as new: the new bucket has no `current.json`, so
     // the scan has nothing to diff against and every HEAD misses. The review is
@@ -478,7 +487,11 @@ export default class OpenPublishPlugin extends Plugin {
             destination: this.destination(),
             builder: this.builder(),
             readFile: (path) => this.readVaultFile(path),
-            site: this.settings.site,
+            // The scan's block, not the settings one. They differ in exactly
+            // one place, `nav`, which settings hold as vault paths and the
+            // snapshot carries as slugs. Committing the settings copy would
+            // publish paths to a generator that has never heard of one.
+            site: scan.snapshot.site,
             pluginVersion: this.manifest.version,
             autoTrigger: this.settings.builder.autoTrigger,
             minIntervalMinutes: this.settings.builder.minIntervalMinutes,

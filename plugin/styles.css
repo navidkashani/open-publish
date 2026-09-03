@@ -5,6 +5,23 @@
 
 .op-muted { color: var(--text-muted); font-size: var(--font-ui-smaller); }
 
+/*
+ * For a screen reader and nothing else. Moved off-screen rather than hidden:
+ * `display: none` would take the element out of the accessibility tree along
+ * with everything it has to say.
+ */
+.op-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
 .op-scan-status { padding: 24px 0; color: var(--text-muted); }
 
 /*
@@ -557,3 +574,97 @@
 .op-advanced-toggle::before { content: "▸ "; }
 .op-advanced-toggle[aria-expanded='true']::before { content: "▾ "; }
 .op-advanced { padding-left: 2px; }
+
+/* --- customise navigation --- */
+
+/*
+ * The controls sit at the right of the row and stay there. They are revealed on
+ * hover on desktop, the way a rule's remove button is, but unlike that one they
+ * keep their space reserved: a row whose buttons appear and disappear would
+ * make every name beside them jump, and this is a screen about position.
+ */
+.op-nav-tree { margin: 4px 0 12px; }
+/* Positioned for the drop line below, which is drawn on the row's own edge. */
+.op-nav-row { padding-right: 2px; position: relative; }
+.op-nav-row:hover { background: var(--background-modifier-hover); }
+/* Only the rows this dialog may actually move offer themselves to a drag. */
+.op-nav-row[draggable='true'] { cursor: grab; }
+.op-nav-row[draggable='true']:active { cursor: grabbing; }
+/*
+ * The name takes the slack, rather than the last thing on the row taking it.
+ * The shared tree rule pushes a badge to the right with `margin-left: auto`,
+ * which here would separate the badges from each other and from the controls.
+ */
+.op-nav-row > .op-tree-name { margin-right: auto; }
+.op-nav-row > .op-badge { margin-left: 0; }
+.op-nav-controls {
+  display: flex;
+  gap: 2px;
+  margin-left: 6px;
+  flex-shrink: 0;
+}
+
+.op-nav-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2px;
+  height: 22px;
+  width: 22px;
+  border: none;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 100ms ease-in-out;
+}
+.op-nav-button .svg-icon { width: 15px; height: 15px; }
+.op-nav-row:hover .op-nav-button,
+.op-nav-button:focus-visible { opacity: 1; }
+.op-nav-button:hover:not(:disabled) { color: var(--text-normal); }
+/* Shown, not hidden: a control that is off is the answer to "why can I not
+   move this", and the badge beside it says which. */
+.op-nav-button:disabled { opacity: 0.25; cursor: default; }
+.op-nav-row:hover .op-nav-button:disabled { opacity: 0.25; }
+
+/* Touch has no hover, so there is nothing to reveal on. */
+.is-mobile .op-nav-button { opacity: 1; }
+
+/*
+ * The drop marker is a line, never a highlighted row. A note and a folder can
+ * be siblings, so dropping a note onto a folder row means "take that folder's
+ * place in the list"; a filled-in folder would read as "put it inside", which
+ * this dialog can never do.
+ */
+.op-nav-drop-before::before,
+.op-nav-drop-after::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 2px;
+  border-radius: 1px;
+  background: var(--interactive-accent);
+  pointer-events: none;
+}
+.op-nav-drop-before::before { top: -1px; }
+.op-nav-drop-after::after { bottom: -1px; }
+
+/* A hidden page is still listed, and still readable: dimmed, not struck out. */
+.op-nav-hidden > .op-tree-name,
+.op-nav-hidden > .op-tree-icon { color: var(--text-faint); }
+
+.op-nav-note {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  margin: 0 0 12px;
+}
+.op-nav-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  color: var(--text-warning);
+  font-size: var(--font-ui-smaller);
+  margin-bottom: 12px;
+}

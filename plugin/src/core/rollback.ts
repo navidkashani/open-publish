@@ -46,7 +46,7 @@ import {
   parseSnapshot,
   snapshotKey,
 } from './snapshot.ts'
-import type { Snapshot, SnapshotDiff, SnapshotSite, SiteBooleanKey, SiteToggleKey } from './snapshot.ts'
+import type { Snapshot, SnapshotDiff, SnapshotNav, SnapshotSite, SiteBooleanKey, SiteToggleKey } from './snapshot.ts'
 import { DEFAULT_LOCALE, localeLabel } from './locales.ts'
 
 /**
@@ -419,6 +419,13 @@ export function diffSiteOptions(before: SnapshotSite, after: SnapshotSite): Opti
     }
   }
 
+  // Compared as lists and reported as a count: two arrangements of the same
+  // twelve pages are a real change, and a diff of two slug arrays is not
+  // something anybody deciding whether to roll back can read.
+  if (navKey(before.nav) !== navKey(after.nav)) {
+    changes.push({ option: SPECIAL.nav, before: describeNav(before.nav), after: describeNav(after.nav) })
+  }
+
   // Optional chaining because `parseSnapshot` validates the site block's
   // presence but not its shape, and every other read in this module fails in a
   // sentence rather than as a raw TypeError.
@@ -474,8 +481,36 @@ const SPECIAL = {
   // Derived from the language, so a change to it already shows as a Language
   // row. Listing it twice would be telling somebody the same thing twice.
   dir: null,
+  nav: 'Navigation order',
   analytics: 'Analytics',
 } satisfies Record<Exclude<keyof SnapshotSite, SiteBooleanKey>, string | null>
+
+/**
+ * The navigation arrangement as a sentence, because the lists themselves are
+ * not readable and a diff of two slug arrays would be worse than silence.
+ *
+ * Counted rather than named for the same reason: what somebody rolling back
+ * needs to know is that the sidebar is about to change and by roughly how much,
+ * and the site itself is the place to check the detail.
+ */
+function describeNav(nav: SnapshotNav | undefined): string {
+  const ordered = navList(nav?.order).length
+  const hidden = navList(nav?.hidden).length
+  if (ordered === 0 && hidden === 0) return 'the default order, nothing hidden'
+  const parts: string[] = []
+  if (ordered > 0) parts.push(`${ordered} ${ordered === 1 ? 'page' : 'pages'} reordered`)
+  if (hidden > 0) parts.push(`${hidden} hidden`)
+  return parts.join(', ')
+}
+
+function navKey(nav: SnapshotNav | undefined): string {
+  return JSON.stringify([navList(nav?.order), navList(nav?.hidden)])
+}
+
+/** A snapshot's site block is cast, not validated, so neither list is trusted. */
+function navList(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : []
+}
 
 function describeAnalytics(site: SnapshotSite): string {
   const analytics = site.analytics

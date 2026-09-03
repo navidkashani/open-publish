@@ -104,6 +104,27 @@ test('new site options arrive with safe defaults, never undefined', () => {
   }
 })
 
+test('a data.json written before navigation could be arranged gets both lists, not undefined', () => {
+  const settings = migrateSettings({ version: 1, site: { title: 'Old vault' } })
+  assert.deepEqual(settings.site.nav, { order: [], hidden: [] })
+})
+
+test('a corrupted navigation block cannot reach the manager or the snapshot', () => {
+  // Hand-edited, half-synced, or written by a version that is not this one. The
+  // manager renders these and the scan resolves them, and both would fail in a
+  // way that names neither the file nor the cause.
+  const settings = migrateSettings({
+    site: { nav: { order: ['Notes/A.md', 42, null, 'Notes/B.md'], hidden: 'Notes/C.md' } },
+  })
+  assert.deepEqual(settings.site.nav, { order: ['Notes/A.md', 'Notes/B.md'], hidden: [] })
+  assert.deepEqual(migrateSettings({ site: { nav: 'nonsense' } }).site.nav, { order: [], hidden: [] })
+})
+
+test('an arrangement survives a load, because it is the only copy of it', () => {
+  const nav = { order: ['Notes', 'Apple.md'], hidden: ['Notes/Secret.md'] }
+  assert.deepEqual(migrateSettings({ site: { nav } }).site.nav, nav)
+})
+
 test('a half-written analytics block cannot lose its provider', () => {
   assert.deepEqual(migrateSettings({ site: { analytics: { id: 'G-123' } } }).site.analytics, {
     provider: 'none',

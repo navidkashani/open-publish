@@ -252,6 +252,10 @@ test('every site option affects the snapshot id, so flipping one triggers a rebu
     showTags: { ...site, showTags: false },
     showPageMetadata: { ...site, showPageMetadata: true },
     showPrevNext: { ...site, showPrevNext: false },
+    // Rearranging the sidebar changes no note and no slug, so without this the
+    // publish that carries it would find nothing to do and spend no build: the
+    // order would sit in data.json and never reach the site.
+    nav: { ...site, nav: { order: ['notes/index', 'a'], hidden: [] } },
     analytics: { ...site, analytics: { provider: 'google', id: 'G-1' } },
   }
   /**

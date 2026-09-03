@@ -12,9 +12,15 @@ registerHooks({
   },
 })
 
+/**
+ * The scan, which imports `TFile` as a value and so cannot be loaded without
+ * the stub in place. Everything else in `core/` imports Obsidian types only.
+ */
+export const { scanVault } = await import('../src/core/scanner.ts')
 export const { PublishModal } = await import('../src/ui/PublishModal.ts')
 export const { StatusBar } = await import('../src/ui/StatusBar.ts')
 export const { FolderModal } = await import('../src/ui/FolderModal.ts')
+export const { NavigationModal, navSizeWarning } = await import('../src/ui/NavigationModal.ts')
 export const { PublishImportModal, renderPublishImportRow } = await import('../src/ui/PublishImportModal.ts')
 export const { RollbackModal } = await import('../src/ui/RollbackModal.ts')
 export const { OpenPublishSettingTab } = await import('../src/ui/SettingsTab.ts')
@@ -156,7 +162,13 @@ export function fakePlugin(overrides = {}) {
  * the same shape a `data.json` has and get whatever the shipping migration
  * would have produced, defaults included.
  */
-export function fakeStoragePlugin({ stored = {}, testResult = { ok: true }, publishConfig = null } = {}) {
+export function fakeStoragePlugin({
+  stored = {},
+  testResult = { ok: true },
+  publishConfig = null,
+  /** Which notes count as published, for the screens that list them. */
+  isNotePublished = () => true,
+} = {}) {
   const calls = { saves: 0, tests: 0, selfTests: 0, cleanups: 0, cacheClears: 0, builderChecks: 0 }
   const plugin = {
     calls,
@@ -184,7 +196,7 @@ export function fakeStoragePlugin({ stored = {}, testResult = { ok: true }, publ
     async clearHashCache() {
       calls.cacheClears++
     },
-    isNotePublished: () => true,
+    isNotePublished,
   }
   return plugin
 }

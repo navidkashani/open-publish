@@ -29,6 +29,12 @@ export const site = {
    * starter that does have one gets the answer without a plugin change.
    */
   showPrevNext: true,
+  /**
+   * Sidebar order and hidden pages, both empty until somebody arranges them in
+   * Obsidian. Slugs, not vault paths, and a folder is named by the slug of its
+   * index page: `notes/index` for the folder published at `/notes`.
+   */
+  nav: { order: [], hidden: [] },
   analytics: { provider: 'none', id: '' },
 }
 export default site

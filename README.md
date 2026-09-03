@@ -51,6 +51,11 @@ published in Git.
   homepage, analytics and a discourage-search-engines switch, described as
   intent, so a future starter can honour them without the plugin knowing
   anything about it.
+- **Puts the navigation in the order you want.** Arrange the sidebar folder by
+  folder, or leave a page out of it entirely. `nav-order:` in a note's
+  frontmatter wins over both, as frontmatter always does. Leaving a page out of
+  the navigation does not unpublish it: it stays at its address and stays in
+  search.
 
 ## Repository layout
 

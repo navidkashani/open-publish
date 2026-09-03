@@ -27,6 +27,8 @@ import {
   tooLargeToUploadMessage,
   tooManyFilesMessage,
 } from './limits.ts'
+import { migrateNavPaths, readNavHidden, readNavOrder, resolveNav } from './navorder.ts'
+import type { NavNote, NavSettings } from './navorder.ts'
 import { getPublishFlag, homepageWarnings, isAlwaysExcluded, isSupportedFile } from './selection.ts'
 import type { SelectionRules } from './selection.ts'
 import { findSlugCollisions, legacyUrlsFor, slugForPath } from './slug.ts'
@@ -47,6 +49,12 @@ export interface ScanOptions {
   destination: Destination
   hasher: Hasher
   rules: SelectionRules
+  /**
+   * The site block as settings hold it, which is not quite the block the
+   * snapshot carries: its `nav` names **vault paths**, and the scan converts
+   * them to slugs. `ScanResult.snapshot.site` is the converted one, and is the
+   * block a publish must go on to commit.
+   */
   site: SnapshotSite
   autoIncludeEmbeds: boolean
   /**
@@ -80,6 +88,12 @@ export interface ScanResult {
   unchanged: string[]
   removed: string[]
   renames: Array<{ from: string; to: string }>
+  /**
+   * The stored navigation with renamed notes followed, or null when nothing
+   * moved. Settings are not written from here, because a scan is a question and
+   * not a decision; the caller saves it. See `migrateNavPaths`.
+   */
+  navRenamed: NavSettings | null
 
   /** Auto-pulled in because a published note embeds them (design note 2.8). */
   autoIncluded: Set<string>
@@ -257,8 +271,30 @@ export async function scanVault(options: ScanOptions): Promise<ScanResult> {
 
   const linkedButUnpublished = collectLinkedButUnpublished(links, flagByPath)
 
+  // 8. Navigation, converted out of vault paths and into slugs.
+  //
+  // Here rather than in the settings panel because it needs the answers this
+  // scan just worked out: which notes are published, what slug each one landed
+  // on, and which of them moved since last time. It runs after `detectRenames`
+  // for that last reason, so an order survives a rename instead of quietly
+  // dropping the note that moved.
+  const storedNav: NavSettings = site.nav ?? { order: [], hidden: [] }
+  const navRenamed = migrateNavPaths(storedNav, renames, (folder) => {
+    for (const path of publishedPaths) {
+      if (path.startsWith(`${folder}/`)) return true
+    }
+    return false
+  })
+  const nav = resolveNav(navNotes(app, files), navRenamed ?? storedNav)
+  const publishedSite: SnapshotSite = { ...site }
+  // Deleted rather than left empty: a vault that has never arranged anything
+  // must produce the snapshot ID it always did, or upgrading the plugin would
+  // spend everybody a build on a feature nobody switched on.
+  if (nav) publishedSite.nav = nav
+  else delete publishedSite.nav
+
   const createdAt = Date.now()
-  const id = await computeSnapshotId(files, site, createdAt)
+  const id = await computeSnapshotId(files, publishedSite, createdAt)
 
   const snapshot: Snapshot = {
     version: 1,
@@ -266,7 +302,7 @@ export async function scanVault(options: ScanOptions): Promise<ScanResult> {
     parent: previous?.id ?? null,
     createdAt,
     generator: { plugin: 'open-publish', version: options.pluginVersion },
-    site,
+    site: publishedSite,
     files,
     links,
     redirects,
@@ -282,12 +318,38 @@ export async function scanVault(options: ScanOptions): Promise<ScanResult> {
     unchanged: diff.unchanged,
     removed: diff.removed,
     renames,
+    navRenamed,
     autoIncluded,
     linkedButUnpublished,
     blockers,
     warnings,
     totalBytes,
   }
+}
+
+/**
+ * The published notes, as much of each as arranging navigation needs.
+ *
+ * Notes only, and that is not an oversight: a generator's sidebar is built from
+ * pages, so listing every published attachment as something to put in an order
+ * would offer a control that does nothing.
+ */
+function navNotes(app: App, files: Record<string, SnapshotFile>): NavNote[] {
+  const notes: NavNote[] = []
+  for (const [path, file] of Object.entries(files)) {
+    if (!path.toLowerCase().endsWith('.md')) continue
+    const frontmatter = app.metadataCache.getCache(path)?.frontmatter
+    const order = readNavOrder(frontmatter?.['nav-order'])
+    const hidden = readNavHidden(frontmatter?.['nav-hidden'])
+    notes.push({
+      path,
+      slug: file.slug,
+      title: file.title ?? file.slug.slice(file.slug.lastIndexOf('/') + 1),
+      ...(order !== undefined ? { order } : {}),
+      ...(hidden !== undefined ? { hidden } : {}),
+    })
+  }
+  return notes
 }
 
 async function readRemoteState(destination: Destination): Promise<{

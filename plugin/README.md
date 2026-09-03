@@ -50,6 +50,7 @@ src/
 │  ├─ hasher.ts               metadataCache fast path + crypto.subtle fallback
 │  ├─ linkindex.ts            link resolution and embed expansion
 │  ├─ slug.ts                 path → URL, plus collision detection
+│  ├─ navorder.ts             sidebar order and hidden pages, settings → slugs
 │  ├─ snapshot.ts             snapshot format, diffing, rename detection
 │  ├─ publisher.ts            the state machine
 │  ├─ session.ts              a publish that outlives the window that started it
@@ -69,6 +70,7 @@ src/
    ├─ StatusBar.ts            background progress; absent on mobile
    ├─ messages.ts             every sentence the publish window can say
    ├─ FolderModal.ts          the manage-folders dialog: both lists, live counts
+   ├─ NavigationModal.ts      the customise-navigation dialog: order and hiding
    ├─ FolderRules.ts          rule normalisation and match counting, no DOM
    ├─ RuleList.ts             a list of rules and the control that removes one
    ├─ PathSuggest.ts          the folder and note pickers

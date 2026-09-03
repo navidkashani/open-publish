@@ -53,6 +53,31 @@ test('display() renders every section without throwing', () => {
   }
 })
 
+test('the navigation manager sits under the toggle it depends on, and reports what it holds', () => {
+  const { root } = open()
+  const row = rowNamed(root, 'Customize navigation')
+  assert.ok(row, 'no way in means the feature does not exist as far as anybody can tell')
+  assert.match(descOf(row), /Folders first, then notes, alphabetically/)
+
+  const arranged = open({ site: { nav: { order: ['A.md', 'B.md'], hidden: ['C.md'] } } })
+  const summary = descOf(rowNamed(arranged.root, 'Customize navigation'))
+  assert.match(summary, /2 arranged by hand, 1 hidden/)
+  assert.match(summary, /still published and still reachable/)
+})
+
+test('with navigation switched off there is nothing to arrange, and the row says so', () => {
+  const { root } = open({ site: { showNavigation: false } })
+  const row = rowNamed(root, 'Customize navigation')
+  assert.match(descOf(row), /Turn navigation on/)
+  assert.equal(find(row, (node) => node.tagName === 'BUTTON').disabled, true)
+})
+
+test('an arrangement large enough to weigh on every page is flagged in settings too', () => {
+  const order = Array.from({ length: 500 }, (unused, index) => `Note ${index}.md`)
+  const { root } = open({ site: { nav: { order, hidden: [] } } })
+  assert.match(errorOf(rowNamed(root, 'Customize navigation')) ?? '', /500 pages are arranged by hand/)
+})
+
 test('the analytics ID field hides itself when no provider is chosen', () => {
   const { root } = open()
   const id = rowNamed(root, 'Tracking ID')

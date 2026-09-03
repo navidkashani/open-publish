@@ -261,6 +261,39 @@ test('rolling back past the day the language option existed reports no change', 
   assert.deepEqual(diffSiteOptions(older, { ...site, locale: 'en-US' }), [])
 })
 
+test('a rearranged sidebar is named in the plan, in a count rather than in slugs', () => {
+  const changes = diffSiteOptions(
+    { ...site, nav: { order: ['a', 'b', 'c'], hidden: ['d'] } },
+    { ...site, nav: { order: [], hidden: [] } },
+  )
+  assert.deepEqual(
+    changes.map((change) => change.option),
+    ['Navigation order'],
+  )
+  assert.equal(changes[0].before, '3 pages reordered, 1 hidden')
+  assert.equal(changes[0].after, 'the default order, nothing hidden')
+})
+
+test('two arrangements of the same pages are still a change', () => {
+  // Counted for display, compared as lists. Reporting on the counts alone would
+  // call a complete reversal of the sidebar "no change".
+  const changes = diffSiteOptions(
+    { ...site, nav: { order: ['a', 'b'], hidden: [] } },
+    { ...site, nav: { order: ['b', 'a'], hidden: [] } },
+  )
+  assert.deepEqual(
+    changes.map((change) => change.option),
+    ['Navigation order'],
+  )
+  assert.equal(changes[0].before, '2 pages reordered')
+})
+
+test('rolling back past the day navigation could be arranged reports no change', () => {
+  // The older snapshot carries no `nav` at all, and the site it built used the
+  // generator's default order. Nothing changed, so nothing may be listed.
+  assert.deepEqual(diffSiteOptions({ ...site }, { ...site, nav: { order: [], hidden: [] } }), [])
+})
+
 test('identical site blocks produce no option noise at all', async () => {
   const plan = await planRollback(twoVersions(), OLD)
   assert.deepEqual(plan.optionChanges, [])

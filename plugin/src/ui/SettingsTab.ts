@@ -15,6 +15,7 @@ import { isUrlStyle } from '../core/slug.ts'
 import { LOCALES, directionFor, isLocale } from '../core/locales.ts'
 import type { SiteToggleKey } from '../core/snapshot.ts'
 import { FolderModal } from './FolderModal.ts'
+import { NavigationModal, navSizeWarning } from './NavigationModal.ts'
 import { RollbackModal } from './RollbackModal.ts'
 import { folderRulesSummary, summarizeRules } from './FolderRules.ts'
 import { PathSuggest, normalizeTypedPath } from './PathSuggest.ts'
@@ -323,6 +324,40 @@ export class OpenPublishSettingTab extends PluginSettingTab {
     validate()
   }
 
+  /**
+   * The way into the navigation manager, and a one-line report of what it has
+   * been told so far.
+   *
+   * The summary is here rather than only inside the dialog for the reason the
+   * folder-rule counts are: a setting that says nothing about its current state
+   * is one people open to find out, and this one is off the main path.
+   */
+  private renderNavigation(containerEl: HTMLElement): void {
+    const site = this.plugin.settings.site
+    const nav = site.nav ?? { order: [], hidden: [] }
+    const setting = new Setting(containerEl).setName('Customize navigation')
+
+    const describe = (): string => {
+      if (!site.showNavigation) return 'Turn navigation on to arrange it.'
+      if (nav.order.length === 0 && nav.hidden.length === 0) {
+        return 'Folders first, then notes, alphabetically. Change the order, or leave pages out of it.'
+      }
+      const parts: string[] = []
+      if (nav.order.length > 0) parts.push(`${nav.order.length} arranged by hand`)
+      if (nav.hidden.length > 0) parts.push(`${nav.hidden.length} hidden`)
+      return `${parts.join(', ')}. Hidden pages are still published and still reachable.`
+    }
+
+    setting.setDesc(describe())
+    setting.setErrorMessage(navSizeWarning(nav.order.length))
+    setting.addButton((button) =>
+      button
+        .setButtonText('Manage')
+        .setDisabled(!site.showNavigation)
+        .onClick(() => new NavigationModal(this.app, this.plugin, () => this.display()).open()),
+    )
+  }
+
   private frontmatterOverride(path: string): string | null {
     const pinned = parsePublishFrontmatter(this.app.metadataCache.getCache(path)?.frontmatter?.['publish'])
     if (pinned === null) return null
@@ -453,9 +488,16 @@ export class OpenPublishSettingTab extends PluginSettingTab {
         .addToggle((toggle) =>
           toggle.setValue(site[key]).onChange(async (value) => {
             site[key] = value
+            // The row below reports on the navigation and is greyed out when
+            // there is none, so it has to be redrawn when this is switched.
+            if (key === 'showNavigation') this.display()
             await this.plugin.saveSettings()
           }),
         )
+      // Directly under the toggle it depends on, rather than in a section of
+      // its own: an arrangement of a sidebar that is switched off is a control
+      // with nothing to control, and the two belong next to each other.
+      if (key === 'showNavigation') this.renderNavigation(containerEl)
     }
 
     new Setting(containerEl).setName('Analytics').setHeading()

@@ -238,6 +238,10 @@ export const DEFAULT_SETTINGS: Settings = {
     // the day of the build on every page.
     showPageMetadata: false,
     showPrevNext: true,
+    // Empty, and it stays empty until somebody opens the navigation manager.
+    // Unlike every other option here, this one holds **vault paths**: the scan
+    // converts them to the slugs a snapshot carries. See `core/navorder.ts`.
+    nav: { order: [], hidden: [] },
     analytics: { provider: 'none', id: '' },
   },
   // Clean URLs, and nothing else, for everyone who is not migrating.
@@ -279,6 +283,14 @@ export function migrateSettings(raw: unknown): Settings {
     settings.site.analytics = {
       provider: analytics?.provider ?? 'none',
       id: typeof analytics?.id === 'string' ? analytics.id : '',
+    }
+    // Rebuilt field by field rather than copied, the same way analytics is. A
+    // hand-edited or half-synced data.json holding a string where a list should
+    // be would otherwise reach the manager, which renders it, and the scanner,
+    // which would throw partway through a publish rather than here.
+    settings.site.nav = {
+      order: asStringArray(stored.site.nav?.order),
+      hidden: asStringArray(stored.site.nav?.hidden),
     }
     // Checked against the table rather than copied across, for the same reason
     // `urlStyle` is below: an unrecognised tag would reach the dropdown, which

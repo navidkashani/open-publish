@@ -112,10 +112,10 @@ could honour it. That second clause is load-bearing: it is why there is no
 capability-negotiation protocol between plugin and starter. There is nothing to
 negotiate when every option is universal.
 
-Currently sixteen: `title`, `homepage`, `locale`, `dir`, `noIndex`,
+Currently seventeen: `title`, `homepage`, `locale`, `dir`, `noIndex`,
 `showThemeToggle`, `strictLineBreaks`, `showNavigation`, `showSearch`,
 `showGraph`, `showOutline`, `showBacklinks`, `showTags`, `showPageMetadata`,
-`showPrevNext`, `analytics`.
+`showPrevNext`, `nav`, `analytics`.
 
 The last two are the clearest illustration of the rule and of its limit.
 `showPageMetadata` is honoured by both starters, because both have a block of
@@ -133,7 +133,7 @@ Deliberately excluded, so the decisions do not get relitigated:
 | Forced light/dark default | Needs patching generator internals (Quartz reads `prefers-color-scheme` in an inline script) |
 | Site description | Generators derive per-page descriptions from content |
 | Readable line length | Quartz's page width is a compile-time SCSS variable, not config |
-| Logo, navigation ordering | Generator-specific plumbing; nav ordering needs functions, not JSON |
+| Logo | Generator-specific plumbing |
 | Stacked pages | No equivalent outside Obsidian Publish |
 | Passwords | Needs server-side auth, and would invalidate the "read-only build token is harmless" position in security.md |
 | Collaborators, custom domain | SaaS or host-level concerns, not properties of a snapshot |
@@ -154,6 +154,73 @@ ignores it" was written for *absent features*: ignore `showGraph` and you get no
 graph. Ignoring `dir` does not produce a missing feature, it produces a site laid
 out backwards for its reader. So `dir` is admissible only because the Quartz
 starter was taught to honour it, in `scripts/lib/rtl-patch.mjs`.
+
+### Navigation ordering, and why the reason for excluding it did not survive
+
+Navigation ordering sat in the table above, alongside the logo, with the reason
+"nav ordering needs functions, not JSON". That reason was wrong, and it is worth
+saying how rather than quietly deleting the row.
+
+Quartz's explorer does take a comparator rather than a list. But it does not
+*keep* one: `Explorer.tsx` stringifies it into a `data-data-fns` attribute and
+`quartz/components/scripts/explorer.inline.ts` rebuilds it in the browser with
+`new Function("return " + src)()`. A function whose ranks are embedded in its own
+source as a JSON literal round-trips through that perfectly well. So the *intent*
+is a JSON array in the snapshot and the *function* is plumbing the starter
+derives from it, which is the ordinary shape of every option here.
+
+That is the `dir` precedent, applied honestly. `dir` is admissible "only because
+the Quartz starter was taught to honour it"; `nav` is admissible for the same
+reason, in `starters/quartz/nav-sort.ts`, and a starter that cannot express an
+order ignores it exactly as it would ignore `showGraph`.
+
+Two things about the shape are load-bearing rather than tidy:
+
+- **The order is materialised per parent, and only for parents somebody actually
+  arranged.** The explorer sits in `left` for both page layouts, so its options
+  are inlined into every page's HTML. A fully materialised order of five thousand
+  slugs would be about 150KB *per page*. Arranging one folder of twenty ships
+  twenty entries; every other folder costs nothing, and a vault that never opens
+  the manager carries no `nav` key at all, so it produces the snapshot ID it
+  always did and never spends a build on this.
+
+  What decides whether a parent is carried is whether somebody **addressed** it,
+  not whether the result differs from the default. That distinction was got
+  wrong first and is worth keeping written down, because it looks like a free
+  optimisation and is not. The default belongs to the *generator*, and the two
+  starters disagree about it: Quartz puts folders first everywhere, and jotter
+  deliberately puts the root's loose notes above its folders, on the grounds that
+  those are a site's front doors. An arrangement measured against Quartz's
+  default and dropped on a match reaches jotter as no instruction at all, and
+  jotter then renders the opposite of what the manager showed: somebody drags a
+  folder to the top and the site quietly puts it back. Hiding is excluded from
+  "addressed" on the same reasoning in reverse: it travels in its own list and
+  leaves the order of what remains exactly as the generator would have had it.
+- **Slug space, keyed `<folder-slug>/index` for folders**, matching Quartz's
+  `FileTrieNode.slug` getter. The plugin's own copy in `data.json` holds vault
+  paths instead, because a slug moves when a note is renamed and a stored order
+  that quietly emptied itself would be worse than none. `core/navorder.ts` is the
+  only thing that speaks both, and the conversion happens once, in the scan.
+- **The homepage is a row, and the two starters disagree about that.** The
+  manager lists it among the root's notes, keyed by the slug it is served at,
+  `index`, wherever its file sits in the vault. Quartz has no such row: its trie
+  keeps the homepage as the root node's own data rather than as a child, so an
+  entry naming it is compared with nothing and sits in the order inert. jotter
+  draws `/` in its sidebar, and there the entry lands. Saying it is right for
+  both, and is the contract working as intended rather than in spite of itself:
+  the plugin states what the site shows, and a generator with no such row ignores
+  the line. `verify-build.mjs` puts `index` in the order it builds for real,
+  which is the only place that inertness is actually checked.
+
+If somebody genuinely needs thousands of pages ordered, the escape hatch is to
+patch `contentIndex.tsx` to carry a per-note rank into `ContentDetails`, which is
+fetched once rather than inlined per page, and have the comparator read
+`a.data`. That is out of scope and is written down here so the next person does
+not have to rediscover it.
+
+`nav` also makes `showPrevNext` answerable for the first time. That option says
+what counts as "next" is "the order its own navigation already uses", and this is
+that order, expressed as data.
 
 Two rules keep the contract safe as it grows:
 
@@ -628,8 +695,18 @@ Every core module avoids importing Obsidian values, so the real implementation
   compare-and-swap conflicts, single-flight, retry policy
 - garbage collection safety
 - the link rewriter, including code fences and frontmatter
+- navigation ordering: precedence, per-parent scoping, and the minimality check
+  that emits nothing when an arrangement reproduces the default
 - the full build pipeline, run as real subprocesses against a real HTTP server
   standing in for a bucket
+
+One test in `starters/quartz/scripts/nav-sort.test.mjs` is worth naming, because
+what it guards is invisible everywhere else. It round-trips the explorer's
+comparator through `new Function("return " + fn.toString())()`, which is exactly
+what the browser does with the serialised attribute. A comparator that closed
+over anything passes every direct call and dies on that transform, silently,
+leaving the sidebar in some other order with no error for anybody to find.
+`npm run verify` repeats it against the attribute a real Quartz build emits.
 
 ## Roadmap
 

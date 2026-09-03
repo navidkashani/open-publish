@@ -200,6 +200,10 @@ const DEFAULT_SITE = {
   showTags: true,
   showPageMetadata: false,
   showPrevNext: true,
+  // Present so that `applySiteConfig` copies it across rather than dropping it
+  // as an option this starter has never heard of. Empty is the whole default:
+  // no arrangement, nothing hidden, and the explorer left exactly as it was.
+  nav: { order: [], hidden: [] },
   analytics: { provider: 'none', id: '' },
 }
 
@@ -211,6 +215,13 @@ async function applySiteConfig(rawSite) {
     if (rawSite?.[key] !== undefined) site[key] = rawSite[key]
   }
   site.analytics = { ...DEFAULT_SITE.analytics, ...(rawSite?.analytics ?? {}) }
+  // Field by field, like analytics above and for the same reason: a snapshot
+  // that carries only half of this must not leave the other half `undefined`,
+  // which the layout would then read the length of.
+  site.nav = {
+    order: navList(rawSite?.nav?.order),
+    hidden: navList(rawSite?.nav?.hidden),
+  }
 
   const unknown = Object.keys(rawSite ?? {}).filter((key) => !(key in DEFAULT_SITE))
   if (unknown.length > 0) {
@@ -228,6 +239,11 @@ async function applySiteConfig(rawSite) {
   await writeFile('op-site.ts', body, 'utf8')
   console.log('[open-publish] site options written to op-site.ts')
   return site
+}
+
+/** Slugs only: a snapshot is data off the network, so neither list is trusted. */
+function navList(value) {
+  return Array.isArray(value) ? value.filter((entry) => typeof entry === 'string' && entry.length > 0) : []
 }
 
 async function pool(items, limit, worker) {

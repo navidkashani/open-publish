@@ -199,6 +199,15 @@ export class StubElement {
     return this.classList.value
   }
 
+  /**
+   * There is no document here, so focus is modelled as "the last element told
+   * to take it". Enough for the one question the dialog has to answer: after a
+   * re-render, is focus still on the control that was pressed?
+   */
+  focus() {
+    focused = this
+  }
+
   // --- events ---
   addEventListener(type, handler) {
     const list = this.listeners.get(type) ?? []
@@ -222,6 +231,11 @@ export class StubElement {
     return !event.defaultPrevented
   }
 }
+
+let focused = null
+
+/** Whatever last had `focus()` called on it, or null. */
+export const activeElement = () => focused
 
 export function el(tag = 'div') {
   return new StubElement(tag)

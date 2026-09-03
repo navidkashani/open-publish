@@ -78,7 +78,10 @@ const snapshot = {
     noIndex: true,
     showThemeToggle: false,
     strictLineBreaks: false,
-    showNavigation: false,
+    // On, so the arrangement below has something to arrange. The "an option
+    // switched off removes its component" case is covered by
+    // `showThemeToggle` a line down, which is the same mechanism.
+    showNavigation: true,
     showSearch: true,
     showGraph: true,
     showOutline: true,
@@ -90,6 +93,20 @@ const snapshot = {
     showPageMetadata: true,
     showPrevNext: false,
     analytics: { provider: 'google', id: 'G-VERIFY123' },
+    // A reordered root and a hidden folder. `wisdom-approaches/index` is the
+    // detail this whole run exists to check: a folder has no page of its own in
+    // this vault, and Quartz still names its node after an index page it does
+    // not have.
+    //
+    // `index` is the homepage, which the manager lists as a root row because
+    // some generators draw one. Quartz does not: its trie keeps the homepage as
+    // the root node's own data and never as a child, so this entry is compared
+    // with nothing. That it is *inert* rather than merely unused is what the
+    // checks below are for, and this is the only build that can show it.
+    nav: {
+      order: ['index', 'notes/index', 'wisdom-approaches/index'],
+      hidden: ['wisdom-approaches/index'],
+    },
   },
   files: snapFiles, links, redirects: [{ from: 'notes/old-name', to: 'notes/zettelkasten' }],
 }
@@ -106,7 +123,7 @@ await new Promise((r) => server.listen(0, '127.0.0.1', r))
 const port = server.address().port
 
 await mkdir(WORK, { recursive: true })
-for (const f of ['scripts', 'quartz.config.ts', 'quartz.layout.ts', 'op-site.ts', 'package.json', 'styles']) {
+for (const f of ['scripts', 'quartz.config.ts', 'quartz.layout.ts', 'op-site.ts', 'nav-sort.ts', 'package.json', 'styles']) {
   await cp(join(STARTER, f), join(WORK, f), { recursive: true })
 }
 // Reuse a Quartz checkout if one is already here, so repeat runs are fast.
@@ -148,6 +165,8 @@ check('unpublished link is plain text, no <a>', html.includes('Private Log') && 
 check('unresolved link is plain text', html.includes('Nothing') && !/href="[^"]*nothing/i.test(html))
 check('embedded image rendered', /<img[^>]+attachments\/diagram\.png/.test(html))
 check('code fence kept literal [[Luhmann]]', html.includes('[[Luhmann]] in code stays literal'))
+// Also the other half of "inert": the navigation order names `index`, and an
+// entry naming the homepage must not be able to take the homepage away.
 check('index page built from Home.md', out.includes('index.html'))
 check('asset copied', out.some((f) => f.endsWith('diagram.png')))
 const marker = JSON.parse(await readFile(join(WORK, 'public/_publish.json'), 'utf8'))
@@ -175,7 +194,7 @@ const oldHome = await readFile(join(WORK, 'public/Notes/Home.html'), 'utf8').cat
 check('the old homepage URL goes to the site root, not to /index', /content="0; url=\.\.\/"/.test(oldHome))
 
 // --- the site options actually take effect in the rendered HTML ---
-check('showNavigation:false removes the page explorer', !/class="[^"]*explorer/.test(home))
+check('showNavigation:true renders the page explorer', /class="[^"]*explorer/.test(home))
 check('showThemeToggle:false removes the dark-mode control', !/class="[^"]*darkmode/.test(home))
 check('showSearch:true keeps search', /class="[^"]*search/.test(home))
 check('showGraph:true keeps the graph', /id="graph-container"|class="[^"]*graph/.test(html))
@@ -214,6 +233,61 @@ const styles = await Promise.all(
 const css = styles.join('\n')
 check('the right-to-left sheet is in the bundle', css.includes('[dir=rtl]') || css.includes("[dir='rtl']"))
 check('and it mirrors the explorer indent guides', /\[dir=.?rtl.?\][^{]*folder-outer[^{]*\{[^}]*border-right/.test(css))
+
+// --- the navigation arrangement survives the trip into the page ------------
+// The one thing only a real build can show: Quartz serialises the comparator
+// and the filter into an attribute with `.toString()` and rebuilds them in the
+// browser with `new Function`. A closure passes every other test and dies here,
+// silently, leaving the sidebar in some other order with no error anywhere.
+const dataFns = /data-data-fns="([^"]*)"/.exec(home)
+check('the explorer carries the functions the layout gave it', dataFns !== null)
+if (dataFns) {
+  const decoded = JSON.parse(dataFns[1].replace(/&#34;|&quot;/g, '"').replace(/&amp;/g, '&'))
+  // Exactly what `quartz/components/scripts/explorer.inline.ts` does with it.
+  const sortFn = new Function('return ' + decoded.sortFn)()
+  const filterFn = new Function('return ' + decoded.filterFn)()
+  const node = (slug, isFolder = false) => ({
+    slug,
+    slugSegment: slug.split('/').pop(),
+    displayName: slug.split('/').pop(),
+    isFolder,
+  })
+  const sorted = [node('attachments/index', true), node('wisdom-approaches/index', true), node('notes/index', true)]
+    .sort(sortFn)
+    .map((n) => n.slug)
+  // The homepage's entry leads the order, so this also says that a rank nothing
+  // matches costs the siblings underneath it nothing: ranks are read by slug and
+  // never by position.
+  check(
+    'the rebuilt comparator puts the arranged folders first, in the arranged order',
+    sorted[0] === 'notes/index' && sorted[1] === 'wisdom-approaches/index',
+  )
+  check('the rebuilt filter drops the hidden folder', filterFn(node('wisdom-approaches/index', true)) === false)
+  check('and still drops the tag index, which is Quartz\'s own rule', filterFn(node('tags', true)) === false)
+  check('and keeps everything else', filterFn(node('notes/index', true)) === true)
+}
+// Hidden is not private, and this is where that claim is actually tested. The
+// folder above is out of the sidebar; every page in it is still built, still at
+// its own address and still in the sitemap. docs/security.md says so in words,
+// and this is the build that has to agree.
+check(
+  'a hidden folder is still published: its pages are still built',
+  out.some((f) => f.startsWith('wisdom-approaches/') && f.endsWith('.html')),
+)
+check(
+  'and still listed in the sitemap',
+  (await readFile(join(WORK, 'public/sitemap.xml'), 'utf8')).includes('wisdom-approaches/critical-thinking'),
+)
+
+// The convention the whole scheme rests on, asserted against Quartz's source
+// rather than inferred: a folder node names itself after an index page whether
+// or not one exists. If upstream ever stops doing that, every folder in every
+// arrangement silently stops matching, and this is the line that would say so.
+const fileTrie = await readFile(join(WORK, '.quartz/quartz/util/fileTrie.ts'), 'utf8').catch(() => '')
+check(
+  'a folder node is still addressed as <folder>/index',
+  /get slug\(\)[\s\S]*?if \(this\.isFolder\)[\s\S]*?joinSegments\(path, "index"\)/.test(fileTrie),
+)
 
 // Keep the Quartz checkout for next time; drop everything else.
 await cp(join(WORK, '.quartz'), join(STARTER, '.quartz'), { recursive: true, force: true }).catch(() => {})

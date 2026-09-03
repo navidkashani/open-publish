@@ -384,6 +384,50 @@ test('a snapshot that names a right-to-left language carries both keys through',
   )
 })
 
+test('an arranged navigation reaches the module the layout reads', async () => {
+  await withBucket(
+    {
+      files: { 'a.md': { content: 'a', slug: 'a' } },
+      site: { nav: { order: ['notes/index', 'a'], hidden: ['secret'] } },
+    },
+    async ({ cwd, env }) => {
+      const result = await runScript('fetch-content.mjs', cwd, env)
+      assert.equal(result.code, 0, result.stderr)
+      const opSite = await readFile(join(cwd, 'op-site.ts'), 'utf8')
+      assert.match(opSite, /"order": \[\s*"notes\/index",\s*"a"\s*\]/)
+      assert.match(opSite, /"hidden": \[\s*"secret"\s*\]/)
+      assert.doesNotMatch(result.stdout, /ignoring site option/, 'it is an option this starter knows')
+    },
+  )
+})
+
+test('a snapshot with no navigation block still builds, with both lists empty', async () => {
+  // The case `applySiteConfig` exists to protect: a manifest published before
+  // this option existed must build the site it always did rather than reading
+  // the length of `undefined`.
+  await withBucket(
+    { files: { 'a.md': { content: 'a', slug: 'a' } }, site: { title: 'Old Snapshot' } },
+    async ({ cwd, env }) => {
+      const result = await runScript('fetch-content.mjs', cwd, env)
+      assert.equal(result.code, 0, result.stderr)
+      assert.match(await readFile(join(cwd, 'op-site.ts'), 'utf8'), /"nav": \{\s*"order": \[\],\s*"hidden": \[\]\s*\}/)
+    },
+  )
+})
+
+test('half a navigation block does not leave the other half undefined', async () => {
+  await withBucket(
+    { files: { 'a.md': { content: 'a', slug: 'a' } }, site: { nav: { order: ['a'] } } },
+    async ({ cwd, env }) => {
+      const result = await runScript('fetch-content.mjs', cwd, env)
+      assert.equal(result.code, 0, result.stderr)
+      const opSite = await readFile(join(cwd, 'op-site.ts'), 'utf8')
+      assert.match(opSite, /"order": \[\s*"a"\s*\]/)
+      assert.match(opSite, /"hidden": \[\]/)
+    },
+  )
+})
+
 test('an option this starter predates is ignored, and says so', async () => {
   await withBucket(
     { files: { 'a.md': { content: 'a', slug: 'a' } }, site: { showStackedPages: true } },

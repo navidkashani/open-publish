@@ -1,6 +1,7 @@
 import { PageLayout, SharedLayout } from './quartz/cfg'
 import * as Component from './quartz/components'
 import { site } from './op-site'
+import { navExplorerOptions } from './nav-sort'
 
 /**
  * Layout, driven by the site options set in Obsidian.
@@ -11,6 +12,17 @@ import { site } from './op-site'
  */
 
 const optional = <T>(enabled: boolean, component: T): T[] => (enabled ? [component] : [])
+
+/**
+ * The explorer, arranged if anybody arranged it.
+ *
+ * Built once and used by both layouts so the two cannot drift apart, and called
+ * rather than shared as a value because each layout needs its own component
+ * instance. `navExplorerOptions` returns undefined when the snapshot carries no
+ * navigation, and `Explorer(undefined)` is the same call as `Explorer()`: a site
+ * nobody has arranged renders byte for byte what it always did.
+ */
+const explorer = () => Component.Explorer(navExplorerOptions(site.nav))
 
 export const sharedPageComponents: SharedLayout = {
   head: Component.Head(),
@@ -46,7 +58,7 @@ export const defaultContentPageLayout: PageLayout = {
     ...optional(site.showSearch, Component.Search()),
     ...optional(site.showThemeToggle, Component.Darkmode()),
     ...optional(site.showGraph, Component.DesktopOnly(Component.Graph())),
-    ...optional(site.showNavigation, Component.DesktopOnly(Component.Explorer())),
+    ...optional(site.showNavigation, Component.DesktopOnly(explorer())),
   ],
   right: [
     ...optional(site.showOutline, Component.DesktopOnly(Component.TableOfContents())),
@@ -65,7 +77,7 @@ export const defaultListPageLayout: PageLayout = {
     Component.MobileOnly(Component.Spacer()),
     ...optional(site.showSearch, Component.Search()),
     ...optional(site.showThemeToggle, Component.Darkmode()),
-    ...optional(site.showNavigation, Component.DesktopOnly(Component.Explorer())),
+    ...optional(site.showNavigation, Component.DesktopOnly(explorer())),
   ],
   right: [],
 }

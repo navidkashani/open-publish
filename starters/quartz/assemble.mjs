@@ -52,6 +52,8 @@ export const OVERLAY_FILES = [
   'quartz.config.ts',
   'quartz.layout.ts',
   'op-site.ts',
+  // Imported by quartz.layout.ts, so a template without it does not build.
+  'nav-sort.ts',
   // The directory, not the file inside it: assemble.test.mjs declares the
   // overlay one top-level name at a time, and `styles/` is where ours lives.
   'styles',

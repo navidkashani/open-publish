@@ -77,6 +77,48 @@ export interface SnapshotFile {
   legacyUrls?: string[]
 }
 
+/**
+ * How the site's navigation is arranged, for the parts of it somebody arranged.
+ *
+ * Both lists name **slugs**, because the slug is the only address a generator
+ * knows a page by. Folders are named by the slug of their index page, so a
+ * folder published at `/notes` is `notes/index` here. That is not an invention:
+ * it is how Quartz's own file tree names a folder node, and any generator with
+ * a tree of pages has to give a folder some address of its own.
+ *
+ * The copy of this shape kept in `data.json` holds **vault paths** instead, so
+ * that renaming a note does not silently drop it out of the order and so the
+ * manager can show the tree somebody recognises. `core/navorder.ts` is the one
+ * place that converts, in the same spirit as `homepage`, which is resolved to a
+ * slug in the plugin so no generator needs to know the concept exists.
+ */
+export interface SnapshotNav {
+  /**
+   * Slugs in the order they should appear among their siblings, for those
+   * parents somebody has actually arranged. A parent absent from this list
+   * keeps the generator's own default order entirely.
+   *
+   * Per parent rather than site-wide, and that is load-bearing rather than
+   * tidy. A generator is free to inline this into every page it renders, which
+   * Quartz's explorer does, so a fully materialised order of five thousand
+   * slugs would be a hundred and fifty kilobytes on every page of the site.
+   * Arranging one folder of twenty costs twenty entries and the rest costs
+   * nothing.
+   *
+   * A parent appears here because somebody arranged it, never because the
+   * result differs from some default: the default is the generator's, and two
+   * generators reading this key already disagree about what it is.
+   */
+  order: string[]
+  /**
+   * Slugs to leave out of the navigation. Still published, still linked to,
+   * still in search and still reachable at their own URL: this is a tidier
+   * sidebar, never a private page. `noIndex` is the search-engine control and
+   * there is no access control at all. See docs/security.md.
+   */
+  hidden: string[]
+}
+
 export type AnalyticsProvider = 'none' | 'google' | 'plausible' | 'umami'
 
 export interface SnapshotAnalytics {
@@ -101,7 +143,7 @@ export interface SnapshotAnalytics {
  * Deliberately excluded, with reasons, so this does not get relitigated:
  *   - forced light/dark default: needs patching generator internals
  *   - site description: generators derive per-page descriptions from content
- *   - readable line length, logo, nav ordering: generator-specific plumbing
+ *   - readable line length, logo: generator-specific plumbing
  *   - stacked pages: no equivalent outside Obsidian Publish
  *   - passwords, collaborators, custom domain: server-side or host-level
  */
@@ -161,6 +203,16 @@ export interface SnapshotSite {
    * navigation already uses.
    */
   showPrevNext: boolean
+  /**
+   * Navigation order and hidden pages, or absent when nobody has arranged any.
+   *
+   * Optional, and it stays optional: a starter that predates it ignores it and
+   * says so, and a snapshot without it builds exactly the site it always did.
+   * The plugin omits the key entirely rather than writing two empty lists, so a
+   * vault that never opens the manager keeps producing byte-identical snapshot
+   * IDs and never spends a build on a feature it does not use.
+   */
+  nav?: SnapshotNav
   analytics: SnapshotAnalytics
 }
 
@@ -173,7 +225,11 @@ export interface SnapshotSite {
  * silently missing from the rollback diff or from the settings panel.
  */
 export type SiteBooleanKey = {
-  [K in keyof SnapshotSite]: SnapshotSite[K] extends boolean ? K : never
+  // `-?` strips optionality before the test, which matters from the moment any
+  // option is optional: without it an optional key contributes `undefined` to
+  // this union, and `undefined` is not a key, so both records keyed by it stop
+  // compiling for a reason that has nothing to do with what they hold.
+  [K in keyof SnapshotSite]-?: SnapshotSite[K] extends boolean ? K : never
 }[keyof SnapshotSite]
 
 /**
