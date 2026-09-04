@@ -80,6 +80,10 @@
 .op-notice-ok { background: var(--background-secondary); border-left-color: var(--text-success); }
 .op-notice-info { background: var(--background-secondary); border-left-color: var(--text-muted); }
 
+/* The rolled-back panel is a setting row now, so without this it carries the
+   row's top border as well as the panel's own left one. */
+.setting-item.op-rolled-back { border-top: none; }
+
 .op-blockers .op-blocker { margin-top: 8px; }
 
 /* --- review sections --- */
@@ -286,8 +290,6 @@
   border-radius: var(--radius-s);
   overflow-x: auto;
 }
-
-.op-security-note p { margin: 0 0 8px; }
 
 .op-result { padding: 14px 16px; }
 .op-result-headline { font-size: var(--font-ui-medium); font-weight: var(--font-semibold); margin: 0 0 4px; }

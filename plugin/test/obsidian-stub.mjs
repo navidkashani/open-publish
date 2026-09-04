@@ -487,6 +487,63 @@ export class TFile extends TAbstractFile {
 }
 
 export class Plugin {}
+
+/**
+ * A sub-page of a setting tab, as `SettingDefinitionPage.page` builds one.
+ *
+ * The element tree is modelled because a subclass renders into `containerEl`
+ * and a test then reads what it drew, which is how the storage and build forms
+ * are still reachable now that each lives on its own page.
+ */
+export class SettingPage {
+  constructor() {
+    this.rootEl = el()
+    this.titlebarEl = this.rootEl.createDiv({ cls: 'setting-page-titlebar' })
+    this.containerEl = this.rootEl.createDiv({ cls: 'setting-page-content' })
+    this.title = ''
+  }
+  display() {}
+  hide() {}
+}
+
+/** The second argument a `render:` definition is handed. Nothing here uses it yet. */
+export class SettingGroup {
+  constructor(containerEl) {
+    this.listEl = containerEl.createDiv({ cls: 'setting-group' })
+  }
+  setHeading(text) {
+    this.listEl.createDiv({ cls: 'setting-item-heading', text })
+    return this
+  }
+  addClass(...classes) {
+    for (const cls of classes) this.listEl.addClass(cls)
+    return this
+  }
+  addSetting(build) {
+    build(new Setting(this.listEl))
+    return this
+  }
+  addSearch(build) {
+    build(valueComponent(this.listEl.createEl('input', { type: 'search' }), 'value'))
+    return this
+  }
+  addExtraButton(build) {
+    const buttonEl = this.listEl.createEl('button', { cls: 'clickable-icon extra-setting-button' })
+    build(component(buttonEl, { extraSettingsEl: buttonEl }))
+    return this
+  }
+}
+
+/**
+ * The tab, with the 1.13 declarative surface and **deliberately no renderer**.
+ *
+ * `update()` stores the definitions and nothing more. Faking Obsidian's
+ * definitions-to-DOM pass here would be a second copy of a shipped feature,
+ * free to drift from the one users get, which is the thing `README.md` says
+ * this test suite exists to avoid. So a test asserts the tree as data, and
+ * reaches DOM only through the `render:` callbacks and `page()` factories that
+ * are the plugin's own code either way.
+ */
 export class PluginSettingTab {
   constructor(app, plugin) {
     this.app = app
@@ -494,7 +551,24 @@ export class PluginSettingTab {
     this.containerEl = el()
     /** The sidebar icon. Real since 1.11.0; a subclass assigns it in its constructor. */
     this.icon = null
+    /** Populated by update(), as the real one is. */
+    this.settingItems = []
   }
+  getSettingDefinitions() {
+    return []
+  }
+  update() {
+    this.settingItems = this.getSettingDefinitions()
+  }
+  /** The documented defaults: a flat key against `plugin.settings`. Both are overridden here. */
+  getControlValue(key) {
+    return this.plugin.settings?.[key]
+  }
+  setControlValue(key, value) {
+    if (this.plugin.settings) this.plugin.settings[key] = value
+  }
+  /** Cheap in the app, and nothing at all here: there is no rendered DOM to refresh. */
+  refreshDomState() {}
   display() {}
   hide() {}
 }

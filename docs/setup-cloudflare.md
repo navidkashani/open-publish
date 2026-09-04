@@ -162,9 +162,10 @@ allow 500 a month, and a test button should not spend one uninvited.
 
 Choose what to publish, either way round:
 
-- **Folders**: Settings → Open Publish → *Folders* → **Manage folders…**, then
-  pick from the list. Each rule shows how many notes it currently publishes,
-  so a rule that has stopped matching says so on the spot.
+- **Folders**: Settings → Open Publish → *What gets published* → *Folders* →
+  **Manage folders…**, then pick from the list. Each rule shows how many notes
+  it currently publishes, so a rule that has stopped matching says so on the
+  spot.
 - **One note**: right click it, anywhere it lives, and choose **Publish with
   Open Publish**. The choices you make this way are listed under *Per-file
   choices* in settings.
@@ -183,11 +184,12 @@ neither changes whether it is published:
   a note in the navigation even if it was hidden in settings.
 
 Both can also be set without touching your notes, under *Settings → Open Publish
-→ Customize navigation → Manage*. Folders open closed; click one to see inside
-it. Drag a page onto the row whose place you want it to take, or use the Move up
-and Move down buttons on its own row. Those buttons are there because a drag
-works on no phone and no keyboard; on a phone, a long press on a row offers the
-same three actions. Either way a page can only move among its own siblings.
+→ Appearance → Customize navigation → Manage*. Folders open closed; click one to
+see inside it. Drag a page onto the row whose place you want it to take, or use
+the Move up and Move down buttons on its own row. Those buttons are there
+because a drag works on no phone and no keyboard; on a phone, a long press on a
+row offers the same three actions. Either way a page can only move among its own
+siblings.
 The third control on each row leaves the page out of the navigation. Your
 homepage is listed too, badged *homepage*: it sits with the top-level notes
 wherever its file happens to live, because that is where the site serves it.

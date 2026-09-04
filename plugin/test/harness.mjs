@@ -32,7 +32,7 @@ export const { SetupWizard } = await import('../src/ui/SetupWizard.ts')
  * name becomes a credential and so the only place that can be tested for it.
  */
 export const { default: OpenPublishPlugin } = await import('../src/main.ts')
-export const { Platform, TFile, TFolder } = await import('./obsidian-stub.mjs')
+export const { Platform, Setting, SettingGroup, TFile, TFolder } = await import('./obsidian-stub.mjs')
 export { notices, menus, modals, suggesters, secretFields, MODAL_MEMBERS } from './obsidian-stub.mjs'
 export { PublishSession }
 

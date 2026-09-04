@@ -27,7 +27,7 @@ No telemetry. No analytics. No server operated by this project.
 npm install
 npm run dev        # esbuild watch
 npm run typecheck
-npm test           # 490 tests, no network, no Obsidian
+npm test           # 852 tests, no network, no Obsidian
 npm run build      # produces main.js
 ```
 
@@ -74,9 +74,15 @@ src/
    ├─ FolderRules.ts          rule normalisation and match counting, no DOM
    ├─ RuleList.ts             a list of rules and the control that removes one
    ├─ PathSuggest.ts          the folder and note pickers
+   ├─ PickerList.ts           the provider and host row lists, shared by wizard and settings
+   ├─ Disclosure.ts           the "Advanced" section, and the rule that it is never opaque
+   ├─ StorageFields.ts        the storage form, shared by settings and the wizard
+   ├─ BuildFields.ts          the build form, shared by settings and the wizard
    ├─ longpress.ts            press-and-hold, with the timing testable off-device
    ├─ SetupWizard.ts          first-run setup
-   └─ SettingsTab.ts          settings
+   ├─ settingDefinitions.ts   the settings tree as data, Obsidian types only
+   ├─ FieldsPage.ts           a settings sub-page whose body is drawn by hand
+   └─ SettingsTab.ts          settings: the shell that wires the tree to the app
 ```
 
 ### A note on testability
@@ -88,3 +94,9 @@ the logic that could drift from what ships.
 
 The two places that genuinely need Obsidian at runtime (`obsidian-http.ts` and
 the UI) are deliberately thin.
+
+`ui/settingDefinitions.ts` is held to the same rule, which is what the settings
+tab was split in two for: the whole settings tree can be asserted as plain data.
+`test/settingdefinitions.test.mjs` does not import `test/harness.mjs`, so no
+resolve hook is installed in that process and the rule enforces itself: an
+Obsidian value import anywhere in that module's reach fails the file outright.
