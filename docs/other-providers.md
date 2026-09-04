@@ -1,21 +1,20 @@
 # Other providers
 
-The design depends on only two things:
+The design needs only two things:
 
 1. **Storage** that speaks the S3 API and supports `GET`, `PUT`, `HEAD` and
    `DELETE`. Conditional writes (`If-Match`) are strongly recommended.
 2. **A host** that builds a Git repository, exposes environment variables, and
    offers a deploy hook URL.
 
-Anything meeting both works. Cloudflare is documented as the default because the
+Anything meeting both works. Cloudflare is the documented default, because the
 free tiers are generous and both halves live in one dashboard.
 
 ## Storage
 
-The plugin ships with this list built in. Pick one in **Settings > Storage** and
-it fills in the endpoint, the region and path-style addressing for you, leaving
-one blank to type. The table is here for reference, and for anyone configuring
-the build by hand.
+Pick one in **Settings → Storage** and the plugin fills in the endpoint, the
+region and path-style addressing, leaving one blank to type. This table is for
+reference, and for anyone configuring a build by hand.
 
 | Provider | Endpoint | Region | Path style | Conditional writes |
 |---|---|---|---|---|
@@ -27,55 +26,42 @@ the build by hand.
 | **MinIO** (self-hosted) | your server URL | `us-east-1` | on | 2024-09-13 and later |
 | **Other S3-compatible storage** | your provider's S3 API endpoint | usually `auto` | on | check at connect |
 
-**Cloudflare R2 without keys** is the same R2 bucket reached a different way:
-through a small Worker you deploy to your own account, which Cloudflare binds to
-the bucket. The plugin then holds one bearer token instead of an access key and
-secret, so no storage credential is on your device at all. Region and path style
-have no meaning there, because nothing is signed and the Worker holds the bucket
-name. See [the gateway's README](../gateway/README.md) to deploy it, and
-[security.md](security.md) for what it does and does not fix. Everyone else,
-including everyone not on Cloudflare, keeps the setup in the rest of this table:
-this route is R2-only and there is no equivalent for S3, Backblaze or Wasabi.
+**Cloudflare R2 without keys** is the same R2 bucket reached a different way,
+through a small Worker you deploy to your own account. The plugin holds one
+bearer token instead of an access key and secret. Region and path style have no
+meaning there. This route is R2-only. See [the gateway's
+README](../gateway/README.md) to deploy it, and [security.md](security.md) for
+what it does and does not fix.
 
-Amazon S3 is the one entry with path style **off**: AWS documents path-style
-addressing as deprecated and virtual-host addressing as the form it is keeping.
-The cost of virtual-host addressing is that a bucket name containing a dot
-breaks TLS, so avoid dots in the name. Every other provider here is path-style,
-which is why it is the default.
+Amazon S3 is the one entry with path style **off**, because AWS documents
+path-style addressing as deprecated. Virtual-host addressing breaks TLS on a
+bucket name containing a dot, so avoid dots in the name.
 
-Use **Test connection** in the plugin before going further. It performs a real
-PUT, GET, compare and DELETE, then one write with a deliberately stale
-`If-Match` that a correct provider has to reject. A pass therefore means the
-credentials genuinely have everything publishing needs, and tells you whether
-two devices can publish safely.
-
-If a provider does not support conditional writes, the plugin detects it at
-runtime and degrades to a read-then-warn check. Publishing still works; the
-protection against two devices publishing at the same moment is weaker. Run
-**Storage self-test** in settings for the full picture, including the
-first-publish guard that **Test connection** does not cover.
+Use **Test connection** before going further. It performs a real PUT, GET,
+compare and DELETE, then one write with a deliberately stale `If-Match` that a
+correct provider has to reject. If a provider does not support conditional
+writes, the plugin degrades to a read-then-warn check: publishing still works,
+and two devices publishing at the same moment are less well protected. **Storage
+self-test** also covers the first-publish guard.
 
 ### Two that fight this design
 
-**Wasabi** bills a 90-day minimum storage duration: delete an object sooner and
-you still pay for the remaining days. Open Publish is content-addressed, so
-**Clean up unused files** deletes orphaned objects, and on Wasabi that costs
-money rather than saving it. Wasabi works, and the plugin says this wherever you
-choose it, but leave the cleanup alone or expect the bill.
+**Wasabi** bills a 90-day minimum storage duration, so **Clean up unused files**
+costs money there rather than saving it. Wasabi works, and the plugin says this
+wherever you choose it, but leave the cleanup alone.
 
-**Storj** charges per segment, which penalises many small objects. A
-content-addressed vault is precisely many small objects, so it is a poor fit
-even though the API works.
+**Storj** charges per segment, which penalises many small objects. This design
+stores many small objects, so it is a poor fit even though the API works.
 
 ## Hosting
 
-The plugin ships with this list built in. Pick one in **Settings > Site build**
-and it labels the copy, the build budget and the warnings for the host you
-actually use. The choice is only ever a label: the deploy hook URL is the one
-thing sent, and the site address the one thing polled.
+Pick one in **Settings → Site build** and the plugin labels the copy, the build
+budget and the warnings for the host you use. The choice is only ever a label:
+the deploy hook URL is the one thing sent, and the site address the one thing
+polled.
 
 Both starters build with `npm run build`. **The output directory differs, and
-getting it wrong is the one mistake here that does not announce itself**: a host
+getting it wrong is the one mistake here that does not announce itself:** a host
 told the wrong directory deploys an empty one and reports success.
 
 | Starter | Build command | Output directory |
@@ -83,12 +69,9 @@ told the wrong directory deploys an empty one and reports success.
 | **jotter** (recommended) | `npm run build` | `dist` |
 | **Open Publish Quartz** | `npm run build`, which runs `node scripts/fetch-content.mjs && node scripts/build-site.mjs && node scripts/finalize.mjs` | `public` |
 
-The setup guide fills this in for whichever starter you picked on step 3, so
-this table is for people wiring a host up by hand.
-
-Environment variables, the same for both: `OP_ENDPOINT`, `OP_BUCKET`,
+Environment variables are the same for both: `OP_ENDPOINT`, `OP_BUCKET`,
 `OP_REGION`, `OP_ACCESS_KEY_ID`, `OP_SECRET_ACCESS_KEY`, plus `OP_PREFIX` if you
-use one, and `OP_SITE_URL` where the host does not provide an address of its own.
+use one, and `OP_SITE_URL` where the host provides no address of its own.
 
 | Host | Deploy hook URL | Free build budget | `_redirects` and `_headers` | Site address variable |
 |---|---|---|---|---|
@@ -99,30 +82,26 @@ use one, and `OP_SITE_URL` where the host does not provide an address of its own
 | **Another host** | whatever your host gives you | unknown | unknown | set `OP_SITE_URL` |
 
 All four accept `POST`, none needs an authorization header, and Vercel also
-accepts `GET`. The plugin recognises a pasted hook URL by matching it against
-these shapes exactly, so a hook behind a relay or a proxy is simply "Another
-host": a near miss costs a label and never changes a limit.
-
-One caveat on the Cloudflare Pages row. Cloudflare's
+accepts `GET`. The plugin recognises a pasted hook URL by matching these shapes
+exactly, so a hook behind a relay is simply "Another host", which costs a label
+and nothing else. One caveat on the Pages row: Cloudflare's
 [deploy hooks page](https://developers.cloudflare.com/pages/configuration/deploy-hooks/)
-shows the URL only in a screenshot rather than as text, so that path is what the
-dashboard hands out rather than something Cloudflare documents. Everything else
-in the table comes from the vendor's own docs.
+shows that URL only in a screenshot. Everything else comes from vendor docs.
 
 ### The site address
 
-Quartz needs an absolute address for the feed, the sitemap and the 404 page.
-Each host names its own variable, and the build reads whichever one it finds.
-Two variables of our own override that:
+The feed, the sitemap and the 404 page need an absolute address. Each host names
+its own variable and the build reads whichever it finds. Two variables of our own
+override that:
 
 | Variable | When you need it |
 |---|---|
-| `OP_SITE_URL` | A custom domain, Cloudflare Workers Builds, or any host that sets no address of its own. Without it the feed and the sitemap keep the vendor host name, or the site is built as `example.com`. |
+| `OP_SITE_URL` | A custom domain, Cloudflare Workers Builds, or any host that sets no address of its own. Without it the feed and sitemap keep the vendor host name, or the site is built as `example.com`. |
 | `OP_SITE_ROOT` | A site served from a sub-path, e.g. `https://example.com/notes/`. Set it to `/notes` so internal links resolve. |
 
 Adding a custom domain in your host's dashboard is not enough on its own. The
-pages will serve from it, but the feed and the sitemap keep pointing at the
-`pages.dev` or `netlify.app` name until `OP_SITE_URL` says otherwise.
+pages serve from it, and the feed and sitemap keep pointing at the `pages.dev`
+or `netlify.app` name until `OP_SITE_URL` says otherwise.
 
 ### Cloudflare Pages
 
@@ -132,87 +111,64 @@ The documented default. See [setup-cloudflare.md](setup-cloudflare.md).
 
 The forward-looking Cloudflare option. Cloudflare's own
 [migration guide](https://developers.cloudflare.com/workers/static-assets/migration-guides/migrate-from-pages/)
-puts it plainly: Pages continues to be supported, but new investment,
-optimisation and feature work go to Workers.
+says Pages continues to be supported, and that new investment goes to Workers.
 
 Same repository, same build command, same variables. Deploy hooks arrived in
 [April 2026](https://developers.cloudflare.com/changelog/post/2026-04-01-deploy-hooks/):
 a URL, `POST`, no authorization header, 10 builds a minute per Worker.
 
-The one thing to get right is the address. Workers Builds sets `CI`,
-`WORKERS_CI`, `WORKERS_CI_BUILD_UUID`, `WORKERS_CI_COMMIT_SHA` and
-`WORKERS_CI_BRANCH`, and
-[no URL variable at all](https://developers.cloudflare.com/workers/ci-cd/builds/configuration/).
-So **set `OP_SITE_URL` yourself**. If you forget, the build stops and says so,
-which is deliberate: it used to build a site quietly addressed as `example.com`.
+Workers Builds sets no URL variable at all, so **set `OP_SITE_URL` yourself**.
+Forget it and the build stops rather than quietly building a site addressed as
+`example.com`.
 
 Both starters ship the `wrangler.jsonc` a Worker needs, so either is
-connect-and-go here. Each is assets-only with no `main`, and the two differ
-where the sites differ:
+connect-and-go here. Each is assets-only with no `main`:
 
 | | Assets directory | 404 | Trailing slashes |
 |---|---|---|---|
 | **jotter** | `./dist` | `404-page`, from `src/pages/404.astro` | `drop-trailing-slash`, because Astro writes `dist/notes/index.html` while the links, canonical, sitemap and search all spell it `/notes` |
 | **Open Publish Quartz** | `./public` | `404-page` | `auto-trailing-slash`, so the extensionless links Quartz writes resolve to its flat `.html` files |
 
-Pages ignores that file in either repository, because it carries no
-`pages_build_output_dir`, so one repository serves both hosts. It says so
-loudly, though, and the line reads worse than it is:
+**Change the `name` in it to match your Worker.** Workers Builds fails the build
+when the two disagree, and the error does not say which name it wanted.
+
+Pages ignores that file, because it carries no `pages_build_output_dir`, so one
+repository serves both hosts. Every Pages build prints this warning and then
+succeeds:
 
 ```
 A Wrangler configuration file was found but it does not appear to be valid.
 Did you mean to use wrangler.toml to configure Pages? ... Skipping file and continuing.
 ```
 
-Every Pages build of either starter prints that and then succeeds. Adding
-`pages_build_output_dir` to silence it would make the file the source of truth
-for the Pages project's build settings, overriding the dashboard, so it stays.
+Adding `pages_build_output_dir` to silence it would make the file the source of
+truth for the Pages project's build settings, overriding the dashboard.
 
 ### Node version
 
-Both starters pin Node with a `.node-version` file, currently `24.20.0`, and
-you should leave it alone unless you mean to move it.
-
-It matters because the hosts disagree about where to look. Cloudflare Pages,
-Workers Builds and Netlify read `.node-version`; **Pages does not read
-`package.json` engines at all**, and its build image default was 22.16.0, older
-than what some dependencies ask for. Vercel is the other way round and reads
-`engines`. Both files ship, saying the same version, so the same template does
-not build on two different Node versions depending on who is building it.
-
-**Change the `name` in it to match your Worker.** Workers Builds fails the build
-when the two disagree, and the error does not say which name it wanted.
-
-Pages keeps the recommendation anyway, for one reason rather than the old two:
-Workers Builds reports no site address, so `OP_SITE_URL` is a required manual
-step here and not needed at all there.
+Both starters pin Node with a `.node-version` file. Leave it alone unless you
+mean to move it. The hosts disagree about where to look: Cloudflare Pages,
+Workers Builds and Netlify read `.node-version`, and **Pages does not read
+`package.json` engines at all**, while Vercel reads `engines`. Both files ship
+saying the same version, so the same template cannot build on two different Node
+versions depending on who builds it.
 
 ### Netlify
 
 Build command `npm run build`, publish directory `public`. Environment variables
-under **Site configuration → Environment variables**. Deploy hook under
-**Build & deploy → Build hooks**.
+under **Site configuration → Environment variables**. Deploy hook under **Build &
+deploy → Build hooks**.
 
 Netlify's free plan is
 [credit-based](https://docs.netlify.com/manage/accounts-and-billing/billing/billing-for-credit-based-plans/billing-faq-for-credit-based-plans/):
 roughly 300 credits a month at about 15 per production deploy, so **around 20
-deploys a month**.
+deploys a month**. A minimum wait between builds cannot protect that, because
+five minutes still permits about 8,600 builds a month. Turn *Build after
+publishing* off and start builds when you mean to. Run out and the site keeps
+serving what it has but stops updating, the deploy hook returns an error, and the
+plugin reports that your host turned the request down.
 
-Worth being clear about what that means, because it is not what a minimum wait
-protects against. Five minutes between builds still permits about 8,600 builds a
-month. The limit that bites is the monthly one, and the only real defence is to
-turn *Build after publishing* off and start builds when you mean to. The plugin
-says so in a panel next to that switch rather than changing the setting for you.
-
-Run out and the site keeps serving what it has, but stops updating: on the
-legacy build-minutes plans
-[builds stop and the site stays up](https://answers.netlify.com/t/what-happens-if-a-free-plan-exceeds-bandwidth-and-or-build-minutes-limit/16244),
-and on the credit-based free plan the project is paused until the next cycle.
-The deploy hook then returns an error, so the plugin reports that your host
-turned the request down.
-
-Netlify reads `_redirects` and `_headers` from the publish directory natively,
-so both files work unchanged.
+Netlify reads `_redirects` and `_headers` from the publish directory natively.
 
 ### Vercel
 
@@ -220,32 +176,26 @@ Framework preset **Other**, build command `npm run build`, output directory
 `public`. Environment variables under **Settings → Environment Variables**.
 Deploy hook under **Settings → Git → Deploy Hooks**.
 
-Vercel does not read `_redirects` or `_headers`. Rename redirects and the
-`no-store` rule on `/_publish.json` will not apply, which means the plugin may
-briefly report a stale version as live. Translate them into `vercel.json` if you
-need them; the cache-busting parameter on each poll covers most of the risk.
+Vercel reads neither `_redirects` nor `_headers`. Rename redirects and the
+`no-store` rule on `/_publish.json` will not apply, so the plugin may briefly
+report a stale version as live. Translate them into `vercel.json` if you need
+them; the cache-busting parameter on each poll covers most of the risk.
 
 ### GitHub Pages
 
-Not directly supported, and the reason is worth stating rather than working
-around. GitHub has no deploy hook: builds are started through
+Not supported. GitHub has no deploy hook: builds start through
 `repository_dispatch` or `workflow_dispatch`, and both require an
-`Authorization` header carrying a token. The plugin sends **no headers at all**
-with a deploy hook, by design, so there is nowhere to put one.
-
-An earlier version of this page said to point the deploy hook URL at the GitHub
-API "with a token". That never worked. To use GitHub Pages you need a small
-relay that you own, holding the token and exposing a plain URL, which is the
-same shape as the Worker gateway sketched in [security.md](security.md). A
-GitHub token is also a far wider credential than a deploy hook URL, which is a
-poor trade on its own terms.
+`Authorization` header carrying a token. The plugin sends no headers at all with
+a deploy hook, by design. You would need a small relay of your own, holding the
+token and exposing a plain URL, the same shape as the [Worker
+gateway](../gateway/README.md).
 
 ### A hook for the branch your site serves
 
 Whichever host you pick, create the deploy hook for the branch the live site is
-built from. A hook scoped to some other branch builds a preview address while
-the plugin polls the production one, so the check never matches and a publish
-waits the full ten minutes before saying anything.
+built from. A hook scoped to another branch builds a preview address while the
+plugin polls the production one, so a publish waits the full ten minutes before
+saying anything.
 
 ## Local testing with MinIO
 
