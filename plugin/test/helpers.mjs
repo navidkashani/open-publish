@@ -98,6 +98,8 @@ export const site = {
   showTags: true,
   showPageMetadata: false,
   showPrevNext: true,
+  showHoverPreview: true,
+  showInlineTitle: true,
   analytics: { provider: 'none', id: '' },
 }
 

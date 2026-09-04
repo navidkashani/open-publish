@@ -32,7 +32,7 @@ const config: QuartzConfig = {
   configuration: {
     pageTitle: site.title,
     enableSPA: true,
-    enablePopovers: true,
+    enablePopovers: site.showHoverPreview,
     analytics: analyticsConfig(),
     // Checked against Quartz's own translation table rather than trusted. An
     // unknown tag makes `TRANSLATIONS[locale]` undefined at runtime, and every

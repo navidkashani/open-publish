@@ -382,6 +382,73 @@ export const UNCLAIMED_PERMALINK_BLIND_SPOT =
   'A note that Publish published individually without a permalink cannot be found this way. Compare against ' +
   'your live site if you want to be sure.'
 
+// --- site options Publish keeps somewhere this plugin cannot read ----------
+
+/**
+ * One Publish setting, or a group of them, and where the same thing is set here.
+ *
+ * The same honesty `PER_NOTE_SELECTIONS_UNREACHABLE` applies to per-note
+ * selections, carried one step further: from *why we cannot read it* to *what to
+ * retype*. `.obsidian/publish.json` holds four keys, `siteId`, `host`,
+ * `included` and `excluded`, and none of these is among them. Every setting
+ * below exists only at `publish-01.obsidian.md/options/<siteId>`, which
+ * `docs/architecture.md` prices and declines to call.
+ *
+ * Analytics is the row this section is worth building for. The field is right
+ * there in the settings panel, so a migrated site keeps collecting nothing and
+ * nothing anywhere says why.
+ *
+ * `here` is a full path every time, never "the panel behind this one": this
+ * screen is also reached from step 6 of the setup guide, where there is no
+ * settings tab open to be behind anything.
+ */
+export interface SiteOptionCarryover {
+  /** What Obsidian Publish calls it. */
+  publish: string
+  /** Where the same thing lives here. */
+  here: string
+}
+
+/** The label on the closed section, which has to say what is inside it. */
+export const SITE_OPTION_CARRYOVER_HEADING = 'Your Publish site options do not come across'
+
+export const SITE_OPTION_CARRYOVER_INTRO =
+  'These live on Obsidian\'s servers rather than in your vault, so the import cannot read them. You can look ' +
+  'them up in Obsidian\'s own Publish site options for as long as that site exists. Nothing here is urgent, and ' +
+  'if you have set this plugin up already you have done most of it.'
+
+export const SITE_OPTION_CARRYOVER: readonly SiteOptionCarryover[] = [
+  { publish: 'Site name', here: 'Settings → Open Publish → Site options → Site name' },
+  { publish: 'Home page', here: 'Settings → Open Publish → Site options → Homepage' },
+  {
+    publish: 'Google Analytics',
+    here:
+      'Settings → Open Publish → Analytics → Tracking ID. Plausible and Umami are offered there too, ' +
+      'and Obsidian Publish offers neither.',
+  },
+  {
+    publish:
+      'Navigation, graph, table of contents, search, backlinks, light/dark toggle, hover preview, inline title',
+    here: 'Settings → Open Publish → Appearance',
+  },
+  {
+    publish: 'Sidebar order, hidden pages',
+    here: 'Settings → Open Publish → Appearance → Customize navigation',
+  },
+  { publish: 'Strict line breaks', here: 'Settings → Open Publish → Appearance → Strict line breaks' },
+  { publish: 'Disallow indexing', here: 'Settings → Open Publish → Site options → Discourage search engines' },
+]
+
+/**
+ * What this plugin does not have, so nobody hunts for it.
+ *
+ * The fact, without the arguments: each of these was decided against for its own
+ * reason, and `docs/architecture.md` keeps the reasons.
+ */
+export const SITE_OPTION_NOT_HERE =
+  'A few Publish settings have no equivalent here at all, so there is nothing to go looking for: a forced ' +
+  'light or dark default, a logo, readable line length, stacked pages, and password protection.'
+
 function capitalize(text: string): string {
   return text.charAt(0).toUpperCase() + text.slice(1)
 }

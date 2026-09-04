@@ -75,6 +75,14 @@ const APPEARANCE = {
     label: 'Previous and next links',
     desc: 'Links to the pages either side of this one, at the foot of the page.',
   },
+  showHoverPreview: {
+    label: 'Hover previews',
+    desc: 'A preview card when a visitor hovers a link to another published page.',
+  },
+  showInlineTitle: {
+    label: 'Inline title',
+    desc: "The note's title as a heading above its content. Off suits notes that open with a heading of their own.",
+  },
 } satisfies Record<AppearanceKey, { label: string; desc: string }>
 
 const APPEARANCE_KEYS = Object.keys(APPEARANCE) as AppearanceKey[]

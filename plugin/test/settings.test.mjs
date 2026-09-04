@@ -86,6 +86,11 @@ test('new site options arrive with safe defaults, never undefined', () => {
   assert.equal(settings.site.homepage, '')
   assert.equal(settings.site.strictLineBreaks, false, 'off by default: notes use single line breaks')
   assert.equal(settings.site.showPrevNext, true)
+  // Both on, so a vault upgrading into them keeps the site it already had:
+  // hover previews and the page's own title are what every starter rendered
+  // before either was an option.
+  assert.equal(settings.site.showHoverPreview, true)
+  assert.equal(settings.site.showInlineTitle, true)
   assert.equal(
     settings.site.showPageMetadata,
     false,

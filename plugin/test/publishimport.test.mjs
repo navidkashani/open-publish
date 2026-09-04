@@ -12,6 +12,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import {
+  SITE_OPTION_CARRYOVER,
+  SITE_OPTION_NOT_HERE,
   UNCLAIMED_PERMALINK_BLIND_SPOT,
   UNCLAIMED_PERMALINK_LIMIT,
   importBlockedReason,
@@ -382,4 +384,58 @@ test('a live site is warned about removals, and only about removals', () => {
 test('a clean import says nothing at all', () => {
   const plan = planPublishImport(publishConfig({ included: ['Notes', 'Ideas'] }), rules())
   assert.deepEqual(warnings(plan), [])
+})
+
+// --- the site options that cannot be imported ------------------------------
+
+/**
+ * Obsidian Publish's own site options, lowercased, as its dialog names them.
+ *
+ * The left column of the carry-over list has to be things somebody can actually
+ * find over there. A row naming an option Publish does not have sends a
+ * migrating user hunting through a dialog for a setting that was never in it,
+ * which is worse than saying nothing.
+ */
+const PUBLISH_OPTIONS = new Set([
+  'site name',
+  'home page',
+  'google analytics',
+  'navigation',
+  'graph',
+  'table of contents',
+  'search',
+  'backlinks',
+  'light/dark toggle',
+  'hover preview',
+  'inline title',
+  'sidebar order',
+  'hidden pages',
+  'strict line breaks',
+  'disallow indexing',
+])
+
+test('every row names a real Publish option and a full path to where it goes', () => {
+  for (const row of SITE_OPTION_CARRYOVER) {
+    for (const name of row.publish.split(',')) {
+      assert.ok(PUBLISH_OPTIONS.has(name.trim().toLowerCase()), `not an Obsidian Publish option: ${name.trim()}`)
+    }
+    // Full paths, never "the panel behind this one": this screen is also
+    // reached from step 6 of the setup guide, where no settings tab is open.
+    assert.match(row.here, /^Settings → Open Publish → /)
+  }
+})
+
+test('the analytics row is there, and names the two providers Publish does not have', () => {
+  // The costly one. The field exists here, so without this row a site migrates
+  // with analytics silently off and nothing anywhere says why.
+  const analytics = SITE_OPTION_CARRYOVER.find((row) => row.publish === 'Google Analytics')
+  assert.ok(analytics, 'the reason this section is worth building')
+  assert.match(analytics.here, /Analytics → Tracking ID/)
+  assert.match(analytics.here, /Plausible and Umami/)
+})
+
+test('the settings this plugin decided against are named too, so nobody hunts for them', () => {
+  for (const absent of ['light or dark default', 'logo', 'readable line length', 'stacked pages', 'password']) {
+    assert.match(SITE_OPTION_NOT_HERE, new RegExp(absent), `unstated: ${absent}`)
+  }
 })

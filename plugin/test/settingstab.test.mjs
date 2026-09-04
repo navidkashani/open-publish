@@ -118,7 +118,7 @@ test('every page entry says what is inside it without being opened', () => {
   assert.equal(entry(tab, 'Site build').displayValue(), 'Cloudflare Pages')
   assert.match(entry(tab, 'What gets published').displayValue(), /No folder rules yet/)
   assert.equal(entry(tab, 'Site options').displayValue(), 'My Notes')
-  assert.equal(entry(tab, 'Appearance').displayValue(), '8 of 10 on')
+  assert.equal(entry(tab, 'Appearance').displayValue(), '10 of 12 on')
   assert.equal(entry(tab, 'Maintenance').displayValue(), 'Nothing published yet')
 })
 
@@ -129,7 +129,7 @@ test('a key prefix is part of where storage points, so the entry names it too', 
 
 test('the Appearance count follows the toggles it is counting', () => {
   const { tab } = open({ site: { showGraph: false, showTags: false, strictLineBreaks: true } })
-  assert.equal(entry(tab, 'Appearance').displayValue(), '7 of 10 on')
+  assert.equal(entry(tab, 'Appearance').displayValue(), '9 of 12 on')
 })
 
 test('the setup guide is the first thing on the screen, and opens the wizard', () => {
@@ -187,6 +187,23 @@ test('every appearance toggle writes the site option it is named for', async () 
   await tab.setControlValue('site.showBacklinks', false)
   assert.equal(plugin.settings.site.showBacklinks, false)
   assert.equal(plugin.calls.saves, 1, 'a toggle saves the moment it is flipped')
+})
+
+test('the newest appearance toggles have a control, and it writes', async () => {
+  // `APPEARANCE` is keyed by `SiteToggleKey`, so an option added without an
+  // entry there fails to compile. What that cannot check is that the row it
+  // generates is wired to the option it is named for, which is the difference
+  // between a control and a label.
+  const { tab, plugin } = open()
+  for (const [label, key] of [
+    ['Hover previews', 'showHoverPreview'],
+    ['Inline title', 'showInlineTitle'],
+  ]) {
+    assert.equal(controlOf(tab, label)?.key, `site.${key}`, `no control for ${key}`)
+    assert.equal(plugin.settings.site[key], true, 'both default on, which is the site every vault already has')
+    await tab.setControlValue(`site.${key}`, false)
+    assert.equal(plugin.settings.site[key], false)
+  }
 })
 
 // --- site options ---------------------------------------------------------

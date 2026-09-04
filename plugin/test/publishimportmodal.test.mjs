@@ -458,3 +458,54 @@ test('no file and an unreadable file give the same answer, because the advice is
 test('nothing is offered until the file has been found', () => {
   assert.equal(plugin(fakeApp({})).hasObsidianPublishConfig(), false)
 })
+
+// --- the settings the import cannot bring across ---------------------------
+
+/** The carry-over section's own toggle, found by its label rather than by position. */
+const carryover = (modal) =>
+  find(
+    modal.contentEl,
+    (node) => node.hasClass('op-advanced-toggle') && /Publish site options/.test(node.textContent),
+  )
+
+test('the settings that do not come across are named, in a section that starts closed', () => {
+  const { modal } = open(publishFile({ included: ['Notes'] }))
+  const section = carryover(modal)
+  assert.ok(section, 'the one screen where somebody is already migrating is where this belongs')
+  // Closed, and allowed to be: it holds no controls and nothing anybody chose.
+  // What that buys is the headline count staying the first thing on screen.
+  assert.equal(section.getAttr('aria-expanded'), 'false')
+
+  const body = find(modal.contentEl, byClass('op-advanced'))
+  assert.ok(body.hasClass('op-collapsed'))
+  assert.match(body.textContent, /Google Analytics/)
+  assert.match(body.textContent, /Settings → Open Publish → Analytics → Tracking ID/)
+  assert.match(body.textContent, /stacked pages/, 'and what this plugin does not have, so nobody hunts for it')
+
+  click(section)
+  assert.equal(section.getAttr('aria-expanded'), 'true')
+})
+
+test('a site that picked every note by hand is still told what to copy across', () => {
+  // The URL offer is withheld on an empty plan; this is not. An empty include
+  // list says nothing about whether the site had a name or an analytics ID.
+  const { modal } = open(publishFile({ included: [], excluded: [] }))
+  assert.equal(toggle(modal), null, 'the URL offer stays off an empty plan')
+  assert.ok(carryover(modal))
+})
+
+test('a hand-made publish.json gets no carry-over list either', () => {
+  // The same gate as the URL offer, for a plainer reason: if it was never a
+  // Publish site there are no Publish site options behind it to copy.
+  const { modal } = open(JSON.stringify({ included: ['Notes'] }))
+  assert.equal(carryover(modal), null)
+})
+
+test('the carry-over section writes nothing', () => {
+  const { modal, plugin } = open(publishFile({ included: ['Notes'] }))
+  const before = JSON.stringify(plugin.settings.site)
+  click(carryover(modal))
+  click(importButton(modal))
+  assert.deepEqual(plugin.settings.selection.includes, ['Notes'], 'the import itself still happens')
+  assert.equal(JSON.stringify(plugin.settings.site), before, 'a checklist, not a form')
+})

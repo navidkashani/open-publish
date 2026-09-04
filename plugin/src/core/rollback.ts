@@ -48,6 +48,10 @@ import {
 } from './snapshot.ts'
 import type { Snapshot, SnapshotDiff, SnapshotNav, SnapshotSite, SiteBooleanKey, SiteToggleKey } from './snapshot.ts'
 import { DEFAULT_LOCALE, localeLabel } from './locales.ts'
+// For the toggle defaults below. Reached for rather than copied into a second
+// literal here, which would be free to drift from the values every new site
+// actually starts with.
+import { DEFAULT_SETTINGS } from '../settings.ts'
 
 /**
  * How far back the picker goes.
@@ -413,9 +417,17 @@ export function diffSiteOptions(before: SnapshotSite, after: SnapshotSite): Opti
     })
   }
 
+  // Defaulted on both sides, for the reason spelled out over `locale` above and
+  // for every toggle rather than only the newest two: a snapshot published
+  // before an option existed carries neither `true` nor `false`, and comparing
+  // raw makes `undefined !== true` announce a change from the default to the
+  // default on every rollback reaching back past the upgrade.
   for (const [key, label] of Object.entries(TOGGLES) as Array<[SiteToggleKey, string]>) {
-    if (before[key] !== after[key]) {
-      changes.push({ option: label, before: before[key] ? 'on' : 'off', after: after[key] ? 'on' : 'off' })
+    const fallback = DEFAULT_SETTINGS.site[key]
+    const wasOn = before[key] ?? fallback
+    const nowOn = after[key] ?? fallback
+    if (wasOn !== nowOn) {
+      changes.push({ option: label, before: wasOn ? 'on' : 'off', after: nowOn ? 'on' : 'off' })
     }
   }
 
@@ -463,6 +475,8 @@ const TOGGLES = {
   showTags: 'Tags',
   showPageMetadata: 'Page metadata',
   showPrevNext: 'Previous and next links',
+  showHoverPreview: 'Hover previews',
+  showInlineTitle: 'Inline title',
 } satisfies Record<SiteToggleKey, string>
 
 /**

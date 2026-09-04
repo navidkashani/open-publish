@@ -45,11 +45,19 @@ export const sharedPageComponents: SharedLayout = {
  * previous/next control. Ignoring an option a generator cannot express is what
  * `docs/architecture.md` says to do with one, and it stays in the snapshot for
  * the starter that can.
+ *
+ * `showInlineTitle` is the opposite case: one option, two layouts, and the same
+ * component in both. It is honoured here and deliberately not in the list layout
+ * below. Obsidian Publish, where the option comes from, has no folder or tag
+ * pages, so "hide inline title" never meant them; here `ArticleTitle` is the
+ * only thing naming a folder listing, a tag index or the 404 page, and dropping
+ * it leaves a heading-less page above a bare list. Mapping the intent onto the
+ * pages it was about is the starter's job, per `docs/architecture.md`.
  */
 export const defaultContentPageLayout: PageLayout = {
   beforeBody: [
     Component.Breadcrumbs(),
-    Component.ArticleTitle(),
+    ...optional(site.showInlineTitle, Component.ArticleTitle()),
     ...optional(site.showPageMetadata, Component.ContentMeta()),
     ...optional(site.showTags, Component.TagList()),
   ],

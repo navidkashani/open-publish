@@ -29,6 +29,14 @@ export const site = {
    * starter that does have one gets the answer without a plugin change.
    */
   showPrevNext: true,
+  /** Quartz's link popovers: `enablePopovers` in quartz.config.ts. */
+  showHoverPreview: true,
+  /**
+   * Quartz's `ArticleTitle`, and only on content pages. Folder listings, tag
+   * indexes and the 404 page have no note behind them, so their heading is the
+   * only thing naming them and it stays. See quartz.layout.ts.
+   */
+  showInlineTitle: true,
   /**
    * Sidebar order and hidden pages, both empty until somebody arranges them in
    * Obsidian. Slugs, not vault paths, and a folder is named by the slug of its

@@ -330,11 +330,13 @@ test('an older snapshot missing new options gets defaults, not silent switch-off
       // left-to-right site it has always built.
       assert.match(opSite, /"locale": "en-US"/)
       assert.match(opSite, /"dir": "ltr"/)
-      // And the two newest, which arrive the same way. `showPageMetadata`
+      // And the four newest, which arrive the same way. `showPageMetadata`
       // defaults *off*, so this is the one place the rule cuts the other way:
       // a snapshot that predates it gets no metadata block rather than one.
       assert.match(opSite, /"showPageMetadata": false/)
       assert.match(opSite, /"showPrevNext": true/)
+      assert.match(opSite, /"showHoverPreview": true/)
+      assert.match(opSite, /"showInlineTitle": true/)
     },
   )
 })
@@ -368,6 +370,48 @@ test('an option this starter carries but cannot render is not reported as unknow
       assert.doesNotMatch(result.stdout, /ignoring site option/)
     },
   )
+})
+
+test('the hover and inline-title toggles reach the module the layout reads', async () => {
+  await withBucket(
+    {
+      files: { 'a.md': { content: 'a', slug: 'a' } },
+      site: { showHoverPreview: false, showInlineTitle: false },
+    },
+    async ({ cwd, env }) => {
+      const result = await runScript('fetch-content.mjs', cwd, env)
+      assert.equal(result.code, 0, result.stderr)
+      const opSite = await readFile(join(cwd, 'op-site.ts'), 'utf8')
+      assert.match(opSite, /"showHoverPreview": false/)
+      assert.match(opSite, /"showInlineTitle": false/)
+      assert.doesNotMatch(result.stdout, /ignoring site option/, 'both are options this starter knows')
+    },
+  )
+})
+
+/**
+ * Read as source rather than rendered, for the reason `wrangler.test.mjs` reads
+ * `quartz.config.ts` the same way: `quartz.layout.ts` imports `./quartz/cfg` and
+ * `./quartz/components`, which exist only inside an assembled template, so there
+ * is nothing here to import.
+ *
+ * What it catches is the one mistake worth catching. `ArticleTitle` appears in
+ * both layouts, and honouring the option in the list layout too would leave
+ * folder listings, tag indexes and the 404 page with no heading above a bare
+ * list. Obsidian Publish, where the option comes from, has no such pages, so
+ * "hide inline title" never meant them.
+ */
+test('the inline title is optional on content pages and fixed on list pages', async () => {
+  const layout = await readFile(join(SCRIPTS, '../quartz.layout.ts'), 'utf8')
+  const contentAt = layout.indexOf('export const defaultContentPageLayout')
+  const listAt = layout.indexOf('export const defaultListPageLayout')
+  assert.ok(contentAt > 0 && listAt > contentAt, 'both layouts have to be in there for this to mean anything')
+
+  const content = layout.slice(contentAt, listAt)
+  const list = layout.slice(listAt)
+  assert.match(content, /\.\.\.optional\(site\.showInlineTitle, Component\.ArticleTitle\(\)\)/)
+  assert.match(list, /^\s*Component\.ArticleTitle\(\),$/m, 'a list page is named by nothing else')
+  assert.doesNotMatch(list, /showInlineTitle/)
 })
 
 test('a snapshot that names a right-to-left language carries both keys through', async () => {

@@ -92,6 +92,10 @@ const snapshot = {
     // renders here, and off is the state a fresh install is already in.
     showPageMetadata: true,
     showPrevNext: false,
+    // Off, so the one thing only a real build can show about this option gets
+    // shown: Quartz emits the popover script into its bundle rather than into
+    // the page, so nothing in the HTML says whether it was dropped.
+    showHoverPreview: false,
     analytics: { provider: 'google', id: 'G-VERIFY123' },
     // A reordered root and a hidden folder. `wisdom-approaches/index` is the
     // detail this whole run exists to check: a folder has no page of its own in
@@ -220,6 +224,21 @@ const scripts = await Promise.all(
   out.filter((f) => f.endsWith('.js')).map((f) => readFile(join(WORK, 'public', f), 'utf8')),
 )
 const bundled = scripts.join('\n')
+// `active-popover` rather than `popover`: the class `popover-hint` is Quartz's
+// own layout vocabulary and `search.inline.ts` reads it whether or not link
+// previews exist, so the bare word is in the bundle of every site with search.
+// This string is written by `popover.inline.ts` alone, which is the script
+// `enablePopovers` actually gates.
+check('showHoverPreview:false leaves the popover script out of the bundle', !bundled.includes('active-popover'))
+// Left on in the snapshot above, so this is the other half of the same option:
+// the title is a component that has to still be there when nobody turned it off.
+check('showInlineTitle defaults on and keeps the article title', /class="[^"]*article-title/.test(html))
+// And the page the option was never about. A folder listing has no note behind
+// it, so `ArticleTitle` is the only thing naming it, which is why the list
+// layout renders it unconditionally. Only a real build shows that Quartz emits
+// such a page at all, and that it is the list layout that drew it.
+const folderPage = await readFile(join(WORK, 'public/wisdom-approaches/index.html'), 'utf8')
+check('a folder page is named by its title, which the option never governed', /class="[^"]*article-title/.test(folderPage))
 check('analytics provider mapped to a real tag', bundled.includes('G-VERIFY123'))
 check('analytics uses the right provider script', /googletagmanager|gtag/.test(bundled))
 check('strictLineBreaks:false renders a single newline as a break', /<br\s*\/?>/.test(html))

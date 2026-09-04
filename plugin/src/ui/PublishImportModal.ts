@@ -40,10 +40,15 @@ import { DEAD_RULE_WARNING, noteCountLabel, summarizeRules } from './FolderRules
 import type { RuleSummary } from './FolderRules.ts'
 import { renderRuleRows, ruleTargetExists } from './RuleList.ts'
 import type { RuleRow } from './RuleList.ts'
+import { renderDisclosure } from './Disclosure.ts'
 import {
   EXCLUDES_KEPT_NOTE,
   LEGACY_URL_OFFER,
   LEGACY_URL_TOGGLE,
+  SITE_OPTION_CARRYOVER,
+  SITE_OPTION_CARRYOVER_HEADING,
+  SITE_OPTION_CARRYOVER_INTRO,
+  SITE_OPTION_NOT_HERE,
   UNCLAIMED_PERMALINK_BLIND_SPOT,
   UNCLAIMED_PERMALINK_HEADING,
   UNCLAIMED_PERMALINK_LIMIT,
@@ -166,6 +171,7 @@ export class PublishImportModal extends Modal {
 
     this.renderUnclaimed(contentEl, candidates)
     this.renderUrlOffer(contentEl, plan)
+    this.renderCarryover(contentEl)
 
     const blocked = importBlockedReason(plan, ticked.length)
     if (blocked) contentEl.createEl('p', { cls: 'op-muted', text: blocked })
@@ -276,6 +282,34 @@ export class PublishImportModal extends Modal {
           this.keepLegacyUrls = value
         }),
       )
+  }
+
+  /**
+   * The settings a migrating site has to bring across by hand.
+   *
+   * Gated on the same evidence as the URL offer above, and for a plainer reason:
+   * a hand-made `publish.json` was never a Publish site, so there are no Publish
+   * site options sitting behind it to copy. Shown when the plan is empty, unlike
+   * that offer, because a site that picked every note by hand still has a site
+   * name and an analytics ID.
+   *
+   * Started closed. `Disclosure.ts` allows that only when nothing the user chose
+   * is hidden, and nothing here was chosen: it holds no controls and no state, so
+   * closing it hides no answer. What it buys is that the headline count, the most
+   * privacy-critical number in the plugin, stays the first thing on screen
+   * instead of being pushed off the top by a list of settings to retype.
+   *
+   * Writes nothing. `commit` never sees this.
+   */
+  private renderCarryover(container: HTMLElement): void {
+    if (!looksLikeObsidianPublish(this.source.config)) return
+
+    const { body } = renderDisclosure(container, SITE_OPTION_CARRYOVER_HEADING, false)
+    body.createEl('p', { cls: 'op-rule-intro', text: SITE_OPTION_CARRYOVER_INTRO })
+    for (const row of SITE_OPTION_CARRYOVER) {
+      new Setting(body).setName(row.publish).setDesc(row.here)
+    }
+    body.createEl('p', { cls: 'op-muted', text: SITE_OPTION_NOT_HERE })
   }
 
   /** One row per rule: its count, its effect, and whether it names anything. */

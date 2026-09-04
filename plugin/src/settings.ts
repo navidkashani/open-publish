@@ -238,6 +238,11 @@ export const DEFAULT_SETTINGS: Settings = {
     // the day of the build on every page.
     showPageMetadata: false,
     showPrevNext: true,
+    // Both on, which is Obsidian Publish's default and also what every starter
+    // rendered back when neither was an option, so no existing site changes
+    // appearance on the upgrade.
+    showHoverPreview: true,
+    showInlineTitle: true,
     // Empty, and it stays empty until somebody opens the navigation manager.
     // Unlike every other option here, this one holds **vault paths**: the scan
     // converts them to the slugs a snapshot carries. See `core/navorder.ts`.

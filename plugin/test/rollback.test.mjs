@@ -511,6 +511,27 @@ test('rolling forward without reaching the top leaves the site behind, and says 
   assert.equal(plan.behind, true, 'NEWER is still in storage, so the site is still showing an older version')
 })
 
+test('a version published before an option existed reports no change to it', () => {
+  // The scenario the compiler cannot catch. `showHoverPreview` and
+  // `showInlineTitle` are the first toggles added *after* snapshots existed, so
+  // a version published before them carries neither key. Compared raw,
+  // `undefined !== true` puts "Hover previews: off to on" in Site history on
+  // every rollback reaching back past the upgrade: a change nobody made,
+  // reported to somebody deciding whether to undo something.
+  const before = { ...site }
+  delete before.showHoverPreview
+  delete before.showInlineTitle
+
+  assert.deepEqual(diffSiteOptions(before, site), [], 'going back to a default must not announce a change to it')
+  assert.deepEqual(diffSiteOptions(site, before), [], 'and neither must coming forward from one')
+
+  assert.deepEqual(
+    diffSiteOptions(before, { ...site, showInlineTitle: false }).map((change) => change.option),
+    ['Inline title'],
+    'a real change against a snapshot that predates the option is still a change',
+  )
+})
+
 test('a site block with no analytics is diffed, not crashed through', () => {
   // `parseSnapshot` checks the site block is present, never its shape.
   const changes = diffSiteOptions({ ...site, analytics: undefined }, { ...site, title: 'Old' })

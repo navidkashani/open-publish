@@ -30,8 +30,9 @@ into Git.
 - **Gives you two themes.** [jotter](https://github.com/navidkashani/jotter) is
   an Astro theme and the recommended one. The Quartz starter lives here.
 - **Carries your site options.** Navigation order, search, graph, backlinks,
-  outline, tags, theme toggle, page metadata, previous/next links, homepage and
-  analytics. Hiding a page from the sidebar does not unpublish it.
+  outline, tags, theme toggle, page metadata, previous/next links, hover
+  previews, inline title, homepage and analytics. Hiding a page from the sidebar
+  does not unpublish it.
 
 ## Install the plugin
 

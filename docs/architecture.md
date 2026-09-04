@@ -109,16 +109,40 @@ or how the site looks, **and** if any reasonable static site generator could
 honour it. That second clause is why there is no capability negotiation between
 plugin and starter: there is nothing to negotiate when every option is universal.
 
-Currently eighteen: `title`, `homepage`, `locale`, `dir`, `noIndex`,
+Currently twenty: `title`, `homepage`, `locale`, `dir`, `noIndex`,
 `showThemeToggle`, `strictLineBreaks`, `showNavigation`, `showSearch`,
 `showGraph`, `showOutline`, `showBacklinks`, `showTags`, `showPageMetadata`,
-`showPrevNext`, `nav`, `folders`, `analytics`.
+`showPrevNext`, `showHoverPreview`, `showInlineTitle`, `nav`, `folders`,
+`analytics`.
 
 **A generator that cannot express an option ignores it.** It must never guess,
 and it must never report the option as unknown, which would tell the user their
 plugin is too new when the truth is that their generator has no such control.
 `showPrevNext` is the live example: Quartz ships no previous/next component, so
 the Quartz starter carries the intent and renders nothing for it.
+
+**So adding one is a two-repo change.** A starter's list of options is a runtime
+allowlist rather than a type, and `applySiteConfig` logs every key it does not
+recognise as an option "this starter does not support". jotter is the
+recommended starter and lives in its own repository, so an option added here
+alone makes the *default* starter print that line on every build: precisely the
+message the paragraph above forbids. Land the starter side first, or ship
+knowing the recommended starter is telling people something untrue.
+
+**And it costs every existing site one rebuild.** The snapshot ID digests the
+whole site block, so a new key changes it even though every page renders
+identically: one build against a 500-a-month allowance, producing the same
+bytes. That is accepted rather than dodged. Making the key optional and omitting
+it at its default would save the build and turn a boolean tri-state on the wire,
+pushing `?? default` into every consumer that reads it. `nav` and `folders` are
+omitted for a size reason, 150KB a page, that no boolean has.
+
+`showInlineTitle` is where "intent, not layout" does real work. Obsidian
+Publish, which the option comes from, has no folder or tag pages, so hiding the
+inline title never meant those. The Quartz starter honours it on content pages
+and keeps the heading on folder listings, tag indexes and the 404 page, where it
+is the only thing naming the page. Mapping intent onto the pages it was about is
+the starter's call, not the plugin's.
 
 Deliberately excluded, so the decisions do not get relitigated:
 

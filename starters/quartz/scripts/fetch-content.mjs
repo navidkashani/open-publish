@@ -200,6 +200,8 @@ const DEFAULT_SITE = {
   showTags: true,
   showPageMetadata: false,
   showPrevNext: true,
+  showHoverPreview: true,
+  showInlineTitle: true,
   // Present so that `applySiteConfig` copies it across rather than dropping it
   // as an option this starter has never heard of. Empty is the whole default:
   // no arrangement, nothing hidden, and the explorer left exactly as it was.

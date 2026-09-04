@@ -204,6 +204,29 @@ export interface SnapshotSite {
    */
   showPrevNext: boolean
   /**
+   * The card that appears when a visitor hovers a link to another published
+   * page. Obsidian shows one in the vault and Obsidian Publish shows one on the
+   * site, so a reader arriving from either expects it, and a site of short,
+   * densely linked notes is a different thing to read without it.
+   */
+  showHoverPreview: boolean
+  /**
+   * The page's own title, printed as a heading above its content. Off suits a
+   * vault whose notes already open with a heading of their own, which would
+   * otherwise print the title twice.
+   *
+   * Stated positively, though Obsidian Publish states the same control as "Hide
+   * inline title". Every other boolean here says what is *shown*, and a single
+   * inverted one among them is the kind of thing that gets read the wrong way
+   * round once and then written into a starter backwards.
+   *
+   * What counts as "the page" is the generator's business, as ever. A folder
+   * listing or a tag index has no note behind it and nothing else naming it, so
+   * a starter that keeps printing headings on those is honouring this rather
+   * than ignoring it.
+   */
+  showInlineTitle: boolean
+  /**
    * Navigation order and hidden pages, or absent when nobody has arranged any.
    *
    * Optional, and it stays optional: a starter that predates it ignores it and
