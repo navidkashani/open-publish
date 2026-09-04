@@ -8,9 +8,10 @@ it is, so the same questions do not get reopened.
 The obvious way to build this is to upload the files that changed, then write a
 `manifest.json` listing them.
 
-That is not atomic. The manifest points at mutable paths, so any build that
-starts mid-upload reads a half-updated tree and deploys it. A retry, a second
-device, or someone clicking "Retry deployment" in a dashboard all do it.
+That is not atomic. A publish has to switch the site all at once or not at all,
+and this does neither: the manifest points at mutable paths, so any build
+starting mid-upload reads a half-updated tree and deploys it. A retry, a second
+device, or someone clicking "Retry deployment" in a dashboard all start one.
 
 Obsidian Publish does not have this problem, because it has no build step. It is
 a client-side app that fetches Markdown on demand, so a half-updated set of files
@@ -365,7 +366,7 @@ it as `legacyUrls` on that file. The value is the old URL *percent-decoded*,
 because a static host decodes a request path before looking for a file.
 
 The snapshot states where a file used to live, and what to do about it is the
-generator's business, which is why this is not a `site` option. The Quartz
+generator's business, so this is not a `site` option. The Quartz
 starter writes each one into the working copy's frontmatter as `permalink`, the
 one key Quartz turns into a redirect page at exactly the path given, so this
 covers notes and not attachments. `aliases` would not do: Quartz slugifies those,
