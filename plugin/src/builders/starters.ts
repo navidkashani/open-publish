@@ -46,17 +46,48 @@ export interface StarterBuild {
   hasWranglerConfig: boolean
 }
 
+/**
+ * How a copy of a starter is made, and therefore the words the wizard uses.
+ *
+ * Both starters are `template` today, and the reasons differ, which is why this
+ * is a field rather than a sentence in the wizard.
+ *
+ * **Quartz cannot be anything else.** `assemble.mjs` regenerates that repository
+ * and force-pushes it, and a rewritten tip is the one thing GitHub's fork sync
+ * cannot survive: every downstream merge would be against commits that no longer
+ * exist.
+ *
+ * **jotter could be forked and deliberately is not recommended that way.** A
+ * fork gets GitHub's native "Sync fork" button for free, which is genuinely
+ * nicer, but it costs three things: a fork of a public repository is public for
+ * ever (so a private site or a vault kept in the repository is out), you get one
+ * fork per account per repository (so a second site cannot have one), and it is
+ * a path nobody has yet run end to end. jotter ships its own update workflow
+ * instead, which has none of those limits and has been run against a fresh
+ * template copy, a conflict, and a repository already up to date.
+ */
+export type Acquisition = 'template' | 'fork'
+
 export interface Starter {
   id: StarterId
   name: string
   /** One line: what it is, and who it suits. */
   summary: string
-  /** The "Use this template" repository. Public, and template-enabled. */
+  /** The repository a copy is made from. Public, and template-enabled. */
   repoUrl: string
   docsUrl?: string
   recommended?: boolean
   /** Shown wherever this starter is chosen, not only where it is picked. */
   caution?: string
+  acquisition: Acquisition
+  /**
+   * How a site made from this starter takes a *later* version of it, once one
+   * exists, or `undefined` where there is no answer better than a terminal.
+   *
+   * The one thing a starter can offer here that this plugin cannot is a button
+   * inside the user's own repository, so what this holds is where to find it.
+   */
+  updates?: { label: string; hint: string }
   build: StarterBuild
 }
 
@@ -88,6 +119,11 @@ export const STARTERS: readonly Starter[] = [
     repoUrl: 'https://github.com/navidkashani/jotter',
     docsUrl: 'https://github.com/navidkashani/jotter/blob/main/docs/open-publish.md',
     recommended: true,
+    acquisition: 'template',
+    updates: {
+      label: 'Actions → Update theme → Run workflow',
+      hint: 'jotter ships a workflow that merges a new version onto a branch in your own repository and gives you a pull request to review.',
+    },
     build: { command: 'npm run build', outputDir: 'dist', hasWranglerConfig: true },
   },
   {
@@ -95,6 +131,7 @@ export const STARTERS: readonly Starter[] = [
     name: 'Open Publish Quartz',
     summary: 'The reference starter. A Quartz fork, built and checked end to end on every commit here.',
     repoUrl: 'https://github.com/navidkashani/open-publish-quartz',
+    acquisition: 'template',
     build: { command: 'npm run build', outputDir: 'public', hasWranglerConfig: true },
   },
 ]
@@ -117,4 +154,27 @@ export function starterById(id: string | undefined): Starter {
 
 export function isStarterId(value: unknown): value is StarterId {
   return typeof value === 'string' && STARTERS.some((starter) => starter.id === value)
+}
+
+/**
+ * Step 2 of the setup guide, in the words the chosen starter's acquisition
+ * needs. The shape `hosts.ts` uses for `setup(build)`, one table over.
+ */
+export function acquireSteps(starter: Starter): string[] {
+  return starter.acquisition === 'fork'
+    ? [
+        'Choose "Fork" → "Create fork".',
+        'Give it any name. There is nothing to clone and nothing to install locally.',
+      ]
+    : [
+        'Choose "Use this template" → "Create a new repository".',
+        'Give it any name. There is nothing to clone and nothing to install locally.',
+      ]
+}
+
+/** What the link to the repository should say, which follows the same choice. */
+export function acquireLabel(starter: Starter): string {
+  return starter.acquisition === 'fork'
+    ? `Fork ${starter.name}`
+    : `Open the ${starter.name} template`
 }

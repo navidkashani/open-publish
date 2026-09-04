@@ -322,8 +322,23 @@ but it was worse for the person actually using it:
 - Quartz needs Node 22+; its `.node-version` only travels with a fork.
 
 The version-bump convenience turned out to favour the maintainer, not the user:
-"Use this template" copies a repository, so existing users never receive template
-updates anyway.
+"Use this template" copies a repository, so an existing user receives nothing on
+their own.
+
+That last clause used to end "never receive template updates anyway", and it is
+now only half true. A copy still receives nothing *by itself*, but jotter ships
+`.github/workflows/update-theme.yml`, which does the merge on a branch inside
+the user's own repository and opens a pull request. That works precisely because
+the unrelated-histories restriction is on pull requests *between* repositories,
+and a branch in one repository is not one; the workflow passes the
+`--allow-unrelated-histories` no button in the web UI passes.
+
+Quartz cannot have the same thing, and the reason is recorded in
+`plugin/src/builders/starters.ts` beside `acquisition`: `assemble.mjs`
+regenerates that repository and **force-pushes** it, so its tip is rewritten and
+any downstream merge is against commits that no longer exist. That also rules
+out the other route, a fork with GitHub's native sync button, for the same
+reason. It is the one real difference between the two starters here.
 
 `starters/quartz/` in this repo holds only the overlay: the files we author.
 `assemble.mjs` combines it with Quartz at a pinned tag, preserving Quartz's

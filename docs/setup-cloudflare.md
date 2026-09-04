@@ -43,16 +43,44 @@ needs and that two devices can publish safely.
 
 ## B. Site repository
 
-5. Open the [Open Publish Quartz template](https://github.com/navidkashani/open-publish-quartz)
-   on GitHub and choose **Use this template → Create a new repository**.
+5. Open the [jotter template](https://github.com/navidkashani/jotter) on GitHub
+   and choose **Use this template → Create a new repository**.
 
    One button in the browser. Nothing to clone, nothing to install. Your notes
    never enter this repository: it holds only the site generator and the build
    scripts, and your notes are fetched from your bucket at build time.
 
-   The repository is yours from that point on. If you later want to change the
-   look of the site, you can edit `quartz/styles/custom.scss` **directly in
-   GitHub's web editor**. Commit, and your host rebuilds. Still no terminal.
+   The repository is yours from that point on. To change how the site looks,
+   edit `src/styles/custom.css` **directly in GitHub's web editor**; to replace
+   a component, add your own to `src/user/`. Commit, and your host rebuilds.
+   Still no terminal. jotter never writes to either place, which is what keeps
+   the next step working.
+
+   **Taking a new version later** is **Actions → Update theme → Run workflow**
+   in your own repository. It merges the new jotter onto a branch and gives you
+   a pull request to review; it never writes to your default branch. See
+   [jotter's updating guide](https://github.com/navidkashani/jotter/blob/main/docs/updating.md).
+
+   <details>
+   <summary>Prefer Quartz?</summary>
+
+   Use the [Open Publish Quartz template](https://github.com/navidkashani/open-publish-quartz)
+   instead, and read `public` wherever the steps below say `dist`. Its styling
+   file is `quartz/styles/custom.scss`.
+
+   It has no update button, and cannot have one: that repository is regenerated
+   and force-pushed, so its history is rewritten and neither a merge from
+   upstream nor a fork sync survives. Updating means making a fresh copy.
+   </details>
+
+   <details>
+   <summary>Want a private repository?</summary>
+
+   Make the repository private at the "Create a new repository" step. Everything
+   above still works, including the update button. That is the reason jotter is
+   copied from a template rather than forked: **a fork of a public repository is
+   public for ever** and cannot be made private.
+   </details>
 
 ---
 
@@ -63,7 +91,10 @@ needs and that two devices can publish safely.
 7. Build settings:
    - Framework preset: **None**
    - Build command: `npm run build`
-   - Output directory: `public`
+   - Output directory: `dist`  *(`public` if you chose Quartz)*
+
+   Getting that last one wrong is the quiet failure: Cloudflare uploads an empty
+   directory and reports a successful deploy.
 8. **Settings → Environment variables.** Add these to **both** Production and
    Preview, using the **read-only** token from step 4:
 

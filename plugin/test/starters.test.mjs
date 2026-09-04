@@ -9,7 +9,7 @@
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { STARTERS, isStarterId, starterById } from '../src/builders/starters.ts'
+import { STARTERS, acquireLabel, acquireSteps, isStarterId, starterById } from '../src/builders/starters.ts'
 
 test('every starter has the copy each surface needs', () => {
   for (const starter of STARTERS) {
@@ -65,4 +65,50 @@ test('isStarterId accepts only what the table holds', () => {
 test('the two templates are different repositories', () => {
   const repos = STARTERS.map((starter) => starter.repoUrl)
   assert.equal(new Set(repos).size, repos.length)
+})
+test('every starter says how a copy of it is made', () => {
+  for (const starter of STARTERS) {
+    assert.ok(
+      ['template', 'fork'].includes(starter.acquisition),
+      `${starter.id} has no acquisition`,
+    )
+  }
+})
+
+test('the steps and the link text follow the acquisition, not the starter', () => {
+  const template = { ...starterById('jotter'), acquisition: 'template' }
+  const forked = { ...starterById('jotter'), acquisition: 'fork' }
+
+  assert.match(acquireSteps(template)[0], /Use this template/)
+  assert.match(acquireLabel(template), /template$/)
+
+  assert.match(acquireSteps(forked)[0], /Fork/)
+  assert.match(acquireLabel(forked), /^Fork /)
+
+  // The second line is the same promise either way, and it is the one that
+  // matters to somebody deciding whether to start: no terminal.
+  for (const starter of [template, forked]) {
+    assert.match(acquireSteps(starter)[1], /nothing to install locally/)
+  }
+})
+
+test('jotter tells a site how to take a later version of it, and Quartz does not', () => {
+  const jotter = starterById('jotter')
+  assert.match(jotter.updates.label, /Actions/)
+  assert.match(jotter.updates.label, /Update theme/)
+
+  /**
+   * Not an oversight. `assemble.mjs` regenerates the Quartz starter and
+   * force-pushes it, so its tip is rewritten and neither a merge from upstream
+   * nor a fork sync survives. Claiming an update button there would send people
+   * to a tab with no workflow in it.
+   */
+  assert.equal(starterById('quartz').updates, undefined)
+})
+
+test('neither starter is offered as a fork, because neither can be one safely', () => {
+  // Quartz is force-pushed; jotter could be forked but a fork of a public
+  // repository can never be made private, and its own workflow has no such
+  // limit. If this ever changes, the wizard's words change with it for free.
+  for (const starter of STARTERS) assert.equal(starter.acquisition, 'template')
 })

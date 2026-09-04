@@ -12,7 +12,7 @@ import type OpenPublishPlugin from '../main.ts'
 import { hasHostMoved, hasStorageMoved, storageMovedWarning } from '../settings.ts'
 import { providerById } from '../destinations/providers.ts'
 import { hostById } from '../builders/hosts.ts'
-import { starterById } from '../builders/starters.ts'
+import { acquireLabel, acquireSteps, starterById } from '../builders/starters.ts'
 import { renderStarterList } from './BuildFields.ts'
 import { addRule, removeRule, summarizeRules } from './FolderRules.ts'
 import { renderFolderList, ruleTargetExists } from './RuleList.ts'
@@ -293,17 +293,33 @@ export class SetupWizard extends Modal {
       },
       (panel) => {
         this.caution(panel, starter.caution)
-        // No "open the template on GitHub" step: the link below says the same
+        // No "open the repository on GitHub" step: the link below says the same
         // thing, and the link is the half that actually goes there.
-        this.instructions(panel, [
-          'Choose "Use this template" → "Create a new repository".',
-          'Give it any name. There is nothing to clone and nothing to install locally.',
-        ])
+        this.instructions(panel, acquireSteps(starter))
+
+        /**
+         * How they will take a later version of the starter, said here rather
+         * than nowhere.
+         *
+         * A site is a *copy* of a starter repository with no link back, so when
+         * the starter fixes something nothing tells the person running it. The
+         * fix on the starter's side is a workflow in their own repository; the
+         * fix on this side is that somebody is told it exists, at the one moment
+         * they are already looking at the repository.
+         */
+        if (starter.updates) {
+          const updates = panel.createEl('p', { cls: 'op-muted' })
+          updates.createSpan({ text: 'Later, to take a new version of ' })
+          updates.createSpan({ text: starter.name })
+          updates.createSpan({ text: ': ' })
+          updates.createEl('strong', { text: starter.updates.label })
+          updates.createSpan({ text: `. ${starter.updates.hint}` })
+        }
 
         const links = panel.createDiv({ cls: 'op-wizard-links' })
         links.createEl('a', {
           href: starter.repoUrl,
-          text: `Open the ${starter.name} template`,
+          text: acquireLabel(starter),
           attr: { target: '_blank', rel: 'noopener' },
         })
         if (starter.docsUrl) {
