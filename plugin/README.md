@@ -4,14 +4,14 @@ Publishes part of your vault to storage you own. See the
 [main README](../README.md) for what the project is, and
 [docs/setup-cloudflare.md](../docs/setup-cloudflare.md) to get started.
 
-Requires Obsidian 1.13 or later: the folder and note pickers are built on
-`AbstractInputSuggest`, and the settings screen uses `Setting.setErrorMessage`
-for inline validation.
+Requires Obsidian 1.13 or later. The settings screen is declared through
+`getSettingDefinitions`, the folder and note pickers use `AbstractInputSuggest`,
+and several rows use `Setting.setErrorMessage`.
 
 ## Network access
 
-Obsidian's developer policy requires full disclosure of network endpoints. This
-plugin contacts three, all configured by you:
+Obsidian's developer policy requires plugins to list every network endpoint. This
+plugin contacts three, and you configure all of them yourself:
 
 | Endpoint | Purpose |
 |---|---|
@@ -27,16 +27,15 @@ No telemetry. No analytics. No server operated by this project.
 npm install
 npm run dev        # esbuild watch
 npm run typecheck
-npm test           # 852 tests, no network, no Obsidian
+npm test           # no network, no Obsidian, no browser
 npm run build      # produces main.js
 ```
 
 To load it in a vault, copy `manifest.json`, `main.js` and `styles.css` into
 `<vault>/.obsidian/plugins/open-publish/` and enable it in Community Plugins.
 
-`main.js` and `manifest.json` both appear here only after a build. The manifest
-is copied from the repository root, which is the one to edit; the copy in this
-directory is a build artefact.
+`main.js` and `manifest.json` appear here only after a build. Edit the manifest
+at the repository root; the copy here is a build artefact.
 
 ## Source layout
 
@@ -87,16 +86,14 @@ src/
 
 ### A note on testability
 
-Core modules import Obsidian **types only**, never values. That keeps them
-erasable by Node's TypeScript type stripping, so `npm test` exercises the real
-implementation under plain Node: no mock of Obsidian, and no separate copy of
-the logic that could drift from what ships.
+Core modules import Obsidian **types only**, never values. Node strips those
+types away, so `npm test` runs the real implementation under plain Node. There
+is no mock of Obsidian and no second copy of the logic to drift from what ships.
 
-The two places that genuinely need Obsidian at runtime (`obsidian-http.ts` and
-the UI) are deliberately thin.
+Two places genuinely need Obsidian at runtime: `obsidian-http.ts` and the UI.
+Both are deliberately thin.
 
-`ui/settingDefinitions.ts` is held to the same rule, which is what the settings
-tab was split in two for: the whole settings tree can be asserted as plain data.
-`test/settingdefinitions.test.mjs` does not import `test/harness.mjs`, so no
-resolve hook is installed in that process and the rule enforces itself: an
-Obsidian value import anywhere in that module's reach fails the file outright.
+`ui/settingDefinitions.ts` is held to the same rule, which is why the settings
+tab is split in two. `test/settingdefinitions.test.mjs` skips `test/harness.mjs`,
+so nothing rewrites `obsidian` to a stub in that process. The rule then enforces
+itself: a value import anywhere in that module's reach fails the file outright.

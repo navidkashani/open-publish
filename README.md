@@ -1,226 +1,150 @@
 # Open Publish
 
-Publish part of your Obsidian vault as a website, using storage you own and a
-host you choose. No subscription, no service in the middle.
+Publish part of your Obsidian vault as a website. You own the storage and you
+pick the host. No subscription, no service in the middle.
 
 ```
 Obsidian plugin  →  your object storage  →  deploy hook  →  your static host
 ```
 
 Your notes go from Obsidian into your own bucket. Your host builds a site from
-that bucket. Nothing passes through anyone else's server, and nothing is
-published in Git.
+that bucket. Nothing passes through anyone else's server, and your notes never go
+into Git.
 
 ## What it does
 
-- **Publishes a subset of your vault.** Folder rules, `publish: true` in
-  frontmatter, or a single note from its right-click menu. Frontmatter always
-  wins.
-- **Never touches your notes.** The plugin only ever reads. Every piece of
-  selection state lives in plugin settings, not in your files.
-- **Never breaks the live site.** Publishing is atomic: the site switches to the
-  new version in a single small write, or it does not switch at all.
-- **Keeps links working.** Obsidian resolves `[[wikilinks]]` against your whole
-  vault. The plugin ships that resolution alongside your notes, so a published
-  subset links correctly, and a link to a note you did not publish renders as
-  plain text instead of a dead end.
-- **Brings your attachments along.** An image embedded by a published note is
+- **Publishes part of your vault.** Pick folders, put `publish: true` in a note's
+  frontmatter, or publish one note from its right-click menu. Frontmatter wins.
+- **Never writes to your notes.** The plugin only reads them.
+- **Never breaks the live site.** The site switches to the new version all at
+  once, or not at all.
+- **Keeps `[[wikilinks]]` working.** The plugin ships Obsidian's own link
+  resolution beside your notes. A link to a note you did not publish renders as
+  plain text, never as a link to a page that is not there.
+- **Brings your attachments along.** An image embedded by a published note gets
   published too, wherever it lives in your vault.
-- **Redirects renamed notes.** A rename changes a URL; old links keep working.
-- **Keeps the URLs you had on Obsidian Publish.** Its scheme is not ours:
-  `Company/About us.md` was served at `/Company/About+us`, and here it is
-  `/company/about-us`. One setting puts a redirect at every address Obsidian
-  used, so moving off it on your own domain keeps your inbound links and your
-  search ranking.
-- **Imports your Obsidian Publish setup.** If this vault published with Obsidian
-  Publish, the folders it published are already written down in
-  `.obsidian/publish.json`. Open Publish reads that file, shows you exactly which
-  folders it would publish and how many notes that is, and writes nothing until
-  you agree. Notes Publish served one at a time are not in that file: those
-  selections live on Obsidian's servers, and this plugin does not talk to
-  Obsidian, so the import offers the notes carrying a `permalink` as candidates
-  and leaves the boxes for you to tick.
-- **Two site themes to choose from.** The setup guide offers
-  [jotter](https://github.com/navidkashani/jotter), an Astro theme and the
-  recommended one, or the Quartz starter in this repository. Both build the same
-  published notes from the same snapshot, so the choice decides how your site
-  looks and nothing about what it contains, and both are connect-and-go on every
-  host listed below.
-- **Site options that are not theme-specific.** Navigation, search, graph,
-  backlinks, outline, tags, theme toggle, page metadata, previous/next links,
-  homepage, analytics and a discourage-search-engines switch, described as
-  intent, so a future starter can honour them without the plugin knowing
-  anything about it.
-- **Puts the navigation in the order you want.** Arrange the sidebar folder by
-  folder, or leave a page out of it entirely. `nav-order:` in a note's
-  frontmatter wins over both, as frontmatter always does. Leaving a page out of
-  the navigation does not unpublish it: it stays at its address and stays in
-  search.
+- **Keeps old addresses working.** Renaming a note leaves a redirect behind, and
+  one setting redirects every URL your old Obsidian Publish site used.
+- **Imports your Obsidian Publish folders** from `.obsidian/publish.json`, after
+  showing you exactly what it would publish.
+- **Gives you two themes.** [jotter](https://github.com/navidkashani/jotter) is
+  an Astro theme and the recommended one. The Quartz starter lives here.
+- **Carries your site options.** Navigation order, search, graph, backlinks,
+  outline, tags, theme toggle, page metadata, previous/next links, homepage and
+  analytics. Hiding a page from the sidebar does not unpublish it.
 
-## Repository layout
+## Install the plugin
 
-| Path | What it is |
-|---|---|
-| `plugin/` | The Obsidian plugin. TypeScript, no runtime dependencies. |
-| `starters/quartz/` | The reference site template: fetches a snapshot and builds it with Quartz. |
-| `gateway/` | An optional Cloudflare Worker, so the plugin can reach R2 without holding a storage key. |
-| `docs/` | Setup, architecture, security, troubleshooting. |
-| `manifest.json` | The plugin manifest. It lives here, not in `plugin/`, because that is where the Obsidian community directory reads it from. The build copies it next to `main.js`; that copy is generated and gitignored, so edit this one. |
-
-## Installing the plugin
-
-There is no release yet and it is not in the community directory, so for now the
-plugin is built from source. This is the only part of Open Publish that needs a
-terminal, and it is needed once:
+There is no release yet, so you build the plugin from source. This is the only
+step that needs a terminal, and you do it once. You need Node 22.18 or newer.
 
 ```bash
 git clone https://github.com/navidkashani/open-publish.git
 cd open-publish
 npm install --prefix plugin
 npm run build
-```
 
-That produces `plugin/main.js`. Copy it, along with `plugin/manifest.json` and
-`plugin/styles.css`, into your vault:
-
-```bash
 mkdir -p "<vault>/.obsidian/plugins/open-publish"
 cp plugin/main.js plugin/manifest.json plugin/styles.css \
    "<vault>/.obsidian/plugins/open-publish/"
 ```
 
-Then enable **Open Publish** under Settings → Community plugins. Node 22.18 or
-newer; nothing else to install.
+Then turn on **Open Publish** under Settings → Community plugins.
 
-## Getting started
+## Get started
 
-With the plugin enabled, follow
-**[docs/setup-cloudflare.md](docs/setup-cloudflare.md)**: about ten minutes and
-no terminal from here on.
+Follow **[docs/setup-cloudflare.md](docs/setup-cloudflare.md)**. It takes about
+ten minutes and needs no terminal.
 
-The setup guide opens on a storage picker. Cloudflare R2, Amazon S3, Backblaze
-B2, Wasabi and MinIO each fill in their own endpoint, region and addressing
-style from one blank, and **Other S3-compatible storage** takes an endpoint
-directly, so anything speaking the S3 API works whether or not it is on the
-list.
+Cloudflare is the default, not a requirement. Storage can be R2, Amazon S3,
+Backblaze B2, Wasabi, MinIO or any other S3 endpoint. Hosting can be Cloudflare
+Pages, Cloudflare Workers, Netlify, Vercel or any host that builds a Git
+repository and gives you a deploy hook URL. **Cloudflare R2 without keys** is the
+one storage entry that is not S3: it uses [a small Worker](gateway/README.md) in
+your own account, so the plugin holds a bearer token rather than a storage key.
 
-There is one entry that is not S3: **Cloudflare R2 without keys**. You deploy
-[a small Worker](gateway/README.md) to your own Cloudflare account, Cloudflare
-binds it to your bucket, and the plugin then holds one bearer token instead of
-an access key and secret. It is not encryption, the token is still readable by
-every other plugin you install, and your site build still needs a read-only R2
-key of its own. What it changes is what a leak reaches. See
-[docs/security.md](docs/security.md), which is blunt about both halves.
+## Guides
 
-Hosting has a picker of its own. Cloudflare Pages, Cloudflare Workers, Netlify
-and Vercel each bring their own instructions, their own free-plan numbers and
-their own warnings, and **Another host** covers anything that builds a Git
-repository and gives you a deploy hook URL. The host is recognised from the hook
-URL you paste, and it is never sent anywhere: it decides what the copy says, not
-what the plugin does.
+| Guide | What it covers |
+|---|---|
+| [Setup: Cloudflare R2 + Pages](docs/setup-cloudflare.md) | The default path, start to finish. |
+| [Other providers](docs/other-providers.md) | Every storage provider and host, in tables. |
+| [Troubleshooting](docs/troubleshooting.md) | Every error message, and what to do about it. |
+| [Security](docs/security.md) | Where your key lives, and what a leak reaches. |
+| [The gateway](gateway/README.md) | Reaching R2 without a storage key. |
+| [Architecture](docs/architecture.md) | How it works inside, and why. |
 
-See [docs/other-providers.md](docs/other-providers.md) for both tables, the two
-storage providers whose pricing fights this design, and what each host does
-about redirects and site addresses.
+## Repository layout
+
+| Path | What it is |
+|---|---|
+| `plugin/` | The Obsidian plugin. TypeScript, no runtime dependencies. |
+| `starters/quartz/` | The reference site template. Fetches a snapshot and builds it with Quartz. |
+| `gateway/` | An optional Cloudflare Worker, so the plugin can reach R2 without a storage key. |
+| `docs/` | The guides above. |
+| `manifest.json` | The plugin manifest, and the copy to edit. The build copies it next to `main.js`. It lives at the repository root because that is where the Obsidian community directory reads it from. |
 
 ## How publishing works
 
-Content is content-addressed. Every file is stored under its own SHA-256, a
-snapshot lists which hashes make up the site, and one small pointer file names
-the live snapshot:
+Each file is stored under a name made from its own contents.
 
 ```
-objects/<ab>/<sha256>        immutable, deduplicated, never overwritten
-snapshots/<id>.json          immutable manifest: path → hash, slug, links
-current.json                 the only mutable key
+objects/<ab>/<sha256>        written once, never overwritten
+snapshots/<id>.json          one version of the site: path → hash, slug, links
+current.json                 the only file that ever changes
 ```
 
-A publish uploads whatever is missing, writes a snapshot, and then commits by
-replacing `current.json`. Everything before that last step is additive, which is
-what gives you:
-
-- **Interrupt it any time.** Quit mid-upload and the live site is untouched.
-- **Retries are free.** Same content, same hash, same key. Nothing uploads twice.
-- **Deleting needs no delete.** A file simply is not in the next snapshot.
-- **Two devices cannot corrupt each other.** The commit is a compare-and-swap;
-  the second one is rejected and told to re-scan.
-- **Rollback is one small write.** Site history, in settings, points
-  `current.json` at an older snapshot. Nothing downloads and nothing re-uploads.
-
-See [docs/architecture.md](docs/architecture.md) for the details.
+A publish uploads whatever is missing, writes a snapshot, then replaces
+`current.json`. Everything before that last write only adds. So you can quit
+mid-publish and leave the live site untouched, a retry re-uploads nothing, and
+rolling back is one small write. See
+[docs/architecture.md](docs/architecture.md).
 
 ## Network access
 
-Obsidian's developer policy requires plugins to disclose every network endpoint.
-This plugin contacts exactly three, all of which you configure yourself:
+Obsidian's developer policy requires plugins to list every network endpoint. This
+plugin contacts three, and you configure all of them yourself:
 
 | Endpoint | Why | When |
 |---|---|---|
-| Your storage endpoint (e.g. `https://<account>.r2.cloudflarestorage.com`), or your own Worker's address if you use the gateway | Read the current snapshot; upload notes and attachments | Scanning, publishing, cleanup |
+| Your storage endpoint, or your own Worker's address if you use the gateway | Read the current snapshot, upload notes and attachments | Scanning, publishing, cleanup |
 | Your deploy hook URL | Ask your host to rebuild the site | After a successful publish |
 | Your site URL, path `/_publish.json` | Check whether the new version is live | After triggering a build |
 
-There is no telemetry, no analytics, and no server operated by this project.
+There is no telemetry, no analytics, and no server run by this project.
 
 ## Credentials
 
-Your secret key is kept in Obsidian's keychain rather than in your vault, so it
-does not sync with your notes and never lands in a Git repository. It is still
-readable by any other plugin you install: that keychain is one shared store and
-reading it is public API. Obsidian cannot sandbox plugins and says so. So the
-protection is still scope rather than secrecy: use a token limited to one
-bucket, give the build a separate read-only token, and revoke either in one
-click. [docs/security.md](docs/security.md) is the honest, complete version,
-including what "encrypted at rest" does and does not mean here.
+Your secret key lives in Obsidian's keychain rather than in your vault, so it
+does not sync with your notes and never reaches Git. Every other plugin you
+install can still read it, because that keychain is one shared store. So limit
+what a leaked key reaches: scope the token to one bucket, give your site build a
+separate read-only token, and revoke either in one click.
+[docs/security.md](docs/security.md) is the full version.
 
 ## Development
 
-Node 22.18 or newer. The test suites import the TypeScript sources directly,
-relying on Node stripping the types itself, so there is no build step and no
-test-only toolchain to keep in sync.
+The test suites import the TypeScript sources directly and let Node strip the
+types, so there is no build step before a test run.
 
 ```bash
 npm install --prefix plugin
 npm run check     # typecheck, both test suites, then the bundle
 ```
 
-Or one piece at a time:
-
-```bash
-npm run typecheck
-npm test          # no network, no Obsidian, no browser
-npm run build     # produces plugin/main.js
-```
-
-The tests are the specification for the parts that must not break: atomic
-commits, garbage-collection safety, link rewriting, the tick-to-outcome table in
-the publish window, and the full build pipeline run as real subprocesses against
-a stand-in bucket. `npm run check` is what CI runs, unchanged.
-
-To try a working copy in a vault, build it and copy the three files across as in
-[Installing the plugin](#installing-the-plugin).
+`npm run check` is what CI runs. To try your working copy in a vault, build it and
+copy the three files across as in [Install the plugin](#install-the-plugin).
 
 ## Status
 
-Phases 1 and 2 of the roadmap in `docs/architecture.md` are done: the plugin and
-the Quartz starter are complete and tested. Phase 3 is underway. The Worker
-gateway has landed, so R2 can be reached with a bearer token instead of a
-storage key, and Site history has landed too, so any version still in your
-storage can be made live again; what remains in that phase is the
-Deploy-to-Cloudflare button and mobile. Phase 4 has landed early: `jotter`, the
-Astro starter, is complete in its own repository, ships a `wrangler.jsonc` of its
-own, and is now the starter step 3 recommends.
+Phases 1 and 2 of the roadmap in [docs/architecture.md](docs/architecture.md)
+are done. Phase 3 is underway: the Worker gateway and Site history have landed,
+and the Deploy-to-Cloudflare button has not.
 
-Mobile is the honest caveat. `manifest.json` does not mark the plugin
-desktop-only, the code avoids Node APIs, and the two places that would notice a
-phone are already handled: the status bar is skipped and a publish reports
-itself in a notice instead, and the hover-only remove control on a rule row
-stays visible where there is no hover. None of that has been run on a device,
-so it is reasoned, not verified.
+Mobile is the caveat. The plugin avoids Node APIs and handles the two places a
+phone would notice, but nobody has run it on a device yet.
 
 ## Licence
 
-MIT. See [LICENSE](LICENSE).
-
-The Quartz starter template carries Quartz's own `LICENSE.txt`, also MIT, which
-stays as it is.
+MIT. See [LICENSE](LICENSE). The Quartz starter template carries Quartz's own
+`LICENSE.txt`, also MIT, which stays as it is.
